@@ -57,14 +57,15 @@ public class EndCrystalListener implements Listener {
         Entity damager = event.getDamager();
 
         if (damager.getType() == EntityType.END_CRYSTAL) {
-            handleCrystalDamage(damaged, damager);
+            if (handleCrystalDamageWithEvent(damaged, damager, event)) {
+                event.setCancelled(true);
+            }
         }
     }
 
-    private void handleCrystalDamage(Entity damaged, Entity damager) {
+    private boolean handleCrystalDamageWithEvent(Entity damaged, Entity damager, EntityDamageByEntityEvent event) {
         Player damagedPlayer = (damaged instanceof Player) ? (Player) damaged : null;
         Player placer = Combat.getInstance().getCrystalManager().getPlacer(damager);
-
         if (damagedPlayer != null) {
             if (placer != null) {
                 handleCombat(damagedPlayer, placer);
@@ -72,6 +73,7 @@ public class EndCrystalListener implements Listener {
                 linkCrystalByProximity(damager, damagedPlayer);
             }
         }
+        return false;
     }
 
     private void handleCombat(Player damagedPlayer, Player placer) {

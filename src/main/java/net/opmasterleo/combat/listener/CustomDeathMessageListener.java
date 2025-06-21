@@ -23,7 +23,7 @@ public class CustomDeathMessageListener implements Listener {
 
         Component deathMessage;
         if (event.deathMessage() instanceof TranslatableComponent tc) {
-            deathMessage = Component.translatable(tc.key(), tc.args().toArray(new Component[0]));
+            deathMessage = Component.translatable(tc.key(), tc.arguments().toArray(new Component[0]));
         } else {
             deathMessage = Component.translatable("death.attack.generic", Component.text(event.getEntity().getName()));
         }

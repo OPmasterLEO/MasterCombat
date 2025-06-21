@@ -34,9 +34,6 @@ public final class CrystalManager {
                 return null;
             }
         }
-        if (!Combat.getInstance().getConfig().getBoolean("self-combat", false)) {
-            Entity damaged = crystal;
-        }
         return placer;
     }
 

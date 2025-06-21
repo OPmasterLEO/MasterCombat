@@ -6,7 +6,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -17,8 +17,6 @@ public class Update {
     private static final String GITHUB_API_URL = "https://api.github.com/repos/OPmasterLEO/MasterCombat/releases/latest";
     private static String latestVersion;
     private static String downloadUrl;
-    private static boolean updateConfirmationRequired = true;
-    private static long confirmationTimeout = 0;
     private static boolean updateCheckInProgress = false;
     private static boolean updateDownloadInProgress = false;
 
@@ -38,6 +36,7 @@ public class Update {
         }
     }
 
+    @SuppressWarnings("deprecation")
     public static void notifyOnServerOnline(Plugin plugin) {
         if (isFolia()) {
             Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
@@ -82,6 +81,7 @@ public class Update {
         }
     }
 
+    @SuppressWarnings("deprecation")
     public static void notifyOnPlayerJoin(Player player, Plugin plugin) {
         if (!player.isOp()) {
             return;
@@ -107,7 +107,6 @@ public class Update {
         } else {
             player.sendMessage("§e[" + pluginName + "]» This server is running " + pluginName + " version v" + currentVersion +
                     " but the latest is (v" + normalizedLatestVersion + ").");
-            player.sendMessage("§e[" + pluginName + "]» Run /combat update again if you confirm to update the plugin version.");
         }
     }
 
@@ -123,10 +122,11 @@ public class Update {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static void performUpdateCheck(Plugin plugin) {
         String pluginName = plugin.getDescription().getName();
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(GITHUB_API_URL).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(GITHUB_API_URL).toURL().openConnection();
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
             connection.setConnectTimeout(5000);
@@ -162,6 +162,7 @@ public class Update {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static void performJarReplacement(Plugin plugin) {
         String pluginName = plugin.getDescription().getName();
         try {
@@ -174,7 +175,7 @@ public class Update {
             String normalizedVersion = latestVersion.replace(pluginName + "-", "").replace(pluginName, "");
             File tempFile = new File(updateFolder, pluginName + "-" + normalizedVersion + ".jar");
 
-            HttpURLConnection connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(downloadUrl).toURL().openConnection();
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
@@ -229,26 +230,5 @@ public class Update {
         int startIndex = jsonResponse.indexOf(urlPrefix) + urlPrefix.length();
         int endIndex = jsonResponse.indexOf("\"", startIndex);
         return startIndex > urlPrefix.length() - 1 ? jsonResponse.substring(startIndex, endIndex) : null;
-    }
-
-    private static boolean isNewerVersion(String currentVersion, String latestVersion) {
-        currentVersion = normalizeVersion(currentVersion);
-        latestVersion = normalizeVersion(latestVersion);
-
-        String[] currentParts = currentVersion.split("\\.");
-        String[] latestParts = latestVersion.split("\\.");
-
-        for (int i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-            int currentPart = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
-            int latestPart = i < latestParts.length ? Integer.parseInt(latestParts[i]) : 0;
-
-            if (currentPart < latestPart) {
-                return true;
-            } else if (currentPart > latestPart) {
-                return false;
-            }
-        }
-
-        return false;
     }
 }

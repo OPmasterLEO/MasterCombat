@@ -1,12 +1,9 @@
 package net.opmasterleo.combat;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
@@ -18,11 +15,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-
-import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
-import lombok.Getter;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.opmasterleo.combat.api.MasterCombatAPIBackend;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
@@ -38,18 +30,17 @@ import net.opmasterleo.combat.listener.PlayerMoveListener;
 import net.opmasterleo.combat.listener.PlayerQuitListener;
 import net.opmasterleo.combat.listener.PlayerTeleportListener;
 import net.opmasterleo.combat.listener.SelfCombatListener;
+import net.opmasterleo.combat.listener.NewbieProtectionListener;
 import net.opmasterleo.combat.manager.CrystalManager;
 import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.manager.WorldGuardUtil;
 
-@Getter
 public class Combat extends JavaPlugin implements Listener {
 
-    @Getter
     private static Combat instance;
-    private final HashMap<UUID, Long> combatPlayers = new HashMap<>();
-    private final HashMap<UUID, UUID> combatOpponents = new HashMap<>();
-    private final HashMap<UUID, Long> lastActionBarSeconds = new HashMap<>();
+    private final ConcurrentHashMap<UUID, Long> combatPlayers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UUID> combatOpponents = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> lastActionBarSeconds = new ConcurrentHashMap<>();
     private boolean enableWorldsEnabled;
     private List<String> enabledWorlds;
     private boolean combatEnabled;
@@ -58,15 +49,17 @@ public class Combat extends JavaPlugin implements Listener {
     private PlayerMoveListener playerMoveListener;
     private EndCrystalListener endCrystalListener;
     private CrystalManager crystalManager;
-    private ProtocolManager protocolManager;
 
     private boolean disableElytra;
     private boolean enderPearlEnabled;
     private long enderPearlDistance;
     private String elytraDisabledMsg;
-    private Set<String> ignoredProjectiles = new HashSet<>();
+    private final Set<String> ignoredProjectiles = ConcurrentHashMap.newKeySet();
+
+    private NewbieProtectionListener newbieProtectionListener;
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onEnable() {
         saveDefaultConfig();
         instance = this;
@@ -79,7 +72,6 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         if (Bukkit.getPluginManager().getPlugin("ProtocolLib") != null) {
-            protocolManager = ProtocolLibrary.getProtocolManager();
             Bukkit.getConsoleSender().sendMessage("§a[MasterCombat] ProtocolLib detected and integrated.");
         } else {
             Bukkit.getConsoleSender().sendMessage("§c[MasterCombat] ProtocolLib not detected. Some features may not work.");
@@ -93,6 +85,7 @@ public class Combat extends JavaPlugin implements Listener {
         Update.notifyOnServerOnline(this);
 
         int pluginId = 25701;
+        @SuppressWarnings("unused")
         Metrics metrics = new Metrics(this, pluginId);
 
         endCrystalListener = new EndCrystalListener();
@@ -100,6 +93,9 @@ public class Combat extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(new EntityPlaceListener(), this);
 
         crystalManager = new CrystalManager();
+
+        newbieProtectionListener = new NewbieProtectionListener();
+        Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
 
         MasterCombatAPIProvider.register(new MasterCombatAPIBackend(this));
         Bukkit.getPluginManager().callEvent(new MasterCombatLoadEvent());
@@ -119,15 +115,6 @@ public class Combat extends JavaPlugin implements Listener {
         Bukkit.getConsoleSender().sendMessage("§cMasterCombat plugin has been disabled.");
     }
 
-    private void detectFolia() {
-        try {
-            Class.forName("io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler");
-            Bukkit.getConsoleSender().sendMessage("§aFolia detected, Using Folia (multi-threaded task) system");
-        } catch (ClassNotFoundException e) {
-            Bukkit.getConsoleSender().sendMessage("§aPaper detected, using Paper (standard task scheduler) system");
-        }
-    }
-
     private void registerListeners() {
         playerMoveListener = new PlayerMoveListener();
         Bukkit.getPluginManager().registerEvents(new EntityDamageByEntityListener(), this);
@@ -142,6 +129,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     @EventHandler
+    @SuppressWarnings("deprecation")
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (player.isOp() && getConfig().getBoolean("update-notify-chat", false)) {
@@ -169,30 +157,26 @@ public class Combat extends JavaPlugin implements Listener {
     private void startCombatTimer() {
         Runnable timerTask = () -> {
             long currentTime = System.currentTimeMillis();
-            Iterator<Map.Entry<UUID, Long>> iterator = combatPlayers.entrySet().iterator();
-
-            while (iterator.hasNext()) {
-                Map.Entry<UUID, Long> entry = iterator.next();
-                UUID uuid = entry.getKey();
+            combatPlayers.forEach((uuid, endTime) -> {
                 Player player = Bukkit.getPlayer(uuid);
 
                 if (player == null) {
-                    iterator.remove();
+                    combatPlayers.remove(uuid);
                     combatOpponents.remove(uuid);
                     lastActionBarSeconds.remove(uuid);
                     if (glowingEnabled) setPlayerGlowing(uuid, false);
-                    continue;
+                    return;
                 }
 
-                if (currentTime >= entry.getValue()) {
-                    handleCombatEnd(player, iterator);
+                if (currentTime >= endTime) {
+                    handleCombatEnd(player);
                     lastActionBarSeconds.remove(uuid);
                     if (glowingEnabled) setPlayerGlowing(uuid, false);
                 } else {
-                    updateActionBar(player, entry.getValue(), currentTime);
+                    updateActionBar(player, endTime, currentTime);
                     if (glowingEnabled) setPlayerGlowing(uuid, true);
                 }
-            }
+            });
         };
 
         try {
@@ -218,62 +202,88 @@ public class Combat extends JavaPlugin implements Listener {
 
     private void setPlayerGlowing(UUID uuid, boolean glowing) {
         Player player = Bukkit.getPlayer(uuid);
-        if (player != null && player.isOnline()) {
-            if (player.isGlowing() != glowing) {
-                player.setGlowing(glowing);
-            }
+        if (player != null && player.isOnline() && player.isGlowing() != glowing) {
+            player.setGlowing(glowing);
         }
     }
 
-    private void handleCombatEnd(Player player, Iterator<Map.Entry<UUID, Long>> iterator) {
-        iterator.remove();
-        UUID opponentUUID = combatOpponents.remove(player.getUniqueId());
+    private void handleCombatEnd(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        combatPlayers.remove(playerUUID);
+        UUID opponentUUID = combatOpponents.remove(playerUUID);
         if (opponentUUID != null) {
             combatOpponents.remove(opponentUUID);
+            if (glowingEnabled) setPlayerGlowing(opponentUUID, false);
         }
+        if (glowingEnabled) setPlayerGlowing(playerUUID, false);
         sendCombatEndMessage(player);
     }
 
+    private void updateCombatState(Player player, Player opponent, long duration) {
+        combatPlayers.put(player.getUniqueId(), duration);
+        if (opponent != null) {
+            combatPlayers.put(opponent.getUniqueId(), duration);
+            combatOpponents.put(player.getUniqueId(), opponent.getUniqueId());
+            combatOpponents.put(opponent.getUniqueId(), player.getUniqueId());
+        }
+    }
+
     private void sendCombatEndMessage(Player player) {
-        if (!getConfig().getString("Messages.NoLongerInCombat", "").isEmpty()) {
+        String noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat", "");
+        if (noLongerInCombatMsg != null && !noLongerInCombatMsg.isEmpty()) {
             player.sendMessage(getMessage("Messages.Prefix") + getMessage("Messages.NoLongerInCombat"));
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void updateActionBar(Player player, long endTime, long currentTime) {
         long seconds = (endTime - currentTime + 999) / 1000;
         player.sendActionBar(getMessage("ActionBar.Format").replace("%seconds%", String.valueOf(seconds)));
     }
 
     public boolean isCombatEnabledInWorld(Player player) {
-        return !enableWorldsEnabled || enabledWorlds.contains(player.getWorld().getName());
+        return enabledWorlds == null || !enableWorldsEnabled || enabledWorlds.contains(player.getWorld().getName());
     }
 
     public boolean isInCombat(Player player) {
-        return combatPlayers.getOrDefault(player.getUniqueId(), 0L) > System.currentTimeMillis();
+        Long until = combatPlayers.get(player.getUniqueId());
+        return until != null && until > System.currentTimeMillis();
     }
 
     public void setCombat(Player player, Player opponent) {
+        // Hook: Prevent combat tagging if either player is protected by NewbieProtection
+        NewbieProtectionListener protection = getNewbieProtectionListener();
+        if (protection != null) {
+            if ((player != null && protection.isProtected(player)) || (opponent != null && protection.isProtected(opponent))) {
+                return;
+            }
+        }
         if (!combatEnabled || !isCombatEnabledInWorld(player)) return;
         if (shouldBypass(player)) return;
 
         long duration = System.currentTimeMillis() + 1000 * getConfig().getLong("Duration", 0);
+        if (player == null) return;
+        Long current = combatPlayers.get(player.getUniqueId());
+        if (current != null && current >= duration) return;
         updateCombatState(player, opponent, duration);
         sendCombatStartMessage(player);
         restrictMovement(player);
+        setPlayerGlowingIfNeeded(player.getUniqueId(), true);
+        if (glowingEnabled && opponent != null) setPlayerGlowingIfNeeded(opponent.getUniqueId(), true);
+    }
+
+    private void setPlayerGlowingIfNeeded(UUID uuid, boolean glowing) {
+        if (!glowingEnabled) return;
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null && player.isOnline() && player.isGlowing() != glowing) {
+            player.setGlowing(glowing);
+        }
     }
 
     private boolean shouldBypass(Player player) {
         return (getConfig().getBoolean("ignore-op", true) && player.isOp()) 
             || player.getGameMode() == GameMode.CREATIVE 
             || player.getGameMode() == GameMode.SPECTATOR;
-    }
-
-    private void updateCombatState(Player player, Player opponent, long duration) {
-        combatPlayers.put(player.getUniqueId(), duration);
-        combatPlayers.put(opponent.getUniqueId(), duration);
-        combatOpponents.put(player.getUniqueId(), opponent.getUniqueId());
-        combatOpponents.put(opponent.getUniqueId(), player.getUniqueId());
     }
 
     private void sendCombatStartMessage(Player player) {
@@ -305,6 +315,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     public String getMessage(String key) {
         String message = getConfig().getString(key, "");
+        if (message == null) message = "";
         return LegacyComponentSerializer.legacySection().serialize(
             LegacyComponentSerializer.legacy('&').deserialize(message)
         );
@@ -348,6 +359,11 @@ public class Combat extends JavaPlugin implements Listener {
         this.combatEnabled = enabled;
     }
 
+    public static Combat getInstance() {
+        return instance;
+    }
+
+    @SuppressWarnings("deprecation")
     private void sendStartupMessage() {
         String version = getDescription().getVersion();
         String pluginName = getDescription().getName();
@@ -396,5 +412,25 @@ public class Combat extends JavaPlugin implements Listener {
         if (crystalManager != null) {
             crystalManager.setPlacer(crystal, placer);
         }
+    }
+
+    public NewbieProtectionListener getNewbieProtectionListener() {
+        return newbieProtectionListener;
+    }
+
+    public ConcurrentHashMap<UUID, Long> getCombatPlayers() {
+        return combatPlayers;
+    }
+
+    public ConcurrentHashMap<UUID, UUID> getCombatOpponents() {
+        return combatOpponents;
+    }
+
+    public CrystalManager getCrystalManager() {
+        return crystalManager;
+    }
+
+    public boolean isCombatEnabled() {
+        return combatEnabled;
     }
 }
