@@ -252,6 +252,11 @@ public class Combat extends JavaPlugin implements Listener {
             return;
         }
 
+        if (superVanishManager != null && 
+            (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
+            return;
+        }
+
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent.getUniqueId();
         

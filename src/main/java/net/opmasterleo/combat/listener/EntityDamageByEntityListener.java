@@ -33,7 +33,6 @@ public final class EntityDamageByEntityListener implements Listener {
             if (damagerPlayer.getGameMode() == GameMode.CREATIVE || damagerPlayer.getGameMode() == GameMode.SPECTATOR) {
                 return;
             }
-
             NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
             if (protectionListener != null) {
                 boolean damagerProtected = protectionListener.isActuallyProtected(damagerPlayer);
@@ -44,12 +43,8 @@ public final class EntityDamageByEntityListener implements Listener {
             }
         }
         
-        if (damager instanceof Projectile projectile && projectile.getType() == EntityType.ENDER_PEARL) {
-            return;
-        }
-        
         if (damager instanceof Projectile projectile) {
-            if (isIgnoredProjectile(combat, projectile)) {
+            if (projectile.getType() == EntityType.ENDER_PEARL || isIgnoredProjectile(combat, projectile)) {
                 return;
             }
         }

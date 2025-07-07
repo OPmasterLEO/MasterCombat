@@ -13,7 +13,6 @@ public final class CrystalManager {
     private final Map<Integer, UUID> crystalEntityMap = new ConcurrentHashMap<>(2048);
     private final Map<Integer, Long> expiryTimes = new ConcurrentHashMap<>(2048);
     private static final long CRYSTAL_TTL = 300000;
-    private long lastCleanupTime = System.currentTimeMillis();
 
     public CrystalManager() {
         startCleanupTask();
@@ -21,11 +20,12 @@ public final class CrystalManager {
     
     private void startCleanupTask() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Combat.getInstance(), () -> {
-            if (System.currentTimeMillis() - lastCleanupTime > 60000) {
+            final long[] lastCleanupTime = {System.currentTimeMillis()};
+            if (System.currentTimeMillis() - lastCleanupTime[0] > 60000) {
                 long now = System.currentTimeMillis();
                 expiryTimes.entrySet().removeIf(entry -> entry.getValue() < now);
                 crystalEntityMap.keySet().removeIf(id -> !expiryTimes.containsKey(id));
-                lastCleanupTime = now;
+                lastCleanupTime[0] = now;
             }
         }, 1200L, 1200L);
     }

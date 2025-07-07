@@ -82,6 +82,13 @@ public class EndCrystalListener implements Listener {
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
         
         if (event.getEntity() instanceof Player victim) {
+            if (combat.getSuperVanishManager() != null && 
+                ((placer != null && combat.getSuperVanishManager().isVanished(placer)) || 
+                 combat.getSuperVanishManager().isVanished(victim))) {
+                event.setCancelled(true);
+                return;
+            }
+            
             boolean placerProtected = placer != null && protection != null && 
                                      protection.isActuallyProtected(placer);
             boolean victimProtected = protection != null && protection.isActuallyProtected(victim);
