@@ -18,7 +18,8 @@ public class PlaceholderManager {
         String formattedTime = formatTime(time);
         message = message.replace("%mastercombat_time%", formattedTime);
         message = message.replace("%time%", formattedTime); // for backward compatibility, but all usages should migrate to %mastercombat_time%
-        message = message.replace("%command%", "removeprotect");
+        String disableCommand = getDisableCommand();
+        message = message.replace("%command%", disableCommand);
         if (player != null && isPlaceholderAPILoaded()) {
             message = PlaceholderAPI.setPlaceholders(player, message);
         }
