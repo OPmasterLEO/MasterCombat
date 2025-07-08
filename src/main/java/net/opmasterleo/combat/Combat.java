@@ -311,6 +311,38 @@ public class Combat extends JavaPlugin implements Listener {
         }
     }
     
+    public void forceCombatCleanup(UUID playerUUID) {
+        if (playerUUID == null) return;
+        
+        // Remove the player from combat
+        combatPlayers.remove(playerUUID);
+        UUID opponentUUID = combatOpponents.remove(playerUUID);
+        lastActionBarSeconds.remove(playerUUID);
+        
+        // Remove glowing effect if applicable
+        Player player = Bukkit.getPlayer(playerUUID);
+        if (player != null && glowingEnabled && glowManager != null) {
+            glowManager.setGlowing(player, false);
+        }
+        
+        // Also clean up opponent's reference to this player
+        if (opponentUUID != null) {
+            UUID currentOpponentRef = combatOpponents.get(opponentUUID);
+            if (currentOpponentRef != null && currentOpponentRef.equals(playerUUID)) {
+                // Only remove if the opponent is still referencing this player
+                combatOpponents.remove(opponentUUID);
+            }
+            
+            Player opponent = Bukkit.getPlayer(opponentUUID);
+            if (opponent != null && glowingEnabled && glowManager != null) {
+                // Check if opponent is still in combat with anyone else before removing glowing
+                if (!combatPlayers.containsKey(opponentUUID)) {
+                    glowManager.setGlowing(opponent, false);
+                }
+            }
+        }
+    }
+
     private void startCombatTimer() {
         // Don't use the adaptive interval approach if we have PacketEvents
         // as we'll be handling most interactions directly through packets
@@ -736,13 +768,6 @@ public class Combat extends JavaPlugin implements Listener {
             Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard loaded!");
         } else {
             Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard not loaded!");
-        }
-
-        boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
-        if (packetEventsLoaded) {
-            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §aPacketEvents found, loaded!");
-        } else {
-            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §cPacketEvents NOT found, unloading!");
         }
 
         String asciiArt =

@@ -132,6 +132,11 @@ public class RespawnAnchorListener implements Listener {
             } else {
                 plugin.directSetCombat(activator, victim);
                 plugin.directSetCombat(victim, activator);
+                
+                // Set the killer for attribution if this is fatal damage
+                if (victim.getHealth() <= event.getFinalDamage()) {
+                    victim.setKiller(activator);
+                }
             }
         }
     }

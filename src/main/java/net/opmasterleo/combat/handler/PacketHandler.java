@@ -18,12 +18,14 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.plugin.IllegalPluginAccessException;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 
 public class PacketHandler extends PacketListenerAbstract {
     private final Combat plugin;
@@ -32,6 +34,7 @@ public class PacketHandler extends PacketListenerAbstract {
     private final Map<UUID, Long> throttleMap = new ConcurrentHashMap<>(256);
     private final Map<UUID, BukkitTask> pendingCombatTasks = new ConcurrentHashMap<>(64);
     private final Set<UUID> pendingMetadataUpdates = ConcurrentHashMap.newKeySet();
+    private volatile boolean isShuttingDown = false;
     
     private static final long THROTTLE_TIME = 50L;
     private static final long ENTITY_CACHE_CLEANUP_INTERVAL = 60000L;
@@ -52,18 +55,29 @@ public class PacketHandler extends PacketListenerAbstract {
     }
 
     private void startCleanupTask() {
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
-            long now = System.currentTimeMillis();
-            if (now - lastCleanup > ENTITY_CACHE_CLEANUP_INTERVAL) {
-                entityCache.clear();
-                throttleMap.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
-                lastCleanup = now;
+        // Only schedule if plugin is still enabled
+        if (plugin.isEnabled()) {
+            try {
+                Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+                    if (!plugin.isEnabled() || isShuttingDown) return;
+                    
+                    long now = System.currentTimeMillis();
+                    if (now - lastCleanup > ENTITY_CACHE_CLEANUP_INTERVAL) {
+                        entityCache.clear();
+                        throttleMap.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
+                        lastCleanup = now;
+                    }
+                }, 1200L, 1200L);
+            } catch (IllegalPluginAccessException e) {
+                // Plugin is disabled, don't schedule
             }
-        }, 1200L, 1200L);
+        }
     }
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
+        // Early return if plugin is disabled or shutting down
+        if (!plugin.isEnabled() || isShuttingDown) return;
         if (!(event.getPlayer() instanceof Player player)) return;
         
         try {
@@ -82,6 +96,10 @@ public class PacketHandler extends PacketListenerAbstract {
             } else if (event.getPacketType() == PacketType.Play.Client.ANIMATION) {
                 handlePlayerAnimation(event, player);
             }
+        } catch (Exception e) {
+            if (plugin.isEnabled()) {
+                plugin.getLogger().log(Level.WARNING, "Error processing packet: " + e.getMessage(), e);
+            }
         } finally {
             processingCount.decrementAndGet();
         }
@@ -89,6 +107,8 @@ public class PacketHandler extends PacketListenerAbstract {
     
     @Override
     public void onPacketSend(PacketSendEvent event) {
+        // Early return if plugin is disabled or shutting down
+        if (!plugin.isEnabled() || isShuttingDown) return;
         if (!(event.getPlayer() instanceof Player player)) return;
         
         // Handle entity metadata packets for glowing effect
@@ -116,19 +136,23 @@ public class PacketHandler extends PacketListenerAbstract {
                 // Let the combat system handle the glowing effect
                 event.setCancelled(true);
                 
-                // Schedule a proper glowing update
-                pendingMetadataUpdates.add(playerUUID);
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (plugin.getGlowManager() != null) {
+                // Instead of scheduling a task, apply the update directly
+                try {
+                    if (plugin.isEnabled() && !isShuttingDown && plugin.getGlowManager() != null) {
+                        pendingMetadataUpdates.add(playerUUID);
                         plugin.getGlowManager().updateGlowingForPlayer(targetPlayer, player);
+                        pendingMetadataUpdates.remove(playerUUID);
                     }
-                    pendingMetadataUpdates.remove(playerUUID);
-                });
+                } catch (Exception e) {
+                    // Ignore exceptions during shutdown
+                }
             }
         }
     }
 
     private void handleEntityInteract(PacketReceiveEvent event, Player player) {
+        if (!plugin.isEnabled() || isShuttingDown) return;
+        
         WrapperPlayClientInteractEntity wrapper = new WrapperPlayClientInteractEntity(event);
         int entityId = wrapper.getEntityId();
         WrapperPlayClientInteractEntity.InteractAction action = wrapper.getAction();
@@ -144,7 +168,9 @@ public class PacketHandler extends PacketListenerAbstract {
         if (action == WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
             handleCombatInteraction(player, targetEntity, AttackType.MELEE);
         } else if (targetEntity.getType() == EntityType.END_CRYSTAL) {
-            plugin.getCrystalManager().setPlacer(targetEntity, player);
+            if (plugin.isEnabled() && !isShuttingDown && plugin.getCrystalManager() != null) {
+                plugin.getCrystalManager().setPlacer(targetEntity, player);
+            }
             handleCrystalInteraction(player, targetEntity);
         }
         
@@ -152,6 +178,8 @@ public class PacketHandler extends PacketListenerAbstract {
     }
     
     private void handlePlayerAnimation(PacketReceiveEvent event, Player player) {
+        if (!plugin.isEnabled() || isShuttingDown) return;
+        
         // This is often a swing animation which could indicate an attack attempt
         // We can use this for more precise combat detection in some cases
         
@@ -166,6 +194,8 @@ public class PacketHandler extends PacketListenerAbstract {
     }
     
     private void handleCrystalInteraction(Player player, Entity crystal) {
+        if (!plugin.isEnabled() || isShuttingDown) return;
+        
         if (plugin.getNewbieProtectionListener() != null && 
             plugin.getNewbieProtectionListener().isActuallyProtected(player)) {
             
@@ -174,26 +204,24 @@ public class PacketHandler extends PacketListenerAbstract {
                     !player.getUniqueId().equals(target.getUniqueId()) &&
                     !plugin.getNewbieProtectionListener().isActuallyProtected(target)) {
                     
-                    // Schedule a task to cancel the effect of this packet if possible
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        if (crystal.isValid()) {
-                            plugin.getNewbieProtectionListener().sendBlockedMessage(
-                                player, plugin.getNewbieProtectionListener().getCrystalBlockMessage());
-                        }
-                    });
+                    // Apply the effect directly instead of scheduling
+                    if (crystal.isValid() && plugin.getNewbieProtectionListener() != null) {
+                        plugin.getNewbieProtectionListener().sendBlockedMessage(
+                            player, plugin.getNewbieProtectionListener().getCrystalBlockMessage());
+                    }
                     return;
                 }
             }
         }
         
         if (plugin.getConfig().getBoolean("self-combat", false)) {
-            scheduleCombatTag(player, player, 1);
+            applyCombatDirectly(player, player);
         }
     }
     
     private void handleCombatInteraction(Player attacker, Entity target, AttackType attackType) {
-        // Skip if either entity is invalid or protected
-        if (target == null) return;
+        // Skip if either entity is invalid or plugin is disabled
+        if (target == null || !plugin.isEnabled() || isShuttingDown) return;
         
         // Handle player attacking another player
         if (target instanceof Player victim) {
@@ -214,41 +242,25 @@ public class PacketHandler extends PacketListenerAbstract {
                 }
             }
             
-            // Schedule combat tag with appropriate delay based on attack type
-            int delay = getDelayForAttackType(attackType);
-            scheduleCombatTag(attacker, victim, delay);
+            // Apply combat directly instead of scheduling
+            applyCombatDirectly(attacker, victim);
         }
     }
     
-    private int getDelayForAttackType(AttackType attackType) {
-        switch (attackType) {
-            case MELEE: return 1; // Almost immediate
-            case RANGED: return 2; // Slight delay for projectiles
-            case CRYSTAL: return 3; // Longer delay for crystals
-            case ANCHOR: return 3; // Longer delay for anchors
-            default: return 2;
-        }
-    }
-    
-    private void scheduleCombatTag(Player attacker, Player victim, int delayTicks) {
-        UUID attackerUUID = attacker.getUniqueId();
-        
-        // Cancel any existing pending tag operations
-        BukkitTask existingTask = pendingCombatTasks.remove(attackerUUID);
-        if (existingTask != null) existingTask.cancel();
-        
-        // Schedule the new tagging operation
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (attacker.isValid() && victim.isValid()) {
+    // Apply combat directly without scheduling
+    private void applyCombatDirectly(Player attacker, Player victim) {
+        try {
+            if (plugin.isEnabled() && !isShuttingDown && attacker.isValid() && victim.isValid()) {
                 plugin.directSetCombat(attacker, victim);
-                pendingCombatTasks.remove(attackerUUID);
             }
-        }, delayTicks);
-        
-        pendingCombatTasks.put(attackerUUID, task);
+        } catch (Exception e) {
+            // Ignore exceptions during shutdown
+        }
     }
     
     private Entity getEntityById(int entityId, Player player) {
+        if (!plugin.isEnabled() || isShuttingDown) return null;
+        
         Entity entity = entityCache.get(entityId);
         if (entity != null && entity.isValid()) return entity;
         
@@ -280,6 +292,8 @@ public class PacketHandler extends PacketListenerAbstract {
     }
     
     private void handlePlayerDigging(PacketReceiveEvent event, Player player) {
+        if (!plugin.isEnabled() || isShuttingDown) return;
+        
         WrapperPlayClientPlayerDigging wrapper = new WrapperPlayClientPlayerDigging(event);
         if (wrapper.getAction() != DiggingAction.START_DIGGING) return;
         
@@ -296,12 +310,14 @@ public class PacketHandler extends PacketListenerAbstract {
             
             boolean selfCombat = plugin.getConfig().getBoolean("self-combat", false);
             if (selfCombat && !plugin.isInCombat(player) && plugin.isCombatEnabled()) {
-                scheduleCombatTag(player, player, getDelayForAttackType(AttackType.ANCHOR));
+                applyCombatDirectly(player, player);
             }
         }
     }
 
     private void handleItemUse(PacketReceiveEvent event, Player player) {
+        if (!plugin.isEnabled() || isShuttingDown) return;
+        
         ItemStack mainHandItem = player.getInventory().getItemInMainHand();
         
         if (mainHandItem.getType() == Material.GLOWSTONE) {
@@ -312,7 +328,7 @@ public class PacketHandler extends PacketListenerAbstract {
 
                     if (plugin.getConfig().getBoolean("self-combat", false)) {
                         plugin.getRespawnAnchorListener().registerPotentialExplosion(targetBlock.getLocation(), player);
-                        scheduleCombatTag(player, player, getDelayForAttackType(AttackType.ANCHOR));
+                        applyCombatDirectly(player, player);
                     }
                 }
             }
@@ -323,11 +339,19 @@ public class PacketHandler extends PacketListenerAbstract {
      * Cleanup method to be called on plugin disable
      */
     public void cleanup() {
-        entityCache.clear();
-        throttleMap.clear();
+        isShuttingDown = true; // Set flag to indicate shutdown
         
         // Cancel all pending tasks
-        pendingCombatTasks.values().forEach(BukkitTask::cancel);
+        pendingCombatTasks.values().forEach(task -> {
+            try {
+                task.cancel();
+            } catch (Exception ignored) {
+                // Task might already be cancelled
+            }
+        });
+        
+        entityCache.clear();
+        throttleMap.clear();
         pendingCombatTasks.clear();
         pendingMetadataUpdates.clear();
     }
