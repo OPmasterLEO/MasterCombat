@@ -75,6 +75,11 @@ public final class EntityDamageByEntityListener implements Listener {
             }
         }
 
+        // Set the killer for fatal damage
+        if (damagerPlayer != null && player.getHealth() <= event.getFinalDamage()) {
+            player.setKiller(damagerPlayer);
+        }
+
         boolean linkRespawnAnchors = combat.getConfig().getBoolean("link-respawn-anchor", true);
         if (linkRespawnAnchors && damager.getType() == EntityType.TNT) {
             if (damager.hasMetadata("respawn_anchor_explosion")) {
@@ -87,6 +92,11 @@ public final class EntityDamageByEntityListener implements Listener {
                     } else {
                         combat.setCombat(player, activator);
                         combat.setCombat(activator, player);
+                        
+                        // Set the killer for fatal damage
+                        if (player.getHealth() <= event.getFinalDamage()) {
+                            player.setKiller(activator);
+                        }
                     }
                     return;
                 }
@@ -97,11 +107,24 @@ public final class EntityDamageByEntityListener implements Listener {
             if (damagerP.getUniqueId().equals(player.getUniqueId())) {
                 if (combat.getConfig().getBoolean("self-combat", false)) {
                     combat.directSetCombat(player, player);
+                    
+                    // If self-damage is fatal, check if player is in combat with someone else
+                    if (player.getHealth() <= event.getFinalDamage()) {
+                        Player opponent = combat.getCombatOpponent(player);
+                        if (opponent != null && !opponent.equals(player)) {
+                            player.setKiller(opponent);
+                        }
+                    }
                 }
                 return;
             }
             combat.directSetCombat(player, damagerP);
             combat.directSetCombat(damagerP, player);
+            
+            // Set the killer for fatal damage
+            if (player.getHealth() <= event.getFinalDamage()) {
+                player.setKiller(damagerP);
+            }
             return;
         }
 
@@ -114,10 +137,23 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (shooter.getUniqueId().equals(player.getUniqueId())) {
                     if (selfCombat) {
                         combat.directSetCombat(player, player);
+                        
+                        // If self-damage is fatal, check if player is in combat with someone else
+                        if (player.getHealth() <= event.getFinalDamage()) {
+                            Player opponent = combat.getCombatOpponent(player);
+                            if (opponent != null && !opponent.equals(player)) {
+                                player.setKiller(opponent);
+                            }
+                        }
                     }
                 } else {
                     combat.directSetCombat(player, shooter);
                     combat.directSetCombat(shooter, player);
+                    
+                    // Set the killer for fatal damage
+                    if (player.getHealth() <= event.getFinalDamage()) {
+                        player.setKiller(shooter);
+                    }
                 }
             }
         }
@@ -133,6 +169,11 @@ public final class EntityDamageByEntityListener implements Listener {
                 }
                 combat.directSetCombat(player, placer);
                 combat.directSetCombat(placer, player);
+                
+                // Set the killer for fatal damage
+                if (player.getHealth() <= event.getFinalDamage()) {
+                    player.setKiller(placer);
+                }
             }
             return;
         }
@@ -142,6 +183,11 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (owner.getUniqueId().equals(player.getUniqueId())) return;
                 combat.directSetCombat(player, owner);
                 combat.directSetCombat(owner, player);
+                
+                // Set the killer for fatal damage
+                if (player.getHealth() <= event.getFinalDamage()) {
+                    player.setKiller(owner);
+                }
             }
             return;
         }
@@ -151,6 +197,11 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (shooter.getUniqueId().equals(player.getUniqueId())) return;
                 combat.directSetCombat(player, shooter);
                 combat.directSetCombat(shooter, player);
+                
+                // Set the killer for fatal damage
+                if (player.getHealth() <= event.getFinalDamage()) {
+                    player.setKiller(shooter);
+                }
             }
             return;
         }
@@ -160,10 +211,23 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (source.getUniqueId().equals(player.getUniqueId())) {
                     if (combat.getConfig().getBoolean("self-combat", false)) {
                         combat.directSetCombat(player, player);
+                        
+                        // If self-damage is fatal, check if player is in combat with someone else
+                        if (player.getHealth() <= event.getFinalDamage()) {
+                            Player opponent = combat.getCombatOpponent(player);
+                            if (opponent != null && !opponent.equals(player)) {
+                                player.setKiller(opponent);
+                            }
+                        }
                     }
                 } else {
                     combat.directSetCombat(player, source);
                     combat.directSetCombat(source, player);
+                    
+                    // Set the killer for fatal damage
+                    if (player.getHealth() <= event.getFinalDamage()) {
+                        player.setKiller(source);
+                    }
                 }
             }
         }

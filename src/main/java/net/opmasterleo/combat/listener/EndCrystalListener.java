@@ -58,7 +58,7 @@ public class EndCrystalListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL)
     public void onExplosionPrime(ExplosionPrimeEvent event) {
         if (event.getEntity().getType() != EntityType.END_CRYSTAL) return;
-        
+
         Entity crystal = event.getEntity();
         UUID explosionId = UUID.randomUUID();
         recentExplosions.put(explosionId, System.currentTimeMillis());
@@ -94,7 +94,7 @@ public class EndCrystalListener implements Listener {
         Player placer = Combat.getInstance().getCrystalManager().getPlacer(damager);
         Combat combat = Combat.getInstance();
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
-        
+
         if (event.getEntity() instanceof Player victim) {
             if (combat.getSuperVanishManager() != null && 
                 ((placer != null && combat.getSuperVanishManager().isVanished(placer)) || 
@@ -102,7 +102,7 @@ public class EndCrystalListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
-            
+
             boolean placerProtected = placer != null && protection != null && 
                                      protection.isActuallyProtected(placer);
             boolean victimProtected = protection != null && protection.isActuallyProtected(victim);
@@ -113,7 +113,7 @@ public class EndCrystalListener implements Listener {
                 }
                 return;
             }
-            
+
             if (!placerProtected && victimProtected) {
                 event.setCancelled(true);
                 if (placer != null && protection != null) {
@@ -127,12 +127,33 @@ public class EndCrystalListener implements Listener {
                 if (victim.getUniqueId().equals(placer.getUniqueId())) {
                     if (selfCombat) {
                         Combat.getInstance().directSetCombat(victim, victim);
+                        
+                        // If fatal self-damage, attribute to opponent
+                        if (victim.getHealth() <= event.getFinalDamage()) {
+                            Player opponent = combat.getCombatOpponent(victim);
+                            if (opponent != null && !opponent.equals(victim)) {
+                                victim.setKiller(opponent);
+                            }
+                        }
                     }
                 } else {
                     Combat.getInstance().directSetCombat(victim, placer);
                     Combat.getInstance().directSetCombat(placer, victim);
+                    
+                    // Set killer for fatal damage
+                    if (victim.getHealth() <= event.getFinalDamage()) {
+                        victim.setKiller(placer);
+                    }
                 }
             } else if (event.getFinalDamage() > 0) {
+                // If a crystal is about to kill a player but we don't know the placer
+                if (victim.getHealth() <= event.getFinalDamage()) {
+                    Player opponent = combat.getCombatOpponent(victim);
+                    if (opponent != null) {
+                        victim.setKiller(opponent);
+                    }
+                }
+                
                 linkCrystalByProximity(damager, victim);
             }
         }
@@ -145,14 +166,13 @@ public class EndCrystalListener implements Listener {
             event.getCause() != EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
             return;
         }
-        
+
         NewbieProtectionListener protection = Combat.getInstance().getNewbieProtectionListener();
         if (protection != null && protection.isActuallyProtected(victim)) {
             event.setCancelled(true);
         }
     }
-    
-    // Optimize proximity search for entities
+
     private void linkCrystalByProximity(Entity crystal, Player victim) {
         // Use more efficient nearby entity retrieval
         List<Entity> nearbyEntities = crystal.getNearbyEntities(4, 4, 4);
@@ -186,7 +206,7 @@ public class EndCrystalListener implements Listener {
         Entity crystal = event.getEntity();
         Combat.getInstance().getCrystalManager().removeCrystal(crystal);
     }
-    
+
     private boolean shouldBypass(Player player) {
         return player == null || 
                player.getGameMode() == org.bukkit.GameMode.CREATIVE || 

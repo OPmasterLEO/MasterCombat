@@ -29,6 +29,14 @@ public class SelfCombatListener implements Listener {
             return;
         }
         
+        // If player is about to die from self-damage, attribute kill to their combat opponent
+        if (player.getHealth() <= event.getFinalDamage()) {
+            Player opponent = combat.getCombatOpponent(player);
+            if (opponent != null && !opponent.equals(player)) {
+                player.setKiller(opponent);
+            }
+        }
+        
         if (event.getDamager() instanceof Projectile projectile) {
             if (isIgnoredProjectile(combat, projectile)) {
                 return;
