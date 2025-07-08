@@ -161,3 +161,9 @@ update-confirmation-timeout: 10000
 
 # Interval for update checks in minutes
 update-check-interval: 120
+
+# Packet-based combat settings (requires PacketEvents)
+PacketBasedCombat:
+  enabled: true       # Use packet-based combat detection when available
+  refresh-on-swing: true  # Refresh combat timer when player swings in combat
+  animation-detection: true  # Detect combat from animation packets

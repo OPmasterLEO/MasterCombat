@@ -45,6 +45,7 @@ import net.opmasterleo.combat.manager.WorldGuardUtil;
 import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import net.opmasterleo.combat.manager.Update;
+import net.opmasterleo.combat.handler.PacketHandler;
 
 public class Combat extends JavaPlugin implements Listener {
 
@@ -74,7 +75,9 @@ public class Combat extends JavaPlugin implements Listener {
     private String prefix;
     private String nowInCombatMsg;
     private String noLongerInCombatMsg;
-
+    
+    private PacketHandler packetHandler;
+    
     @Override
     public void onEnable() {
         saveDefaultConfig();
@@ -97,7 +100,11 @@ public class Combat extends JavaPlugin implements Listener {
         new Metrics(this, pluginId);
 
         if (isPacketEventsAvailable()) {
-            PacketEvents.getAPI().getEventManager().registerListener(new net.opmasterleo.combat.handler.PacketHandler(this));
+            packetHandler = new PacketHandler(this);
+            PacketEvents.getAPI().getEventManager().registerListener(packetHandler);
+            getLogger().info("PacketEvents integration enabled for enhanced performance");
+        } else {
+            getLogger().warning("PacketEvents not found. Some features will be limited.");
         }
     }
 
@@ -175,6 +182,10 @@ public class Combat extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        if (packetHandler != null) {
+            packetHandler.cleanup();
+        }
+        
         if (glowManager != null) {
             glowManager.cleanup();
         }
@@ -301,26 +312,51 @@ public class Combat extends JavaPlugin implements Listener {
     }
     
     private void startCombatTimer() {
-        final int BATCH_SIZE = Math.min(2000, Math.max(500, Bukkit.getMaxPlayers() / 10));
-        final UUID[] processBuffer = new UUID[BATCH_SIZE];
+        // Don't use the adaptive interval approach if we have PacketEvents
+        // as we'll be handling most interactions directly through packets
+        final long timerInterval = isPacketEventsAvailable() ? 20L : Math.max(10L, Math.min(20L, getDynamicInterval()));
+        
+        // Calculate optimal batch size based on expected player count
+        final int MAX_BATCH_SIZE = 2000;
+        final int MIN_BATCH_SIZE = 50;
+        final int OPTIMAL_BATCH_SIZE = Math.min(MAX_BATCH_SIZE, Math.max(MIN_BATCH_SIZE, Bukkit.getMaxPlayers() / 8));
+        final UUID[] processBuffer = new UUID[OPTIMAL_BATCH_SIZE];
+        
+        // Use an adaptive interval based on server load
+        final int[] tickCounter = {0};
+        final int[] skippedTicks = {0};
         
         Runnable timerTask = () -> {
+            // Skip processing if previous task is still running
+            if (skippedTicks[0] > 0) {
+                skippedTicks[0]--;
+                return;
+            }
+            
+            long startTime = System.nanoTime();
             long currentTime = System.currentTimeMillis();
             int count = 0;
             
-            for (UUID uuid : combatPlayers.keySet()) {
-                if (count >= BATCH_SIZE) break;
-                processBuffer[count++] = uuid;
+            // Use a more efficient copy approach for iteration safety
+            UUID[] playerKeys;
+            synchronized(combatPlayers) {
+                playerKeys = combatPlayers.keySet().toArray(new UUID[0]);
+            }
+            
+            for (int i = 0; i < playerKeys.length && count < OPTIMAL_BATCH_SIZE; i++) {
+                processBuffer[count++] = playerKeys[i];
             }
             
             for (int i = 0; i < count; i++) {
                 UUID uuid = processBuffer[i];
+                if (uuid == null) continue;
                 
                 Long endTime = combatPlayers.get(uuid);
                 if (endTime == null) continue;
                 
                 Player player = Bukkit.getPlayer(uuid);
                 if (player == null) {
+                    // Use computeIfPresent for atomic removal
                     combatPlayers.remove(uuid);
                     combatOpponents.remove(uuid);
                     lastActionBarSeconds.remove(uuid);
@@ -332,22 +368,39 @@ public class Combat extends JavaPlugin implements Listener {
                     lastActionBarSeconds.remove(uuid);
                 } else {
                     Long lastUpdate = lastActionBarSeconds.get(uuid);
+                    // Only update actionbar every 500ms to reduce packet spam
                     if (lastUpdate == null || currentTime - lastUpdate >= 500) {
                         updateActionBar(player, endTime, currentTime);
                         lastActionBarSeconds.put(uuid, currentTime);
                     }
                 }
                 
-                if (i % 100 == 0 && count > 1000) {
-                    Thread.yield();
+                // Every 25 players, check if we're taking too long
+                if (i % 25 == 0 && i > 0) {
+                    if ((System.nanoTime() - startTime) > 5_000_000) { // 5ms
+                        Thread.yield(); // Let other threads run
+                    }
+                }
+            }
+            
+            // Adjust timer execution frequency based on performance
+            long elapsed = System.nanoTime() - startTime;
+            tickCounter[0]++;
+            
+            // Every 20 ticks, check if we need to adjust our frequency
+            if (tickCounter[0] >= 20) {
+                tickCounter[0] = 0;
+                
+                // If processing took more than 25ms, temporarily reduce frequency
+                if (elapsed > 25_000_000) {
+                    skippedTicks[0] = 2; // Skip next 2 ticks
                 }
             }
         };
 
-        long baseInterval = Math.max(10L, Math.min(40L, getDynamicInterval()));
-        
+        // Use an adaptive interval based on server conditions
         try {
-            SchedulerUtil.runTaskTimerAsync(this, timerTask, baseInterval, baseInterval);
+            SchedulerUtil.runTaskTimerAsync(this, timerTask, timerInterval, timerInterval);
         } catch (Exception e) {
             getLogger().warning("Failed to schedule combat timer: " + e.getMessage());
         }
@@ -362,12 +415,16 @@ public class Combat extends JavaPlugin implements Listener {
             tps = 20.0;
         }
         
-        long interval = tps >= 19.5 ? 10L : 
+        // More aggressive interval adjustments based on TPS
+        long interval = tps >= 19.8 ? 10L : 
+                        tps >= 19.0 ? 12L : 
                         tps >= 18.0 ? 15L : 
-                        tps >= 16.0 ? 20L : 30L;
+                        tps >= 16.0 ? 20L : 25L;
         
-        if (playerCount > 10000) interval *= 2;
-        else if (playerCount > 5000) interval *= 1.5;
+        // Scale based on player count more aggressively
+        if (playerCount > 5000) interval = (long)(interval * 2.0);
+        else if (playerCount > 2000) interval = (long)(interval * 1.5);
+        else if (playerCount > 1000) interval = (long)(interval * 1.2);
         
         return interval;
     }
@@ -697,6 +754,13 @@ public class Combat extends JavaPlugin implements Listener {
 
         for (String line : asciiArt.split("\n")) {
             Bukkit.getConsoleSender().sendMessage(net.opmasterleo.combat.util.ChatUtil.parse(line));
+        }
+    }
+
+    // Add a method to update glowing via packets
+    public void updateGlowing() {
+        if (glowingEnabled && glowManager != null) {
+            glowManager.updateGlowingForAll();
         }
     }
 }

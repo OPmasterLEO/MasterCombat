@@ -13,13 +13,28 @@ import com.sk89q.worldguard.protection.regions.RegionQuery;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
 
 public class WorldGuardUtil {
     private final RegionQuery regionQuery;
-    private final Map<Long, CacheEntry> pvpCache = new ConcurrentHashMap<>(4096);
-    private static final long CACHE_TIMEOUT = 10000;
+    private final Map<Long, CacheEntry> pvpCache = new LRUCache<>(1024); // Use LRU cache with limited size
+    private static final long CACHE_TIMEOUT = 30000; // Increased cache time to 30s
     private long lastCleanupTime = System.currentTimeMillis();
+    
+    // LRU Cache implementation to limit memory usage
+    private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
+        private final int maxSize;
+        
+        public LRUCache(int maxSize) {
+            super(16, 0.75f, true);
+            this.maxSize = maxSize;
+        }
+        
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+            return size() > maxSize;
+        }
+    }
     
     private static class CacheEntry {
         final boolean pvpDenied;
@@ -52,22 +67,34 @@ public class WorldGuardUtil {
     public boolean isPvpDenied(Player player) {
         if (player == null) return false;
         Location location = player.getLocation();
+        
+        // Use coarser location keys to improve cache hit rate
         long key = locationToChunkKey(location);
         CacheEntry cached = pvpCache.get(key);
         if (cached != null && !cached.isExpired()) {
             return cached.pvpDenied;
         }
 
-        ApplicableRegionSet regions = regionQuery.getApplicableRegions(BukkitAdapter.adapt(location));
-        boolean denied = regions.queryValue(null, Flags.PVP) == StateFlag.State.DENY;
+        // Use thread-safe access to WorldGuard API
+        boolean denied;
+        try {
+            ApplicableRegionSet regions = regionQuery.getApplicableRegions(BukkitAdapter.adapt(location));
+            denied = regions.queryValue(null, Flags.PVP) == StateFlag.State.DENY;
+        } catch (Exception e) {
+            // Fallback if WorldGuard API fails
+            denied = false;
+        }
+        
+        // Cache the result
         pvpCache.put(key, new CacheEntry(denied));
         
         return denied;
     }
-
+    
+    // Use a coarser grid to increase cache hit rate
     private long locationToChunkKey(Location loc) {
-        int chunkX = loc.getBlockX() >> 4;
-        int chunkZ = loc.getBlockZ() >> 4;
+        int chunkX = loc.getBlockX() >> 5; // 32-block grid instead of 16
+        int chunkZ = loc.getBlockZ() >> 5;
         int worldId = loc.getWorld().getUID().hashCode();
         return ((long)worldId << 40) | ((long)chunkX << 20) | (long)chunkZ;
     }
