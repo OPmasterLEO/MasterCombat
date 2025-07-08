@@ -113,12 +113,33 @@ public class EndCrystalListener implements Listener {
                 if (victim.getUniqueId().equals(placer.getUniqueId())) {
                     if (selfCombat) {
                         Combat.getInstance().directSetCombat(victim, victim);
+                        
+                        // If fatal self-damage, attribute to opponent
+                        if (victim.getHealth() <= event.getFinalDamage()) {
+                            Player opponent = combat.getCombatOpponent(victim);
+                            if (opponent != null && !opponent.equals(victim)) {
+                                victim.setKiller(opponent);
+                            }
+                        }
                     }
                 } else {
                     Combat.getInstance().directSetCombat(victim, placer);
                     Combat.getInstance().directSetCombat(placer, victim);
+                    
+                    // Set killer for fatal damage
+                    if (victim.getHealth() <= event.getFinalDamage()) {
+                        victim.setKiller(placer);
+                    }
                 }
             } else if (event.getFinalDamage() > 0) {
+                // If a crystal is about to kill a player but we don't know the placer
+                if (victim.getHealth() <= event.getFinalDamage()) {
+                    Player opponent = combat.getCombatOpponent(victim);
+                    if (opponent != null) {
+                        victim.setKiller(opponent);
+                    }
+                }
+                
                 linkCrystalByProximity(damager, victim);
             }
         }
