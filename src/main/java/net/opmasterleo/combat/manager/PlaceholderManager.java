@@ -4,6 +4,7 @@ import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.entity.Player;
 
 import java.util.concurrent.TimeUnit;
+import net.opmasterleo.combat.Combat;
 
 public class PlaceholderManager {
 
@@ -28,5 +29,12 @@ public class PlaceholderManager {
 
     private static boolean isPlaceholderAPILoaded() {
         return org.bukkit.Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+    }
+
+    private static String getDisableCommand() {
+        Combat combat = Combat.getInstance();
+        if (combat == null) return "removeprotect";
+        
+        return combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect");
     }
 }
