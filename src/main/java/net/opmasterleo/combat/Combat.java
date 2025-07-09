@@ -1,12 +1,10 @@
 package net.opmasterleo.combat;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
@@ -16,14 +14,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.EventPriority;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-
-import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
-import lombok.Getter;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import com.github.retrooper.packetevents.PacketEvents;
 import net.opmasterleo.combat.api.MasterCombatAPIBackend;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.api.events.MasterCombatLoadEvent;
@@ -38,18 +37,22 @@ import net.opmasterleo.combat.listener.PlayerMoveListener;
 import net.opmasterleo.combat.listener.PlayerQuitListener;
 import net.opmasterleo.combat.listener.PlayerTeleportListener;
 import net.opmasterleo.combat.listener.SelfCombatListener;
+import net.opmasterleo.combat.listener.NewbieProtectionListener;
+import net.opmasterleo.combat.listener.RespawnAnchorListener;
 import net.opmasterleo.combat.manager.CrystalManager;
-import net.opmasterleo.combat.manager.Update;
+import net.opmasterleo.combat.manager.GlowManager;
 import net.opmasterleo.combat.manager.WorldGuardUtil;
+import net.opmasterleo.combat.manager.SuperVanishManager;
+import net.opmasterleo.combat.util.SchedulerUtil;
+import net.opmasterleo.combat.manager.Update;
 
-@Getter
 public class Combat extends JavaPlugin implements Listener {
 
-    @Getter
     private static Combat instance;
-    private final HashMap<UUID, Long> combatPlayers = new HashMap<>();
-    private final HashMap<UUID, UUID> combatOpponents = new HashMap<>();
-    private final HashMap<UUID, Long> lastActionBarSeconds = new HashMap<>();
+    private final ConcurrentHashMap<UUID, Long> combatPlayers = new ConcurrentHashMap<>(512, 0.75f, 64);
+    private final ConcurrentHashMap<UUID, UUID> combatOpponents = new ConcurrentHashMap<>(512, 0.75f, 64);
+    private final ConcurrentHashMap<UUID, Long> lastActionBarSeconds = new ConcurrentHashMap<>(512, 0.75f, 64);
+    
     private boolean enableWorldsEnabled;
     private List<String> enabledWorlds;
     private boolean combatEnabled;
@@ -57,74 +60,86 @@ public class Combat extends JavaPlugin implements Listener {
     private WorldGuardUtil worldGuardUtil;
     private PlayerMoveListener playerMoveListener;
     private EndCrystalListener endCrystalListener;
+    private NewbieProtectionListener newbieProtectionListener;
     private CrystalManager crystalManager;
-    private ProtocolManager protocolManager;
-
+    private SuperVanishManager superVanishManager;
+    private GlowManager glowManager;
     private boolean disableElytra;
     private boolean enderPearlEnabled;
     private long enderPearlDistance;
     private String elytraDisabledMsg;
-    private Set<String> ignoredProjectiles = new HashSet<>();
+    private final Set<String> ignoredProjectiles = ConcurrentHashMap.newKeySet();
+    private RespawnAnchorListener respawnAnchorListener;
+    
+    private String prefix;
+    private String nowInCombatMsg;
+    private String noLongerInCombatMsg;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         instance = this;
 
+        if (!getConfig().contains("NewbieProtection.Messages.BlockedMessage")) {
+            getConfig().set("NewbieProtection.Messages.BlockedMessage", "&cYou can't use this item while protected.");
+            saveConfig();
+        }
+
+        loadConfigValues();
+        initializeManagers();
+        registerCommands();
+        registerListeners();
+        startCombatTimer();
+        initializeAPI();
+        sendStartupMessage();
+        
+        int pluginId = 25701;
+        new Metrics(this, pluginId);
+
+        if (isPacketEventsAvailable()) {
+            PacketEvents.getAPI().getEventManager().registerListener(new net.opmasterleo.combat.handler.PacketHandler(this));
+        }
+    }
+
+    private void loadConfigValues() {
         combatEnabled = getConfig().getBoolean("combat-enabled", true);
         glowingEnabled = getConfig().getBoolean("CombatTagGlowing.Enabled", false);
+        enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
+        enabledWorlds = getConfig().getStringList("EnabledWorlds.worlds");
+        disableElytra = getConfig().getBoolean("disable-elytra", false);
+        enderPearlEnabled = getConfig().getBoolean("EnderPearl.Enabled", false);
+        enderPearlDistance = getConfig().getLong("EnderPearl.Distance", 0);
+        
+        prefix = getConfig().getString("Messages.Prefix", "");
+        nowInCombatMsg = getConfig().getString("Messages.NowInCombat", "");
+        noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat", "");
+        elytraDisabledMsg = getConfig().getString("Messages.ElytraDisabled", "§cElytra usage is disabled while in combat.");
+        
+        List<String> ignoredList = getConfig().getStringList("ignored-projectiles");
+        for (String s : ignoredList) {
+            ignoredProjectiles.add(s.toUpperCase());
+        }
+    }
 
+    private void initializeManagers() {
+        superVanishManager = new SuperVanishManager();
+        crystalManager = new CrystalManager();
+        
         if (Bukkit.getPluginManager().getPlugin("WorldGuard") != null) {
             worldGuardUtil = new WorldGuardUtil();
         }
-
-        if (Bukkit.getPluginManager().getPlugin("ProtocolLib") != null) {
-            protocolManager = ProtocolLibrary.getProtocolManager();
-            Bukkit.getConsoleSender().sendMessage("§a[MasterCombat] ProtocolLib detected and integrated.");
-        } else {
-            Bukkit.getConsoleSender().sendMessage("§c[MasterCombat] ProtocolLib not detected. Some features may not work.");
-        }
-
-        registerListeners();
-        getCommand("combat").setExecutor(new CombatCommand());
-        startCombatTimer();
-        sendStartupMessage();
-        Update.checkForUpdates(this);
-        Update.notifyOnServerOnline(this);
-
-        int pluginId = 25701;
-        Metrics metrics = new Metrics(this, pluginId);
-
-        endCrystalListener = new EndCrystalListener();
-        Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
-        Bukkit.getPluginManager().registerEvents(new EntityPlaceListener(), this);
-
-        crystalManager = new CrystalManager();
-
-        MasterCombatAPIProvider.register(new MasterCombatAPIBackend(this));
-        Bukkit.getPluginManager().callEvent(new MasterCombatLoadEvent());
-    }
-
-    @Override
-    public void onDisable() {
-        combatPlayers.clear();
-        combatOpponents.clear();
-        lastActionBarSeconds.clear();
+        
         if (glowingEnabled) {
-            for (UUID uuid : combatPlayers.keySet()) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) player.setGlowing(false);
-            }
+            glowManager = new GlowManager();
         }
-        Bukkit.getConsoleSender().sendMessage("§cMasterCombat plugin has been disabled.");
     }
-
-    private void detectFolia() {
-        try {
-            Class.forName("io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler");
-            Bukkit.getConsoleSender().sendMessage("§aFolia detected, Using Folia (multi-threaded task) system");
-        } catch (ClassNotFoundException e) {
-            Bukkit.getConsoleSender().sendMessage("§aPaper detected, using Paper (standard task scheduler) system");
+    
+    private void registerCommands() {
+        Objects.requireNonNull(getCommand("combat")).setExecutor(new CombatCommand());
+        Objects.requireNonNull(getCommand("protection")).setExecutor(new CombatCommand());
+        String disableCmd = getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
+        if (getCommand(disableCmd) != null) {
+            getCommand(disableCmd).setExecutor(new CombatCommand());
         }
     }
 
@@ -139,153 +154,314 @@ public class Combat extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(new CustomDeathMessageListener(), this);
         Bukkit.getPluginManager().registerEvents(new SelfCombatListener(), this);
         Bukkit.getPluginManager().registerEvents(this, this);
+        
+        endCrystalListener = new EndCrystalListener();
+        Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
+        Bukkit.getPluginManager().registerEvents(new EntityPlaceListener(), this);
+
+        if (getConfig().getBoolean("link-respawn-anchor", true)) {
+            respawnAnchorListener = new RespawnAnchorListener();
+            Bukkit.getPluginManager().registerEvents(respawnAnchorListener, this);
+        }
+
+        newbieProtectionListener = new NewbieProtectionListener();
+        Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
+    }
+    
+    private void initializeAPI() {
+        MasterCombatAPIProvider.set(new MasterCombatAPIBackend(this));
+        Bukkit.getPluginManager().callEvent(new MasterCombatLoadEvent());
+    }
+
+    @Override
+    public void onDisable() {
+        if (glowManager != null) {
+            glowManager.cleanup();
+        }
+
+        combatPlayers.clear();
+        combatOpponents.clear();
+        lastActionBarSeconds.clear();
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        
+        if (glowManager != null) {
+            glowManager.trackPlayer(player);
+        }
+        
         if (player.isOp() && getConfig().getBoolean("update-notify-chat", false)) {
-            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-                String pluginName = getDescription().getName();
-                String currentVersion = getDescription().getVersion();
-                String latestVersion = Update.getLatestVersion();
-
-                Bukkit.getScheduler().runTask(this, () -> {
-                    if (latestVersion == null) {
-                        player.sendMessage("§c[" + pluginName + "]» Unable to fetch update information.");
-                        return;
-                    }
-                    if (currentVersion.equalsIgnoreCase(latestVersion)) {
-                        player.sendMessage("§a[" + pluginName + "]» This server is running the latest " + pluginName + " version.");
-                    } else {
-                        player.sendMessage("§e[" + pluginName + "]» This server is running " + pluginName + " version " + currentVersion +
-                                " but the latest is " + latestVersion + ".");
-                    }
-                });
-            });
+            Update.notifyOnPlayerJoin(player, this);
+        }
+    }
+    
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        
+        if (glowManager != null) {
+            glowManager.untrackPlayer(player);
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        if (event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) return;
+
+        Location location = victim.getLocation();
+        Block anchorBlock = null;
+        
+        int blockX = location.getBlockX();
+        int blockY = location.getBlockY();
+        int blockZ = location.getBlockZ();
+        
+        for (int x = -2; x <= 2; x++) {
+            for (int y = -2; y <= 2; y++) {
+                for (int z = -2; z <= 2; z++) {
+                    Block block = location.getWorld().getBlockAt(blockX + x, blockY + y, blockZ + z);
+                    if (block.getType() == Material.RESPAWN_ANCHOR) {
+                        anchorBlock = block;
+                        x = y = z = 3;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (anchorBlock == null) return;
+
+        UUID anchorId = UUID.nameUUIDFromBytes(anchorBlock.getLocation().toString().getBytes());
+        Player activator = newbieProtectionListener.getAnchorActivator(anchorId);
+        if (activator == null) return;
+
+        if (newbieProtectionListener.isActuallyProtected(activator) &&
+            !newbieProtectionListener.isActuallyProtected(victim)) {
+            event.setCancelled(true);
+            newbieProtectionListener.sendBlockedMessage(activator, newbieProtectionListener.getAnchorBlockMessage());
+        }
+    }
+
+    public void directSetCombat(Player player, Player opponent) {
+        if (!combatEnabled || player == null || opponent == null) return;
+
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR ||
+            opponent.getGameMode() == GameMode.CREATIVE || opponent.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+
+        if (superVanishManager != null && 
+            (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
+            return;
+        }
+
+        UUID playerUUID = player.getUniqueId();
+        UUID opponentUUID = opponent.getUniqueId();
+        
+        if (worldGuardUtil != null) {
+            Boolean playerDenied = worldGuardUtil.getCachedPvpState(playerUUID, player.getLocation());
+
+            if (!playerUUID.equals(opponentUUID)) {
+                Boolean opponentDenied = worldGuardUtil.getCachedPvpState(opponentUUID, opponent.getLocation());
+                if ((playerDenied != null && playerDenied) || (opponentDenied != null && opponentDenied)) {
+                    return;
+                }
+            } else if (playerDenied != null && playerDenied) {
+                return;
+            }
+        }
+
+        long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
+        
+        boolean playerWasInCombat = combatPlayers.containsKey(playerUUID);
+        boolean opponentWasInCombat = !playerUUID.equals(opponentUUID) && combatPlayers.containsKey(opponentUUID);
+        
+        combatOpponents.put(playerUUID, opponentUUID);
+        combatPlayers.put(playerUUID, expiry);
+        
+        if (!playerUUID.equals(opponentUUID)) {
+            combatOpponents.put(opponentUUID, playerUUID);
+            combatPlayers.put(opponentUUID, expiry);
+        }
+        
+        if (!playerWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+            player.sendMessage(prefix + nowInCombatMsg);
+        }
+        
+        if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+            opponent.sendMessage(prefix + nowInCombatMsg);
+        }
+
+        if (glowingEnabled && glowManager != null) {
+            if (!playerWasInCombat) glowManager.setGlowing(player, true);
+            if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
+        }
+    }
+    
     private void startCombatTimer() {
+        final int BATCH_SIZE = Math.min(2000, Math.max(500, Bukkit.getMaxPlayers() / 10));
+        final UUID[] processBuffer = new UUID[BATCH_SIZE];
+        
         Runnable timerTask = () -> {
             long currentTime = System.currentTimeMillis();
-            Iterator<Map.Entry<UUID, Long>> iterator = combatPlayers.entrySet().iterator();
-
-            while (iterator.hasNext()) {
-                Map.Entry<UUID, Long> entry = iterator.next();
-                UUID uuid = entry.getKey();
+            int count = 0;
+            
+            for (UUID uuid : combatPlayers.keySet()) {
+                if (count >= BATCH_SIZE) break;
+                processBuffer[count++] = uuid;
+            }
+            
+            for (int i = 0; i < count; i++) {
+                UUID uuid = processBuffer[i];
+                
+                Long endTime = combatPlayers.get(uuid);
+                if (endTime == null) continue;
+                
                 Player player = Bukkit.getPlayer(uuid);
-
                 if (player == null) {
-                    iterator.remove();
+                    combatPlayers.remove(uuid);
                     combatOpponents.remove(uuid);
                     lastActionBarSeconds.remove(uuid);
-                    if (glowingEnabled) setPlayerGlowing(uuid, false);
                     continue;
                 }
 
-                if (currentTime >= entry.getValue()) {
-                    handleCombatEnd(player, iterator);
+                if (currentTime >= endTime) {
+                    handleCombatEnd(player);
                     lastActionBarSeconds.remove(uuid);
-                    if (glowingEnabled) setPlayerGlowing(uuid, false);
                 } else {
-                    updateActionBar(player, entry.getValue(), currentTime);
-                    if (glowingEnabled) setPlayerGlowing(uuid, true);
+                    Long lastUpdate = lastActionBarSeconds.get(uuid);
+                    if (lastUpdate == null || currentTime - lastUpdate >= 500) {
+                        updateActionBar(player, endTime, currentTime);
+                        lastActionBarSeconds.put(uuid, currentTime);
+                    }
+                }
+                
+                if (i % 100 == 0 && count > 1000) {
+                    Thread.yield();
                 }
             }
         };
 
+        long baseInterval = Math.max(10L, Math.min(40L, getDynamicInterval()));
+        
         try {
-            Class.forName("io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler");
-            Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
-                timerTask.run();
-            }, 20L, getDynamicInterval());
-        } catch (ClassNotFoundException e) {
-            Bukkit.getScheduler().runTaskTimerAsynchronously(this, timerTask, 20L, getDynamicInterval());
+            SchedulerUtil.runTaskTimerAsync(this, timerTask, baseInterval, baseInterval);
+        } catch (Exception e) {
+            getLogger().warning("Failed to schedule combat timer: " + e.getMessage());
         }
     }
-
+    
     private long getDynamicInterval() {
-        double tps = 20.0;
+        int playerCount = Bukkit.getOnlinePlayers().size();
+        double tps;
         try {
             tps = Bukkit.getServer().getTPS()[0];
-        } catch (Throwable ignored) {}
-        if (tps >= 19.5) return 20L;
-        if (tps >= 18.0) return 30L;
-        if (tps >= 16.0) return 40L;
-        return 60L;
+        } catch (Throwable ignored) {
+            tps = 20.0;
+        }
+        
+        long interval = tps >= 19.5 ? 10L : 
+                        tps >= 18.0 ? 15L : 
+                        tps >= 16.0 ? 20L : 30L;
+        
+        if (playerCount > 10000) interval *= 2;
+        else if (playerCount > 5000) interval *= 1.5;
+        
+        return interval;
     }
 
-    private void setPlayerGlowing(UUID uuid, boolean glowing) {
-        Player player = Bukkit.getPlayer(uuid);
-        if (player != null && player.isOnline()) {
-            if (player.isGlowing() != glowing) {
-                player.setGlowing(glowing);
+    private void handleCombatEnd(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        combatPlayers.remove(playerUUID);
+        UUID opponentUUID = combatOpponents.remove(playerUUID);
+        
+        if (glowingEnabled && glowManager != null) {
+            glowManager.setGlowing(player, false);
+            if (opponentUUID != null) {
+                Player opponent = Bukkit.getPlayer(opponentUUID);
+                if (opponent != null) {
+                    glowManager.setGlowing(opponent, false);
+                }
             }
         }
-    }
-
-    private void handleCombatEnd(Player player, Iterator<Map.Entry<UUID, Long>> iterator) {
-        iterator.remove();
-        UUID opponentUUID = combatOpponents.remove(player.getUniqueId());
-        if (opponentUUID != null) {
-            combatOpponents.remove(opponentUUID);
-        }
-        sendCombatEndMessage(player);
-    }
-
-    private void sendCombatEndMessage(Player player) {
-        if (!getConfig().getString("Messages.NoLongerInCombat", "").isEmpty()) {
-            player.sendMessage(getMessage("Messages.Prefix") + getMessage("Messages.NoLongerInCombat"));
+        
+        if (noLongerInCombatMsg != null && !noLongerInCombatMsg.isEmpty()) {
+            player.sendMessage(prefix + noLongerInCombatMsg);
         }
     }
 
     private void updateActionBar(Player player, long endTime, long currentTime) {
         long seconds = (endTime - currentTime + 999) / 1000;
-        player.sendActionBar(getMessage("ActionBar.Format").replace("%seconds%", String.valueOf(seconds)));
+        String format = getConfig().getString("ActionBar.Format");
+        if (format == null || format.isEmpty()) return;
+
+        String message = format.replace("%seconds%", String.valueOf(seconds));
+        net.kyori.adventure.text.Component component = net.opmasterleo.combat.util.ChatUtil.parse(message);
+        player.sendActionBar(component);
     }
 
     public boolean isCombatEnabledInWorld(Player player) {
-        return !enableWorldsEnabled || enabledWorlds.contains(player.getWorld().getName());
+        return !enableWorldsEnabled || enabledWorlds == null || enabledWorlds.contains(player.getWorld().getName());
     }
 
     public boolean isInCombat(Player player) {
-        return combatPlayers.getOrDefault(player.getUniqueId(), 0L) > System.currentTimeMillis();
+        Long until = combatPlayers.get(player.getUniqueId());
+        return until != null && until > System.currentTimeMillis();
     }
 
     public void setCombat(Player player, Player opponent) {
-        if (!combatEnabled || !isCombatEnabledInWorld(player)) return;
-        if (shouldBypass(player)) return;
+        if (player == null || opponent == null) return;
+        
+        if (player.equals(opponent)) {
+            if (getConfig().getBoolean("self-combat", false)) {
+                forceSetCombat(player, player);
+            }
+            return;
+        }
 
-        long duration = System.currentTimeMillis() + 1000 * getConfig().getLong("Duration", 0);
-        updateCombatState(player, opponent, duration);
-        sendCombatStartMessage(player);
-        restrictMovement(player);
+        if (!combatEnabled || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
+
+        if (!canDamage(player, opponent)) return;
+
+        forceSetCombat(player, opponent);
+    }
+    
+    public boolean canDamage(Player attacker, Player victim) {
+        if (attacker.getGameMode() == GameMode.CREATIVE || attacker.getGameMode() == GameMode.SPECTATOR ||
+            victim.getGameMode() == GameMode.CREATIVE || victim.getGameMode() == GameMode.SPECTATOR) {
+            return false;
+        }
+
+        if (attacker.equals(victim) && !getConfig().getBoolean("self-combat", false)) {
+            return false;
+        }
+
+        if (worldGuardUtil != null && worldGuardUtil.isPvpDenied(attacker)) {
+            return false;
+        }
+
+        if (newbieProtectionListener != null) {
+            boolean attackerProtected = newbieProtectionListener.isActuallyProtected(attacker);
+            boolean victimProtected = newbieProtectionListener.isActuallyProtected(victim);
+
+            if (attackerProtected && !victimProtected) return false;
+            if (!attackerProtected && victimProtected) return false;
+        }
+
+        if (superVanishManager != null && 
+            (superVanishManager.isVanished(attacker) || superVanishManager.isVanished(victim))) {
+            return false;
+        }
+
+        return true;
     }
 
     private boolean shouldBypass(Player player) {
         return (getConfig().getBoolean("ignore-op", true) && player.isOp()) 
             || player.getGameMode() == GameMode.CREATIVE 
             || player.getGameMode() == GameMode.SPECTATOR;
-    }
-
-    private void updateCombatState(Player player, Player opponent, long duration) {
-        combatPlayers.put(player.getUniqueId(), duration);
-        combatPlayers.put(opponent.getUniqueId(), duration);
-        combatOpponents.put(player.getUniqueId(), opponent.getUniqueId());
-        combatOpponents.put(opponent.getUniqueId(), player.getUniqueId());
-    }
-
-    private void sendCombatStartMessage(Player player) {
-        if (!isInCombat(player) && !getConfig().getString("Messages.NowInCombat", "").isEmpty()) {
-            player.sendMessage(getMessage("Messages.Prefix") + getMessage("Messages.NowInCombat"));
-        }
-    }
-
-    private void restrictMovement(Player player) {
-        player.setGliding(false);
-        player.setFlying(false);
-        player.setAllowFlight(false);
     }
 
     public Player getCombatOpponent(Player player) {
@@ -297,7 +473,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void keepPlayerInCombat(Player player) {
-        if (isInCombat(player)) {
+        if (player != null) {
             combatPlayers.put(player.getUniqueId(), 
                 System.currentTimeMillis() + 1000 * getConfig().getLong("Duration", 0));
         }
@@ -305,36 +481,16 @@ public class Combat extends JavaPlugin implements Listener {
 
     public String getMessage(String key) {
         String message = getConfig().getString(key, "");
-        return LegacyComponentSerializer.legacySection().serialize(
-            LegacyComponentSerializer.legacy('&').deserialize(message)
-        );
+        if (message == null) message = "";
+        return message;
     }
 
     public void reloadCombatConfig() {
         reloadConfig();
-        combatEnabled = getConfig().getBoolean("combat-enabled", true);
-        enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
-        enabledWorlds = getConfig().getStringList("EnabledWorlds.worlds");
-        if (enabledWorlds == null || enabledWorlds.isEmpty()) {
-            enabledWorlds = List.of("world");
-        }
-        glowingEnabled = getConfig().getBoolean("CombatTagGlowing.Enabled", false);
-
-        disableElytra = getConfig().getBoolean("disable-elytra", false);
-        enderPearlEnabled = getConfig().getBoolean("EnderPearl.Enabled", false);
-        enderPearlDistance = getConfig().getLong("EnderPearl.Distance", 0);
-        elytraDisabledMsg = getMessage("Messages.ElytraDisabled");
-        if (elytraDisabledMsg == null || elytraDisabledMsg.isEmpty()) {
-            elytraDisabledMsg = "§cElytra usage is disabled while in combat.";
-        }
-        ignoredProjectiles.clear();
-        List<String> ignoredList = getConfig().getStringList("ignored-projectiles");
-        for (String s : ignoredList) ignoredProjectiles.add(s.toUpperCase());
-
-        if (!glowingEnabled) {
-            for (UUID uuid : combatPlayers.keySet()) {
-                setPlayerGlowing(uuid, false);
-            }
+        loadConfigValues();
+        
+        if (newbieProtectionListener != null) {
+            newbieProtectionListener.reloadConfig();
         }
     }
 
@@ -348,9 +504,158 @@ public class Combat extends JavaPlugin implements Listener {
         this.combatEnabled = enabled;
     }
 
+    public static Combat getInstance() {
+        return instance;
+    }
+
+    public WorldGuardUtil getWorldGuardUtil() {
+        return worldGuardUtil;
+    }
+
+    public void registerCrystalPlacer(Entity crystal, Player placer) {
+        if (crystalManager != null) {
+            crystalManager.setPlacer(crystal, placer);
+        }
+    }
+
+    public NewbieProtectionListener getNewbieProtectionListener() {
+        return newbieProtectionListener;
+    }
+
+    public ConcurrentHashMap<UUID, Long> getCombatPlayers() {
+        return combatPlayers;
+    }
+
+    public ConcurrentHashMap<UUID, UUID> getCombatOpponents() {
+        return combatOpponents;
+    }
+
+    public CrystalManager getCrystalManager() {
+        return crystalManager;
+    }
+
+    public SuperVanishManager getSuperVanishManager() {
+        return superVanishManager;
+    }
+
+    public GlowManager getGlowManager() {
+        if (!glowingEnabled) return null;
+        return glowManager;
+    }
+
+    public boolean isCombatEnabled() {
+        return combatEnabled;
+    }
+
+    private boolean isPacketEventsAvailable() {
+        return Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
+    }
+
+    public RespawnAnchorListener getRespawnAnchorListener() {
+        return respawnAnchorListener;
+    }
+
+    public void forceSetCombat(Player player, Player opponent) {
+        if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
+        
+        if (worldGuardUtil != null) {
+            if (opponent != null && opponent.equals(player)) {
+                if (worldGuardUtil.isPvpDenied(player)) return;
+            } else if (opponent != null) {
+                if (worldGuardUtil.isPvpDenied(player) || worldGuardUtil.isPvpDenied(opponent)) return;
+            } else {
+                if (worldGuardUtil.isPvpDenied(player)) return;
+            }
+        }
+
+        long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
+        
+        if (player != null) {
+            UUID playerUUID = player.getUniqueId();
+            boolean wasInCombat = combatPlayers.containsKey(playerUUID);
+            
+            combatOpponents.put(playerUUID, opponent != null ? opponent.getUniqueId() : null);
+            combatPlayers.put(playerUUID, expiry);
+            
+            if (!wasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+                player.sendMessage(prefix + nowInCombatMsg);
+            }
+            
+            if (glowingEnabled) {
+                if (!wasInCombat && player.isGliding()) player.setGliding(false);
+                if (!wasInCombat && player.isFlying()) {
+                    player.setFlying(false);
+                    player.setAllowFlight(false);
+                }
+                
+                if (glowManager != null) {
+                    glowManager.setGlowing(player, true);
+                }
+            }
+            
+            lastActionBarSeconds.put(playerUUID, System.currentTimeMillis());
+        }
+        
+        if (opponent != null && !opponent.equals(player)) {
+            UUID opponentUUID = opponent.getUniqueId();
+            boolean wasInCombat = combatPlayers.containsKey(opponentUUID);
+            
+            combatOpponents.put(opponentUUID, player.getUniqueId());
+            combatPlayers.put(opponentUUID, expiry);
+            
+            if (!wasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+                opponent.sendMessage(prefix + nowInCombatMsg);
+            }
+            
+            if (glowingEnabled && glowManager != null) {
+                glowManager.setGlowing(opponent, true);
+            }
+            
+            lastActionBarSeconds.put(opponentUUID, System.currentTimeMillis());
+        }
+    }
+
+    public void handlePacketEvent(Player player, Player opponent) {
+        if (!combatEnabled || player == null || opponent == null) return;
+        
+        long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
+        
+        UUID playerUUID = player.getUniqueId();
+        UUID opponentUUID = opponent.getUniqueId();
+        
+        combatOpponents.put(playerUUID, opponentUUID);
+        combatPlayers.put(playerUUID, expiry);
+        
+        if (!playerUUID.equals(opponentUUID)) {
+            combatOpponents.put(opponentUUID, playerUUID);
+            combatPlayers.put(opponentUUID, expiry);
+        }
+        
+        if (!combatPlayers.containsKey(playerUUID) && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+            player.sendMessage(prefix + nowInCombatMsg);
+        }
+        
+        if (!playerUUID.equals(opponentUUID) && !combatPlayers.containsKey(opponentUUID) && 
+            nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+            opponent.sendMessage(prefix + nowInCombatMsg);
+        }
+        
+        if (glowingEnabled && glowManager != null) {
+            glowManager.setGlowing(player, true);
+            if (!playerUUID.equals(opponentUUID)) {
+                glowManager.setGlowing(opponent, true);
+            }
+        }
+    }
+
+    @Deprecated
+    public org.bukkit.plugin.PluginDescriptionFile getPluginDescription() {
+        return super.getDescription();
+    }
+
     private void sendStartupMessage() {
-        String version = getDescription().getVersion();
-        String pluginName = getDescription().getName();
+        String version = getPluginMeta().getVersion();
+        String pluginName = getPluginMeta().getDisplayName();
 
         String apiType;
         String serverJarName;
@@ -376,6 +681,13 @@ public class Combat extends JavaPlugin implements Listener {
             Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard not loaded!");
         }
 
+        boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
+        if (packetEventsLoaded) {
+            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §aPacketEvents found, loaded!");
+        } else {
+            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §cPacketEvents NOT found, unloading!");
+        }
+
         String asciiArt =
             "&b   ____                _           _               \n" +
             "&b  / ___|___  _ __ ___ | |__   __ _| |_             \n" +
@@ -384,17 +696,7 @@ public class Combat extends JavaPlugin implements Listener {
             "&b  \\____\\___/|_| |_| |_|_.__/ \\__,_|\\__|   \n";
 
         for (String line : asciiArt.split("\n")) {
-            Bukkit.getConsoleSender().sendMessage(LegacyComponentSerializer.legacy('&').deserialize(line));
-        }
-    }
-
-    public WorldGuardUtil getWorldGuardUtil() {
-        return worldGuardUtil;
-    }
-
-    public void registerCrystalPlacer(Entity crystal, Player placer) {
-        if (crystalManager != null) {
-            crystalManager.setPlacer(crystal, placer);
+            Bukkit.getConsoleSender().sendMessage(net.opmasterleo.combat.util.ChatUtil.parse(line));
         }
     }
 }

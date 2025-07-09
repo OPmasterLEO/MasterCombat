@@ -1,28 +1,38 @@
 package net.opmasterleo.combat.listener;
 
-import org.bukkit.Bukkit;
+import net.opmasterleo.combat.Combat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
-import net.opmasterleo.combat.Combat;
 
 public class PlayerQuitListener implements Listener {
 
     @EventHandler
-    public void handle(PlayerQuitEvent event) {
+    public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-
-        if (Combat.getInstance().isInCombat(player)) {
-            if (player.getHealth() > 0.0) {
-                player.setHealth(0.0);
-            }
-            String logoutMsg = Combat.getInstance().getMessage("Messages.LogoutInCombat");
+        Combat combat = Combat.getInstance();
+        if (combat.isInCombat(player)) {
+            Player opponent = combat.getCombatOpponent(player);
+            player.setHealth(0);
+            String logoutMsg = combat.getMessage("Messages.LogoutInCombat");
             if (logoutMsg != null && !logoutMsg.isEmpty()) {
-                Bukkit.broadcastMessage(Combat.getInstance().getMessage("Messages.Prefix") + logoutMsg.replace("%player%", player.getName()));
+                String message = logoutMsg.replace("%player%", player.getName());
+                combat.getServer().getOnlinePlayers().forEach(p -> p.sendMessage(message));
+            }
+
+            combat.getCombatPlayers().remove(player.getUniqueId());
+            combat.getCombatOpponents().remove(player.getUniqueId());
+            if (combat.getGlowManager() != null) {
+                combat.getGlowManager().setGlowing(player, false);
+                if (opponent != null) {
+                    combat.getGlowManager().setGlowing(opponent, false);
+                    combat.getCombatPlayers().remove(opponent.getUniqueId());
+                    combat.getCombatOpponents().remove(opponent.getUniqueId());
+                    opponent.sendMessage(combat.getMessage("Messages.CombatLogged")
+                            .replace("%player%", player.getName()));
+                }
             }
         }
-
-        Combat.getInstance().getCombatPlayers().remove(player.getUniqueId());
     }
 }

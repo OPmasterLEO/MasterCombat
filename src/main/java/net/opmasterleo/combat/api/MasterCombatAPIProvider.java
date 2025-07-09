@@ -15,4 +15,8 @@ public class MasterCombatAPIProvider {
     public static void register(MasterCombatAPI api) {
         API = api;
     }
+
+    public static void set(MasterCombatAPIBackend apiBackend) {
+        API = apiBackend;
+    }
 }

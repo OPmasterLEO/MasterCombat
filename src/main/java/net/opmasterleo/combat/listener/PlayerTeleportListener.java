@@ -18,8 +18,8 @@ public final class PlayerTeleportListener implements Listener {
         final boolean disableElytra = combat.isDisableElytra();
         final boolean enderPearlEnabled = combat.isEnderPearlEnabled();
         final boolean inCombat = combat.isInCombat(player);
-
-        if (disableElytra && inCombat) {
+        final boolean visualEffectsEnabled = combat.getConfig().getBoolean("CombatTagGlowing.Enabled", false);
+        if (disableElytra && inCombat && visualEffectsEnabled) {
             if (player.isGliding() || player.isFlying()) {
                 player.setGliding(false);
                 player.setFlying(false);

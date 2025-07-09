@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.Locale;
 import java.util.Set;
 
 import org.bukkit.entity.Player;
@@ -20,23 +21,23 @@ public final class PlayerCommandPreprocessListener implements Listener {
     public void reloadBlockedCommands() {
         blockedCommands = new java.util.HashSet<>();
         for (String cmd : Combat.getInstance().getConfig().getStringList("Commands.Blocked")) {
-            blockedCommands.add(cmd.toLowerCase().trim());
+            blockedCommands.add(cmd.toLowerCase(Locale.ROOT).trim());
         }
     }
 
     @EventHandler
     public void handle(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        String command = event.getMessage().substring(1).toLowerCase().trim();
-        String baseCommand = command.split(" ")[0];
+        if (!Combat.getInstance().isInCombat(player)) return;
 
-        if (Combat.getInstance().isInCombat(player)) {
-            if (blockedCommands.contains(command) || blockedCommands.contains(baseCommand)) {
-                event.setCancelled(true);
-                String prefix = Combat.getInstance().getMessage("Messages.Prefix");
-                String format = Combat.getInstance().getMessage("Commands.Format");
-                player.sendMessage(prefix + format.replace("%command%", baseCommand));
-            }
+        String command = event.getMessage().substring(1).trim();
+        String baseCommand = command.split(" ")[0].toLowerCase(Locale.ROOT);
+
+        if (blockedCommands.contains(baseCommand)) {
+            event.setCancelled(true);
+            String prefix = Combat.getInstance().getMessage("Messages.Prefix");
+            String format = Combat.getInstance().getMessage("Commands.Format");
+            player.sendMessage(prefix + format.replace("%command%", baseCommand));
         }
     }
 }

@@ -2,7 +2,7 @@
 #
 #         Developed by OPmasterLEO
 #
-#         https://github.com/Kaleshnikk
+#         https://github.com/OPmasterLEO
 #         https://builtbybit.com/resources/moderncombat.65133/
 #
 # ---------------------------------------------------------------------------
@@ -11,10 +11,10 @@
 generated-by-version: "v${project.version}" # DO NOT CHANGE
  
 # Notify opped players about updates when they join the server
-update-notify-chat: false
+update-notify-chat: true
 
 # Duration of the combat timer in seconds
-Duration: 15
+Duration: 20
 
 # Enable combat globally
 combat-enabled: true
@@ -30,11 +30,12 @@ EnabledWorlds:
     - world2
 
 Messages:
-  Prefix: '' # Prefix for all messages
-  NowInCombat: '' # empty = disabled
-  NoLongerInCombat: '' # empty = disabled
-  LogoutInCombat: '' # empty = disabled
-  ElytraDisabled: '&cElytra usage is disabled while in combat.' # <--- add this line
+  Prefix: ''
+  NowInCombat: ''
+  NoLongerInCombat: ''
+  LogoutInCombat: ''
+  ElytraDisabled: '&cElytra usage is disabled while in combat.'
+  # empty = disabled
 
 # Enable custom death messages
 # This feature does not modify vanilla death messages.
@@ -76,6 +77,47 @@ EnderPearl:
   Distance: 25 # Maximum allowed teleport distance with ender pearls
   Format: '&cYou cannot teleport that far away in combat!'
 
+# New Protection system for new players
+# This system protects new players from PvP for a certain time after they join the server.
+NewbieProtection:
+  enabled: true # Should new players be protected from PvP?
+  time: 300 # Time of protection in seconds
+
+  settings:
+    MobsProtect: false # Protects players from mobs during newbie protection
+    disableCommand: "removeprotect" # Command to disable newbie protection
+    MessageType: ActionBar # Type of message to show, can be ActionBar, Chat, title, etc.
+    BlockedItems:
+      - END_CRYSTAL
+      - RESPAWN_ANCHOR
+
+  # Messages for newbie protection
+  Messages:
+    ExpiredMessage: "&cYour newbie protection has expired." # Message shown when newbie protection expires
+    protectedMessage: "&aYou are protected from PvP for %time% seconds." # Message shown when a player is protected
+    DisabledMessage: "&cYou are no longer protected from PvP." # Message shown when a player disables newbie protection
+    disableMessage: "&cWarning! &fYou'll be vulnerable to PvP. Use /combat %command% confirm to disable protection."
+    TriedAttackMessage: "&cYou cannot attack while protected. Use /combat %command% to disable."
+    AttackerMessage: "&cYou cannot attack that user while in protected mode."
+    CrystalBlockMessage: "&cYou cannot attack unprotected players with crystals while protected."
+    ProtectionLeftMessage: "&aProtection Left: %time%" # Message shown when a player checks their protection time left
+
+    # Message shown when a player tries to use a blocked item while protected
+    BlockedMessage: "&cYou can't do that while protected."
+
+# Should MasterCombat tag players when they damage themselves?
+# Default: false
+self-combat: false
+
+# Should MasterCombat remove players from combat when they are killed?
+# Default: true
+untag-on-death: true
+
+# Should MasterCombat remove players from combat when their enemy is killed?
+# This also removed combat if the enemy is a creeper and decides to explode.
+# Default: true
+untag-on-enemy-death: true
+
 # MasterCombat can link pets, such as wolves, cats, and other animals that can be tamed, to their owner.
 # This will only link the attacker, not the entity that was attacked.
 # Default: true
@@ -111,18 +153,8 @@ link-tnt: true
 # Default: true
 link-end-crystals: true
 
-# Should MasterCombat tag players when they shoot themselves with a projectile?
-# Default: false
-self-combat: false
-
-# Should MasterCombat remove players from combat when they are killed?
-# Default: true
-untag-on-death: true
-
-# Should MasterCombat remove players from combat when their enemy is killed?
-# This also removed combat if the enemy is a creeper and decides to explode.
-# Default: true
-untag-on-enemy-death: true
+# Link respawn anchor explosions to combat (cpvp)
+link-respawn-anchor: true
 
 # Timeout for update confirmation in milliseconds
 update-confirmation-timeout: 10000

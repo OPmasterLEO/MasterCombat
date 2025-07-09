@@ -1,6 +1,7 @@
 package net.opmasterleo.combat.listener;
 
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -16,10 +17,13 @@ public class EntityPlaceListener implements Listener {
     public void onBlockPlace(BlockPlaceEvent event) {
         if (event.isCancelled()) return;
 
-        if (event.getBlock().getType() == Material.END_CRYSTAL) {
-            Player player = event.getPlayer();
-            Entity crystal = event.getBlock().getWorld().spawnEntity(event.getBlock().getLocation(), EntityType.END_CRYSTAL);
-            Combat.getInstance().registerCrystalPlacer(crystal, player);
+        Block block = event.getBlock();
+        Player player = event.getPlayer();
+        Combat combat = Combat.getInstance();
+
+        if (block.getType() == Material.END_CRYSTAL) {
+            Entity crystal = block.getWorld().spawnEntity(block.getLocation(), EntityType.END_CRYSTAL);
+            combat.registerCrystalPlacer(crystal, player);
         }
     }
 }

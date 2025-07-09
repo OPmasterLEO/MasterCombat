@@ -1,33 +1,32 @@
 package net.opmasterleo.combat.listener;
 
+import net.opmasterleo.combat.Combat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import net.opmasterleo.combat.Combat;
 
 public class PlayerDeathListener implements Listener {
 
     @EventHandler
-    public void handle(PlayerDeathEvent event) {
-        Player deadPlayer = event.getEntity();
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
         Combat combat = Combat.getInstance();
-
-        if (combat.getConfig().getBoolean("untag-on-death", true)) {
-            combat.getCombatPlayers().remove(deadPlayer.getUniqueId());
+        
+        combat.getCombatPlayers().remove(player.getUniqueId());
+        Player opponent = combat.getCombatOpponent(player);
+        combat.getCombatOpponents().remove(player.getUniqueId());
+        
+        if (combat.getGlowManager() != null) {
+            combat.getGlowManager().setGlowing(player, false);
+            if (opponent != null) {
+                combat.getGlowManager().setGlowing(opponent, false);
+            }
         }
-
-        if (combat.getConfig().getBoolean("untag-on-enemy-death", true)) {
-            Player opponent = combat.getCombatOpponent(deadPlayer);
-            if (opponent != null) {
-                combat.getCombatPlayers().remove(opponent.getUniqueId());
-                combat.getCombatOpponents().remove(opponent.getUniqueId());
-            }
-        } else {
-            Player opponent = combat.getCombatOpponent(deadPlayer);
-            if (opponent != null) {
-                combat.getCombatPlayers().remove(deadPlayer.getUniqueId());
-            }
+        
+        if (opponent != null) {
+            combat.getCombatPlayers().remove(opponent.getUniqueId());
+            combat.getCombatOpponents().remove(opponent.getUniqueId());
         }
     }
 }
