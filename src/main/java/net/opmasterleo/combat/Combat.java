@@ -182,6 +182,10 @@ public class Combat extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        net.opmasterleo.combat.util.SchedulerUtil.setShuttingDown(true);
+        net.opmasterleo.combat.manager.Update.setShuttingDown(true);
+        net.opmasterleo.combat.manager.Update.cleanupTasks();
+        
         if (packetHandler != null) {
             packetHandler.cleanup();
         }
@@ -190,9 +194,16 @@ public class Combat extends JavaPlugin implements Listener {
             glowManager.cleanup();
         }
 
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException ignored) {}
+        net.opmasterleo.combat.util.SchedulerUtil.cancelAllTasks(this);
+
         combatPlayers.clear();
         combatOpponents.clear();
         lastActionBarSeconds.clear();
+        
+        getLogger().info("MasterCombat shutdown complete.");
     }
 
     @EventHandler

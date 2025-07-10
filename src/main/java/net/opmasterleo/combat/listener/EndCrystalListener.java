@@ -1,6 +1,7 @@
 package net.opmasterleo.combat.listener;
 
 import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -13,7 +14,6 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.metadata.FixedMetadataValue;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.List;
 import java.util.Map;
@@ -67,18 +67,15 @@ public class EndCrystalListener implements Listener {
 
         // Limit concurrent async tasks to prevent thread pool saturation
         if (pendingTasks.incrementAndGet() <= MAX_PENDING_TASKS) {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    try {
-                        // Batch cleanup for better performance
-                        long now = System.currentTimeMillis();
-                        recentExplosions.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
-                    } finally {
-                        pendingTasks.decrementAndGet();
-                    }
+            SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
+                try {
+                    // Batch cleanup for better performance
+                    long now = System.currentTimeMillis();
+                    recentExplosions.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
+                } finally {
+                    pendingTasks.decrementAndGet();
                 }
-            }.runTaskLaterAsynchronously(Combat.getInstance(), 100L);
+            }, 100L);
         } else {
             pendingTasks.decrementAndGet();
         }

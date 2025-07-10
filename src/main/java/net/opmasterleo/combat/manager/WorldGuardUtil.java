@@ -57,12 +57,14 @@ public class WorldGuardUtil {
     }
     
     private void startCleanupTask() {
-        org.bukkit.Bukkit.getScheduler().runTaskTimerAsynchronously(net.opmasterleo.combat.Combat.getInstance(), () -> {
-            if (System.currentTimeMillis() - lastCleanupTime > 60000) {
-                pvpCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
-                lastCleanupTime = System.currentTimeMillis();
-            }
-        }, 1200L, 1200L);
+        net.opmasterleo.combat.util.SchedulerUtil.runTaskTimerAsync(
+            net.opmasterleo.combat.Combat.getInstance(), 
+            () -> {
+                if (System.currentTimeMillis() - lastCleanupTime > 60000) {
+                    pvpCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
+                    lastCleanupTime = System.currentTimeMillis();
+                }
+            }, 1200L, 1200L);
     }
     public boolean isPvpDenied(Player player) {
         if (player == null) return false;

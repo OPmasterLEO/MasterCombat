@@ -1,7 +1,7 @@
 package net.opmasterleo.combat.listener;
 
 import net.opmasterleo.combat.Combat;
-import org.bukkit.Bukkit;
+import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -42,9 +42,11 @@ public class BedExplosionListener implements Listener {
         interactionTimestamps.put(bedId, System.currentTimeMillis());
         
         // Clean up old entries after some time
-        Bukkit.getScheduler().runTaskLaterAsynchronously(Combat.getInstance(), () -> {
+        SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
+            // Use the INTERACTION_TIMEOUT constant to clean up old entries
+            long now = System.currentTimeMillis();
             interactionTimestamps.entrySet().removeIf(entry -> 
-                System.currentTimeMillis() - entry.getValue() > INTERACTION_TIMEOUT);
+                now - entry.getValue() > INTERACTION_TIMEOUT);
             recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
         }, 200L);
     }

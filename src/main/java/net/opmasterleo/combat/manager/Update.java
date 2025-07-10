@@ -9,10 +9,13 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import net.opmasterleo.combat.util.SchedulerUtil;
 
@@ -23,9 +26,36 @@ public class Update {
     private static String downloadUrl;
     private static boolean updateCheckInProgress = false;
     private static boolean updateDownloadInProgress = false;
+    private static volatile boolean isShuttingDown = false;
+    private static final Set<HttpURLConnection> activeConnections = ConcurrentHashMap.newKeySet();
+    private static final Set<BukkitTask> updateTasks = ConcurrentHashMap.newKeySet();
+
+    public static void setShuttingDown(boolean shuttingDown) {
+        isShuttingDown = shuttingDown;
+        
+        // Close any active connections
+        if (shuttingDown) {
+            for (HttpURLConnection conn : activeConnections) {
+                try {
+                    conn.disconnect();
+                } catch (Exception ignored) {}
+            }
+            activeConnections.clear();
+            
+            // Cancel any tasks
+            for (BukkitTask task : updateTasks) {
+                try {
+                    if (!task.isCancelled()) {
+                        task.cancel();
+                    }
+                } catch (Exception ignored) {}
+            }
+            updateTasks.clear();
+        }
+    }
 
     public static String getLatestVersion() {
-        if (latestVersion == null && !updateCheckInProgress) {
+        if (latestVersion == null && !updateCheckInProgress && !isShuttingDown) {
             updateCheckInProgress = true;
             try {
                 performUpdateCheck(Bukkit.getPluginManager().getPlugin("MasterCombat"));
@@ -37,19 +67,32 @@ public class Update {
     }
 
     public static void checkForUpdates(Plugin plugin) {
+        if (isShuttingDown) return;
+        
         if (!updateCheckInProgress) {
             updateCheckInProgress = true;
             Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eChecking for updates…");
-            SchedulerUtil.runTaskAsync(plugin, () -> performUpdateCheck(plugin));
+            BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
+                try {
+                    performUpdateCheck(plugin);
+                } finally {
+                    updateCheckInProgress = false;
+                }
+            });
+            if (task != null) {
+                updateTasks.add(task);
+            }
         }
     }
 
     public static void notifyOnServerOnline(Plugin plugin) {
-        SchedulerUtil.runTaskLater(plugin, () -> {
+        if (isShuttingDown) return;
+        
+        BukkitTask task = SchedulerUtil.runTaskLater(plugin, () -> {
             String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
             String normalizedCurrent = normalizeVersion(currentVersion);
-            if (latestVersion == null && !updateCheckInProgress) {
+            if (latestVersion == null && !updateCheckInProgress && !isShuttingDown) {
                 updateCheckInProgress = true;
                 performUpdateCheck(plugin);
                 updateCheckInProgress = false;
@@ -73,14 +116,14 @@ public class Update {
                 Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» You are running a developer build (v" + currentVersion + "), but the latest public version is v" + latestVersion + ".");
             }
         }, 20L * 3);
+        
+        if (task != null) {
+            updateTasks.add(task);
+        }
     }
 
     public static void notifyOnPlayerJoin(Player player, Plugin plugin) {
-        if (!player.isOp()) {
-            return;
-        }
-
-        if (!plugin.getConfig().getBoolean("update-notify-chat", false)) {
+        if (isShuttingDown || !player.isOp() || !plugin.getConfig().getBoolean("update-notify-chat", false)) {
             return;
         }
 
@@ -88,19 +131,29 @@ public class Update {
         String currentVersion = plugin.getPluginMeta().getVersion();
         if (latestVersion == null && !updateCheckInProgress) {
             updateCheckInProgress = true;
-            SchedulerUtil.runTaskAsync(plugin, () -> {
-                performUpdateCheck(plugin);
-                updateCheckInProgress = false;
-                SchedulerUtil.runTask(plugin, () -> {
-                    sendUpdateNotification(player, pluginName, currentVersion);
-                });
+            BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
+                try {
+                    performUpdateCheck(plugin);
+                } finally {
+                    updateCheckInProgress = false;
+                    SchedulerUtil.runTask(plugin, () -> {
+                        if (!isShuttingDown) {
+                            sendUpdateNotification(player, pluginName, currentVersion);
+                        }
+                    });
+                }
             });
+            if (task != null) {
+                updateTasks.add(task);
+            }
         } else {
             sendUpdateNotification(player, pluginName, currentVersion);
         }
     }
     
     private static void sendUpdateNotification(Player player, String pluginName, String currentVersion) {
+        if (isShuttingDown) return;
+        
         String normalizedCurrent = normalizeVersion(currentVersion);
         String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
         
@@ -123,29 +176,53 @@ public class Update {
     }
 
     public static void downloadAndReplaceJar(Plugin plugin) {
+        if (isShuttingDown) return;
+        
         if (!updateDownloadInProgress) {
             updateDownloadInProgress = true;
             Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eDownloading and applying the update...");
-            SchedulerUtil.runTaskAsync(plugin, () -> performJarReplacement(plugin));
+            BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
+                try {
+                    performJarReplacement(plugin);
+                } catch (Exception e) {
+                    if (!isShuttingDown) {
+                        Bukkit.getConsoleSender().sendMessage("§c[" + plugin.getName() + "]» Error during update: " + e.getMessage());
+                    }
+                } finally {
+                    updateDownloadInProgress = false;
+                }
+            });
+            if (task != null) {
+                updateTasks.add(task);
+            }
         }
     }
 
     private static void performUpdateCheck(Plugin plugin) {
+        if (isShuttingDown) return;
+        
         String pluginName = plugin.getPluginMeta().getName();
+        HttpURLConnection connection = null;
         try {
             URL url = URI.create(GITHUB_API_URL).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection = (HttpURLConnection) url.openConnection();
+            activeConnections.add(connection);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
             connection.setRequestProperty("User-Agent", "MasterCombat-UpdateChecker");
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
 
+            if (isShuttingDown) {
+                return;
+            }
+
             if (connection.getResponseCode() == 200) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                     StringBuilder response = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) {
+                        if (isShuttingDown) return;
                         response.append(line);
                     }
                     latestVersion = parseVersion(response.toString());
@@ -155,14 +232,25 @@ public class Update {
                 Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to check for updates. HTTP Response Code: " + connection.getResponseCode());
             }
         } catch (Exception e) {
-            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while checking for updates: " + e.getMessage());
+            if (!isShuttingDown) {
+                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while checking for updates: " + e.getMessage());
+            }
         } finally {
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {}
+                activeConnections.remove(connection);
+            }
             updateCheckInProgress = false;
         }
     }
 
     private static void performJarReplacement(Plugin plugin) {
+        if (isShuttingDown) return;
+        
         String pluginName = plugin.getPluginMeta().getName();
+        HttpURLConnection connection = null;
         try {
             if (downloadUrl == null || latestVersion == null) {
                 performUpdateCheck(plugin);
@@ -180,9 +268,25 @@ public class Update {
 
             File tempFile = new File(updateFolder, pluginName + "-" + latestVersion + ".jar");
             URL website = URI.create(downloadUrl).toURL();
-            try (ReadableByteChannel rbc = Channels.newChannel(website.openStream());
+            connection = (HttpURLConnection) website.openConnection();
+            activeConnections.add(connection);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(30000);
+            
+            if (isShuttingDown) return;
+            
+            try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
                  FileOutputStream fos = new FileOutputStream(tempFile)) {
-                fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+                
+                // Check for shutdown every 10MB
+                long maxChunk = 10 * 1024 * 1024;
+                long position = 0;
+                while (true) {
+                    if (isShuttingDown) return;
+                    long transferred = fos.getChannel().transferFrom(rbc, position, maxChunk);
+                    if (transferred == 0) break;
+                    position += transferred;
+                }
             }
 
             if (tempFile.exists() && tempFile.length() > 0) {
@@ -193,9 +297,16 @@ public class Update {
                 Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to download the latest jar. File does not exist or is empty.");
             }
         } catch (Exception e) {
-            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while downloading the jar: " + e.getMessage());
-            e.printStackTrace();
+            if (!isShuttingDown) {
+                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while downloading the jar: " + e.getMessage());
+            }
         } finally {
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {}
+                activeConnections.remove(connection);
+            }
             updateDownloadInProgress = false;
         }
     }
@@ -243,5 +354,9 @@ public class Update {
         startIndex += urlPrefix.length();
         int endIndex = jsonResponse.indexOf("\"", startIndex);
         return jsonResponse.substring(startIndex, endIndex);
+    }
+    
+    public static void cleanupTasks() {
+        setShuttingDown(true);
     }
 }

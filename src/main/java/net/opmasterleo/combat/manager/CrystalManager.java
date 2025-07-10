@@ -23,33 +23,35 @@ public final class CrystalManager {
     }
     
     private void startCleanupTask() {
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Combat.getInstance(), () -> {
-            long now = System.currentTimeMillis();
-            if (now - lastCleanupTime > CLEANUP_INTERVAL) {
-                // Batch cleanup for better performance
-                int removed = 0;
-                int batchSize = 100;
-                
-                // Get expired keys
-                Set<Integer> expiredKeys = new HashSet<>();
-                for (Map.Entry<Integer, Long> entry : expiryTimes.entrySet()) {
-                    if (entry.getValue() < now) {
-                        expiredKeys.add(entry.getKey());
-                        removed++;
+        net.opmasterleo.combat.util.SchedulerUtil.runTaskTimerAsync(
+            net.opmasterleo.combat.Combat.getInstance(),
+            () -> {
+                long now = System.currentTimeMillis();
+                if (now - lastCleanupTime > CLEANUP_INTERVAL) {
+                    // Batch cleanup for better performance
+                    int removed = 0;
+                    int batchSize = 100;
+                    
+                    // Get expired keys
+                    Set<Integer> expiredKeys = new HashSet<>();
+                    for (Map.Entry<Integer, Long> entry : expiryTimes.entrySet()) {
+                        if (entry.getValue() < now) {
+                            expiredKeys.add(entry.getKey());
+                            removed++;
+                        }
+                        
+                        if (removed >= batchSize) break;
                     }
                     
-                    if (removed >= batchSize) break;
+                    // Remove expired entries
+                    for (Integer key : expiredKeys) {
+                        expiryTimes.remove(key);
+                        crystalEntityMap.remove(key);
+                    }
+                    
+                    lastCleanupTime = now;
                 }
-                
-                // Remove expired entries
-                for (Integer key : expiredKeys) {
-                    expiryTimes.remove(key);
-                    crystalEntityMap.remove(key);
-                }
-                
-                lastCleanupTime = now;
-            }
-        }, 600L, 600L); // Run less frequently (30s)
+            }, 600L, 600L); // Run less frequently (30s)
     }
 
     public Player getPlacer(Entity crystal) {
