@@ -1,6 +1,8 @@
 package net.opmasterleo.combat.manager;
 
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.Bukkit;
@@ -10,9 +12,11 @@ import org.bukkit.entity.Player;
 import net.opmasterleo.combat.Combat;
 
 public final class CrystalManager {
-    private final Map<Integer, UUID> crystalEntityMap = new ConcurrentHashMap<>(2048);
-    private final Map<Integer, Long> expiryTimes = new ConcurrentHashMap<>(2048);
-    private static final long CRYSTAL_TTL = 300000;
+    private final Map<Integer, UUID> crystalEntityMap = new ConcurrentHashMap<>(512); // Reduced initial capacity
+    private final Map<Integer, Long> expiryTimes = new ConcurrentHashMap<>(512);
+    private static final long CRYSTAL_TTL = 60000; // Reduced from 300s to 60s
+    private long lastCleanupTime = System.currentTimeMillis();
+    private static final long CLEANUP_INTERVAL = 30000; // 30 seconds
 
     public CrystalManager() {
         startCleanupTask();
@@ -20,14 +24,32 @@ public final class CrystalManager {
     
     private void startCleanupTask() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Combat.getInstance(), () -> {
-            final long[] lastCleanupTime = {System.currentTimeMillis()};
-            if (System.currentTimeMillis() - lastCleanupTime[0] > 60000) {
-                long now = System.currentTimeMillis();
-                expiryTimes.entrySet().removeIf(entry -> entry.getValue() < now);
-                crystalEntityMap.keySet().removeIf(id -> !expiryTimes.containsKey(id));
-                lastCleanupTime[0] = now;
+            long now = System.currentTimeMillis();
+            if (now - lastCleanupTime > CLEANUP_INTERVAL) {
+                // Batch cleanup for better performance
+                int removed = 0;
+                int batchSize = 100;
+                
+                // Get expired keys
+                Set<Integer> expiredKeys = new HashSet<>();
+                for (Map.Entry<Integer, Long> entry : expiryTimes.entrySet()) {
+                    if (entry.getValue() < now) {
+                        expiredKeys.add(entry.getKey());
+                        removed++;
+                    }
+                    
+                    if (removed >= batchSize) break;
+                }
+                
+                // Remove expired entries
+                for (Integer key : expiredKeys) {
+                    expiryTimes.remove(key);
+                    crystalEntityMap.remove(key);
+                }
+                
+                lastCleanupTime = now;
             }
-        }, 1200L, 1200L);
+        }, 600L, 600L); // Run less frequently (30s)
     }
 
     public Player getPlacer(Entity crystal) {
