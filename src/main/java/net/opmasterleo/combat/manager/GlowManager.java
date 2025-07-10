@@ -127,8 +127,6 @@ public class GlowManager {
                     target.getEntityId(),
                     metadata
                 );
-                // metadataPacket.setEntityId(target.getEntityId());
-                // metadataPacket.setEntityMetadata(metadata);
                 
                 PacketEvents.getAPI().getPlayerManager().sendPacket(user, metadataPacket);
             }

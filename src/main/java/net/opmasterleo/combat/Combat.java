@@ -388,7 +388,7 @@ public class Combat extends JavaPlugin implements Listener {
                 
                 Player player = Bukkit.getPlayer(uuid);
                 if (player == null) {
-                    // Use computeIfPresent for atomic removal
+                    // Use atomic removal for thread safety
                     combatPlayers.remove(uuid);
                     combatOpponents.remove(uuid);
                     lastActionBarSeconds.remove(uuid);
@@ -707,6 +707,12 @@ public class Combat extends JavaPlugin implements Listener {
     public void handlePacketEvent(Player player, Player opponent) {
         if (!combatEnabled || player == null || opponent == null) return;
         
+        // Check for vanish status before putting in combat
+        if (superVanishManager != null && 
+            (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
+            return;
+        }
+        
         long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
         
         UUID playerUUID = player.getUniqueId();
@@ -768,6 +774,13 @@ public class Combat extends JavaPlugin implements Listener {
             Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard loaded!");
         } else {
             Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard not loaded!");
+        }
+
+        boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
+        if (packetEventsLoaded) {
+            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §aPacketEvents found, loaded!");
+        } else {
+            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §cPacketEvents NOT found, unloading!");
         }
 
         String asciiArt =

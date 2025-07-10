@@ -2,10 +2,8 @@ package net.opmasterleo.combat.listener;
 
 import net.opmasterleo.combat.Combat;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -29,8 +27,8 @@ public class BedExplosionListener implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getClickedBlock() == null) return;
 
-        Material blockType = event.getClickedBlock().getType();
-        if (!blockType.name().endsWith("_BED")) return;
+        String blockTypeName = event.getClickedBlock().getType().name();
+        if (!blockTypeName.endsWith("_BED")) return;
 
         Player player = event.getPlayer();
         World.Environment dimension = player.getWorld().getEnvironment();
@@ -59,33 +57,45 @@ public class BedExplosionListener implements Listener {
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-bed-explosions", true)) return;
 
-        // Find nearby recently interacted beds
-        for (Entity entity : victim.getNearbyEntities(6, 6, 6)) {
-            // Check all blocks in a small radius around this entity
-            for (int x = -1; x <= 1; x++) {
-                for (int y = -1; y <= 1; y++) {
-                    for (int z = -1; z <= 1; z++) {
-                        Block block = entity.getLocation().add(x, y, z).getBlock();
-                        if (block.getType().name().endsWith("_BED")) {
-                            UUID bedId = UUID.nameUUIDFromBytes(block.getLocation().toString().getBytes());
-                            Player activator = recentBedInteractions.get(bedId);
-                            
-                            if (activator != null && activator.isOnline()) {
-                                if (activator.getUniqueId().equals(victim.getUniqueId())) {
-                                    if (combat.getConfig().getBoolean("self-combat", false)) {
-                                        combat.directSetCombat(victim, victim);
-                                    }
-                                } else {
-                                    combat.directSetCombat(victim, activator);
-                                    combat.directSetCombat(activator, victim);
-                                    
-                                    // Set the killer for attribution if this is fatal damage
-                                    if (victim.getHealth() <= event.getFinalDamage()) {
-                                        victim.setKiller(activator);
-                                    }
-                                }
-                                return;
+        // Check if victim is vanished
+        if (combat.getSuperVanishManager() != null && combat.getSuperVanishManager().isVanished(victim)) {
+            return;
+        }
+
+        // Calculate all blocks within the explosion radius directly
+        int radius = 6;
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    // Skip blocks that are too far away (use squared distance for efficiency)
+                    if (x*x + y*y + z*z > radius*radius) continue;
+                    
+                    Block block = victim.getLocation().add(x, y, z).getBlock();
+                    if (block.getType().name().endsWith("_BED")) {
+                        UUID bedId = UUID.nameUUIDFromBytes(block.getLocation().toString().getBytes());
+                        Player activator = recentBedInteractions.get(bedId);
+                        
+                        if (activator != null && activator.isOnline()) {
+                            // Check if activator is vanished
+                            if (combat.getSuperVanishManager() != null && 
+                                combat.getSuperVanishManager().isVanished(activator)) {
+                                continue;
                             }
+                            
+                            if (activator.getUniqueId().equals(victim.getUniqueId())) {
+                                if (combat.getConfig().getBoolean("self-combat", false)) {
+                                    combat.directSetCombat(victim, victim);
+                                }
+                            } else {
+                                combat.directSetCombat(victim, activator);
+                                combat.directSetCombat(activator, victim);
+                                
+                                // Set the killer for attribution if this is fatal damage
+                                if (victim.getHealth() <= event.getFinalDamage()) {
+                                    victim.setKiller(activator);
+                                }
+                            }
+                            return;
                         }
                     }
                 }

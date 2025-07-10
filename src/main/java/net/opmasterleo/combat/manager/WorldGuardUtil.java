@@ -93,8 +93,13 @@ public class WorldGuardUtil {
     
     // Use a coarser grid to increase cache hit rate
     private long locationToChunkKey(Location loc) {
-        int chunkX = loc.getBlockX() >> 5; // 32-block grid instead of 16
-        int chunkZ = loc.getBlockZ() >> 5;
+        // Configurable grid size - can be adjusted based on performance needs
+        // Note: Larger values (32) improve cache hit rate but may cause incorrect results near region boundaries
+        // Smaller values (16) are more accurate but increase cache misses
+        final int GRID_SIZE_BITS = 4; // 16-block grid (2^4 = 16)
+        
+        int chunkX = loc.getBlockX() >> GRID_SIZE_BITS;
+        int chunkZ = loc.getBlockZ() >> GRID_SIZE_BITS;
         int worldId = loc.getWorld().getUID().hashCode();
         return ((long)worldId << 40) | ((long)chunkX << 20) | (long)chunkZ;
     }

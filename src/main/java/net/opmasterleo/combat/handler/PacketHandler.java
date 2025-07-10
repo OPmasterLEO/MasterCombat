@@ -196,6 +196,9 @@ public class PacketHandler extends PacketListenerAbstract {
     private void handleCrystalInteraction(Player player, Entity crystal) {
         if (!plugin.isEnabled() || isShuttingDown) return;
         
+        // First check if crystal is valid before using it
+        if (!crystal.isValid()) return;
+        
         if (plugin.getNewbieProtectionListener() != null && 
             plugin.getNewbieProtectionListener().isActuallyProtected(player)) {
             
@@ -205,7 +208,8 @@ public class PacketHandler extends PacketListenerAbstract {
                     !plugin.getNewbieProtectionListener().isActuallyProtected(target)) {
                     
                     // Apply the effect directly instead of scheduling
-                    if (crystal.isValid() && plugin.getNewbieProtectionListener() != null) {
+                    // Removed redundant crystal.isValid() check since we check at the beginning
+                    if (plugin.getNewbieProtectionListener() != null) {
                         plugin.getNewbieProtectionListener().sendBlockedMessage(
                             player, plugin.getNewbieProtectionListener().getCrystalBlockMessage());
                     }

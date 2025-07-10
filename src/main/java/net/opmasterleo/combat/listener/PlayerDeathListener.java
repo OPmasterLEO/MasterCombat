@@ -10,6 +10,9 @@ import java.util.UUID;
 
 public class PlayerDeathListener implements Listener {
 
+    // Extract string to constant for better maintainability
+    private static final String INTENTIONAL_GAME_DESIGN_KEYWORD = "Intentional Game Design";
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getEntity();
@@ -22,7 +25,7 @@ public class PlayerDeathListener implements Listener {
         // If the kill hasn't been attributed but we have a combat opponent, set them as the killer
         if (killer == null && combatOpponent != null && 
             event.deathMessage() != null && 
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.deathMessage()).contains("Intentional Game Design")) {
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.deathMessage()).contains(INTENTIONAL_GAME_DESIGN_KEYWORD)) {
             victim.setKiller(combatOpponent);
         }
         
