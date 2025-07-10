@@ -369,11 +369,8 @@ public class Combat extends JavaPlugin implements Listener {
             long currentTime = System.currentTimeMillis();
             int count = 0;
             
-            // Use a more efficient copy approach for iteration safety
-            UUID[] playerKeys;
-            synchronized(combatPlayers) {
-                playerKeys = combatPlayers.keySet().toArray(new UUID[0]);
-            }
+            // Use a thread-safe copy approach for iteration safety
+            UUID[] playerKeys = combatPlayers.keySet().toArray(new UUID[0]);
             
             for (int i = 0; i < playerKeys.length && count < OPTIMAL_BATCH_SIZE; i++) {
                 processBuffer[count++] = playerKeys[i];
@@ -527,8 +524,8 @@ public class Combat extends JavaPlugin implements Listener {
             return false;
         }
 
-        if (worldGuardUtil != null && worldGuardUtil.isPvpDenied(attacker)) {
-            return false;
+        if (worldGuardUtil != null) {
+            return !worldGuardUtil.isPvpDenied(attacker);
         }
 
         if (newbieProtectionListener != null) {

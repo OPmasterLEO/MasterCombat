@@ -137,11 +137,6 @@ public class RespawnAnchorListener implements Listener {
                 if (victim.getHealth() <= event.getFinalDamage()) {
                     victim.setKiller(activator);
                 }
-                
-                // Set the killer for attribution if this is fatal damage
-                if (victim.getHealth() <= event.getFinalDamage()) {
-                    victim.setKiller(activator);
-                }
             }
         }
     }

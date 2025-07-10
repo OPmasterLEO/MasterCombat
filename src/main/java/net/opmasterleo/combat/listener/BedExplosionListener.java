@@ -64,6 +64,7 @@ public class BedExplosionListener implements Listener {
 
         // Calculate all blocks within the explosion radius directly
         int radius = 6;
+        // Search for bed blocks in a radius around the explosion
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 for (int z = -radius; z <= radius; z++) {
@@ -102,7 +103,7 @@ public class BedExplosionListener implements Listener {
             }
         }
     }
-    
+
     public Player getBedActivator(UUID bedId) {
         return recentBedInteractions.get(bedId);
     }
