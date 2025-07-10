@@ -118,8 +118,6 @@ public class RespawnAnchorListener implements Listener {
             return;
         }
 
-        if (event.getFinalDamage() <= 0) return;
-
         Location damageLocation = victim.getLocation();
         Player activator = findActivatorForDamage(damageLocation);
         if (activator != null && !shouldBypass(activator)) {

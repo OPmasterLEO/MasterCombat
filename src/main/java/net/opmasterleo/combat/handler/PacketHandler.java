@@ -235,6 +235,11 @@ public class PacketHandler extends PacketListenerAbstract {
                  plugin.getSuperVanishManager().isVanished(victim))) {
                 return;
             }
+            if (plugin.getWorldGuardUtil() != null && 
+                (plugin.getWorldGuardUtil().isPvpDenied(attacker) || 
+                 plugin.getWorldGuardUtil().isPvpDenied(victim))) {
+                return;
+            }
             
             // Check protection status
             if (plugin.getNewbieProtectionListener() != null) {

@@ -272,14 +272,10 @@ public class Combat extends JavaPlugin implements Listener {
         UUID opponentUUID = opponent.getUniqueId();
         
         if (worldGuardUtil != null) {
-            Boolean playerDenied = worldGuardUtil.getCachedPvpState(playerUUID, player.getLocation());
-
-            if (!playerUUID.equals(opponentUUID)) {
-                Boolean opponentDenied = worldGuardUtil.getCachedPvpState(opponentUUID, opponent.getLocation());
-                if ((playerDenied != null && playerDenied) || (opponentDenied != null && opponentDenied)) {
-                    return;
-                }
-            } else if (playerDenied != null && playerDenied) {
+            boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player);
+            boolean opponentInProtectedRegion = !playerUUID.equals(opponentUUID) && worldGuardUtil.isPvpDenied(opponent);
+            
+            if (playerInProtectedRegion || opponentInProtectedRegion) {
                 return;
             }
         }
@@ -525,7 +521,10 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         if (worldGuardUtil != null) {
-            return !worldGuardUtil.isPvpDenied(attacker);
+            // Check both players' locations for PvP denial
+            if (worldGuardUtil.isPvpDenied(attacker) || worldGuardUtil.isPvpDenied(victim)) {
+                return false;
+            }
         }
 
         if (newbieProtectionListener != null) {
@@ -645,12 +644,13 @@ public class Combat extends JavaPlugin implements Listener {
         if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
         
         if (worldGuardUtil != null) {
-            if (opponent != null && opponent.equals(player)) {
-                if (worldGuardUtil.isPvpDenied(player)) return;
-            } else if (opponent != null) {
-                if (worldGuardUtil.isPvpDenied(player) || worldGuardUtil.isPvpDenied(opponent)) return;
-            } else {
-                if (worldGuardUtil.isPvpDenied(player)) return;
+            boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player);
+            boolean opponentInProtectedRegion = opponent != null && 
+                                               !player.equals(opponent) && 
+                                               worldGuardUtil.isPvpDenied(opponent);
+            
+            if (playerInProtectedRegion || opponentInProtectedRegion) {
+                return;
             }
         }
 
@@ -708,6 +708,16 @@ public class Combat extends JavaPlugin implements Listener {
         if (superVanishManager != null && 
             (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
             return;
+        }
+        
+        // Check WorldGuard protection - don't allow combat in protected regions
+        if (worldGuardUtil != null) {
+            boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player);
+            boolean opponentInProtectedRegion = worldGuardUtil.isPvpDenied(opponent);
+            
+            if (playerInProtectedRegion || opponentInProtectedRegion) {
+                return;
+            }
         }
         
         long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
