@@ -118,8 +118,6 @@ public class RespawnAnchorListener implements Listener {
             return;
         }
 
-        if (event.getFinalDamage() <= 0) return;
-
         Location damageLocation = victim.getLocation();
         Player activator = findActivatorForDamage(damageLocation);
         if (activator != null && !shouldBypass(activator)) {
@@ -132,6 +130,11 @@ public class RespawnAnchorListener implements Listener {
             } else {
                 plugin.directSetCombat(activator, victim);
                 plugin.directSetCombat(victim, activator);
+                
+                // Set the killer for attribution if this is fatal damage
+                if (victim.getHealth() <= event.getFinalDamage()) {
+                    victim.setKiller(activator);
+                }
             }
         }
     }

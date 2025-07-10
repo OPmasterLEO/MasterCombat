@@ -15,13 +15,17 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class EndCrystalListener implements Listener {
 
-    private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>(256); // Smaller initial capacity
+    private final AtomicInteger pendingTasks = new AtomicInteger(0);
+    private static final int MAX_PENDING_TASKS = 10;
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
@@ -54,20 +58,30 @@ public class EndCrystalListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL)
     public void onExplosionPrime(ExplosionPrimeEvent event) {
         if (event.getEntity().getType() != EntityType.END_CRYSTAL) return;
-        
+
         Entity crystal = event.getEntity();
         UUID explosionId = UUID.randomUUID();
         recentExplosions.put(explosionId, System.currentTimeMillis());
         crystal.setMetadata("explosion_id", new FixedMetadataValue(
             Combat.getInstance(), explosionId));
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                recentExplosions.entrySet().removeIf(entry -> 
-                    System.currentTimeMillis() - entry.getValue() > 5000);
-            }
-        }.runTaskLaterAsynchronously(Combat.getInstance(), 100L);
+        // Limit concurrent async tasks to prevent thread pool saturation
+        if (pendingTasks.incrementAndGet() <= MAX_PENDING_TASKS) {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    try {
+                        // Batch cleanup for better performance
+                        long now = System.currentTimeMillis();
+                        recentExplosions.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
+                    } finally {
+                        pendingTasks.decrementAndGet();
+                    }
+                }
+            }.runTaskLaterAsynchronously(Combat.getInstance(), 100L);
+        } else {
+            pendingTasks.decrementAndGet();
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -80,7 +94,7 @@ public class EndCrystalListener implements Listener {
         Player placer = Combat.getInstance().getCrystalManager().getPlacer(damager);
         Combat combat = Combat.getInstance();
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
-        
+
         if (event.getEntity() instanceof Player victim) {
             if (combat.getSuperVanishManager() != null && 
                 ((placer != null && combat.getSuperVanishManager().isVanished(placer)) || 
@@ -88,7 +102,7 @@ public class EndCrystalListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
-            
+
             boolean placerProtected = placer != null && protection != null && 
                                      protection.isActuallyProtected(placer);
             boolean victimProtected = protection != null && protection.isActuallyProtected(victim);
@@ -99,7 +113,7 @@ public class EndCrystalListener implements Listener {
                 }
                 return;
             }
-            
+
             if (!placerProtected && victimProtected) {
                 event.setCancelled(true);
                 if (placer != null && protection != null) {
@@ -152,17 +166,32 @@ public class EndCrystalListener implements Listener {
             event.getCause() != EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
             return;
         }
-        
+
         NewbieProtectionListener protection = Combat.getInstance().getNewbieProtectionListener();
         if (protection != null && protection.isActuallyProtected(victim)) {
             event.setCancelled(true);
         }
     }
-    
+
     private void linkCrystalByProximity(Entity crystal, Player victim) {
-        for (Entity entity : crystal.getNearbyEntities(4, 4, 4)) {
-            if (entity instanceof Player player && !shouldBypass(player)
-                    && (!player.equals(victim) || Combat.getInstance().getConfig().getBoolean("self-combat", false))) {
+        // Use more efficient nearby entity retrieval
+        List<Entity> nearbyEntities = crystal.getNearbyEntities(4, 4, 4);
+        if (nearbyEntities.isEmpty()) return;
+        
+        // Sort by distance to prioritize closer players
+        nearbyEntities.sort((e1, e2) -> {
+            if (!(e1 instanceof Player) && !(e2 instanceof Player)) return 0;
+            if (!(e1 instanceof Player)) return 1;
+            if (!(e2 instanceof Player)) return -1;
+            
+            double d1 = e1.getLocation().distanceSquared(crystal.getLocation());
+            double d2 = e2.getLocation().distanceSquared(crystal.getLocation());
+            return Double.compare(d1, d2);
+        });
+        
+        for (Entity entity : nearbyEntities) {
+            if (entity instanceof Player player && !shouldBypass(player) &&
+                    (!player.equals(victim) || Combat.getInstance().getConfig().getBoolean("self-combat", false))) {
                 Combat.getInstance().getCrystalManager().setPlacer(crystal, player);
                 Combat.getInstance().directSetCombat(victim, player);
                 Combat.getInstance().directSetCombat(player, victim);
@@ -177,7 +206,7 @@ public class EndCrystalListener implements Listener {
         Entity crystal = event.getEntity();
         Combat.getInstance().getCrystalManager().removeCrystal(crystal);
     }
-    
+
     private boolean shouldBypass(Player player) {
         return player == null || 
                player.getGameMode() == org.bukkit.GameMode.CREATIVE || 

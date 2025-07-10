@@ -156,6 +156,9 @@ link-end-crystals: true
 # Link respawn anchor explosions to combat (cpvp)
 link-respawn-anchor: true
 
+# Link bed explosions in nether/end to combat
+link-bed-explosions: true
+
 # Timeout for update confirmation in milliseconds
 update-confirmation-timeout: 10000
 
