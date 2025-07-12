@@ -8,7 +8,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
+import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.ChatUtil;
 
 public final class PlayerCommandPreprocessListener implements Listener {
 
@@ -37,7 +39,8 @@ public final class PlayerCommandPreprocessListener implements Listener {
             event.setCancelled(true);
             String prefix = Combat.getInstance().getMessage("Messages.Prefix");
             String format = Combat.getInstance().getMessage("Commands.Format");
-            player.sendMessage(prefix + format.replace("%command%", baseCommand));
+            Component message = ChatUtil.parse(prefix + format.replace("%command%", baseCommand));
+            player.sendMessage(message);
         }
     }
 }
