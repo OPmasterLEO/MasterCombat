@@ -16,10 +16,8 @@ public class CustomDeathMessageListener implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         FileConfiguration config = Combat.getInstance().getConfig();
         if (!config.getBoolean("CustomDeathMessage.enabled", false)) return;
-
         String prefixRaw = config.getString("CustomDeathMessage.prefix", "");
         Component prefix = ChatUtil.parse(prefixRaw);
-
         Component vanillaMessage = event.deathMessage();
         if (vanillaMessage == null) {
             vanillaMessage = Component.translatable("death.attack.generic", Component.text(event.getEntity().getName()));

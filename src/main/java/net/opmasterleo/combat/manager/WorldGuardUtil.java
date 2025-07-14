@@ -69,36 +69,27 @@ public class WorldGuardUtil {
     public boolean isPvpDenied(Player player) {
         if (player == null) return false;
         Location location = player.getLocation();
-        
-        // Use coarser location keys to improve cache hit rate
         long key = locationToChunkKey(location);
         CacheEntry cached = pvpCache.get(key);
         if (cached != null && !cached.isExpired()) {
             return cached.pvpDenied;
         }
 
-        // Use thread-safe access to WorldGuard API
         boolean denied;
         try {
             ApplicableRegionSet regions = regionQuery.getApplicableRegions(BukkitAdapter.adapt(location));
             denied = regions.queryValue(null, Flags.PVP) == StateFlag.State.DENY;
         } catch (Exception e) {
-            // Fallback if WorldGuard API fails
             denied = false;
         }
-        
-        // Cache the result
+
         pvpCache.put(key, new CacheEntry(denied));
         
         return denied;
     }
-    
-    // Use a coarser grid to increase cache hit rate
+
     private long locationToChunkKey(Location loc) {
-        // Configurable grid size - can be adjusted based on performance needs
-        // Note: Larger values (32) improve cache hit rate but may cause incorrect results near region boundaries
-        // Smaller values (16) are more accurate but increase cache misses
-        final int GRID_SIZE_BITS = 4; // 16-block grid (2^4 = 16)
+        final int GRID_SIZE_BITS = 4;
         
         int chunkX = loc.getBlockX() >> GRID_SIZE_BITS;
         int chunkZ = loc.getBlockZ() >> GRID_SIZE_BITS;

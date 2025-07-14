@@ -31,11 +31,12 @@ public class SchedulerUtil {
 
     public static void cancelAllTasks(Plugin plugin) {
         if (plugin == null) return;
-        
-        // Cancel all tasks registered with Bukkit scheduler
-        Bukkit.getScheduler().cancelTasks(plugin);
-        
-        // Cancel our tracked tasks too (in case some were missed)
+        try {
+            Bukkit.getScheduler().cancelTasks(plugin);
+        } catch (UnsupportedOperationException e) {
+        } catch (Exception e) {
+        }
+
         synchronized (activeTasks) {
             for (BukkitTask task : activeTasks) {
                 try {
@@ -43,7 +44,6 @@ public class SchedulerUtil {
                         task.cancel();
                     }
                 } catch (Exception e) {
-                    // Ignore exceptions during shutdown
                 }
             }
             activeTasks.clear();
@@ -57,7 +57,7 @@ public class SchedulerUtil {
         if (IS_FOLIA) {
             try {
                 Bukkit.getGlobalRegionScheduler().execute(plugin, task);
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
             }
@@ -78,7 +78,7 @@ public class SchedulerUtil {
         if (IS_FOLIA) {
             try {
                 Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> task.run());
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
             }
@@ -99,7 +99,7 @@ public class SchedulerUtil {
         if (IS_FOLIA) {
             try {
                 Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> task.run(), delay);
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
             }
@@ -120,7 +120,7 @@ public class SchedulerUtil {
         if (IS_FOLIA) {
             try {
                 Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(), delay, period);
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
             }
@@ -142,7 +142,7 @@ public class SchedulerUtil {
             try {
                 Bukkit.getAsyncScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(), 
                         delay * 50, period * 50, TimeUnit.MILLISECONDS);
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
             }
@@ -164,7 +164,7 @@ public class SchedulerUtil {
             try {
                 Bukkit.getAsyncScheduler().runDelayed(plugin, scheduledTask -> task.run(), 
                         delay * 50, TimeUnit.MILLISECONDS);
-                return null; // Folia doesn't return tasks
+                return null;
             } catch (Exception e) {
                 bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
             }

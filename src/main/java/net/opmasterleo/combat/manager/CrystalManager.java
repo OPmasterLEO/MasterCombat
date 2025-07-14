@@ -12,11 +12,11 @@ import org.bukkit.entity.Player;
 import net.opmasterleo.combat.Combat;
 
 public final class CrystalManager {
-    private final Map<Integer, UUID> crystalEntityMap = new ConcurrentHashMap<>(512); // Reduced initial capacity
+    private final Map<Integer, UUID> crystalEntityMap = new ConcurrentHashMap<>(512);
     private final Map<Integer, Long> expiryTimes = new ConcurrentHashMap<>(512);
-    private static final long CRYSTAL_TTL = 60000; // Reduced from 300s to 60s
+    private static final long CRYSTAL_TTL = 60000;
     private long lastCleanupTime = System.currentTimeMillis();
-    private static final long CLEANUP_INTERVAL = 30000; // 30 seconds
+    private static final long CLEANUP_INTERVAL = 30000;
 
     public CrystalManager() {
         startCleanupTask();
@@ -28,11 +28,8 @@ public final class CrystalManager {
             () -> {
                 long now = System.currentTimeMillis();
                 if (now - lastCleanupTime > CLEANUP_INTERVAL) {
-                    // Batch cleanup for better performance
                     int removed = 0;
                     int batchSize = 100;
-                    
-                    // Get expired keys
                     Set<Integer> expiredKeys = new HashSet<>();
                     for (Map.Entry<Integer, Long> entry : expiryTimes.entrySet()) {
                         if (entry.getValue() < now) {
@@ -42,8 +39,7 @@ public final class CrystalManager {
                         
                         if (removed >= batchSize) break;
                     }
-                    
-                    // Remove expired entries
+
                     for (Integer key : expiredKeys) {
                         expiryTimes.remove(key);
                         crystalEntityMap.remove(key);
@@ -51,7 +47,7 @@ public final class CrystalManager {
                     
                     lastCleanupTime = now;
                 }
-            }, 600L, 600L); // Run less frequently (30s)
+            }, 600L, 600L);
     }
 
     public Player getPlacer(Entity crystal) {

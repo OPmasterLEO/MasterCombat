@@ -59,8 +59,6 @@ public class GlowManager {
     public void trackPlayer(Player player) {
         if (!glowingEnabled || !packetEventsAvailable) return;
         entityIdMap.put(player.getEntityId(), player.getUniqueId());
-        
-        // Store initial glow state in metadata
         player.setMetadata(GLOWING_METADATA_KEY, new FixedMetadataValue(Combat.getInstance(), false));
     }
 
@@ -72,8 +70,6 @@ public class GlowManager {
 
     public void setGlowing(Player player, boolean glowing) {
         if (!glowingEnabled || !packetEventsAvailable) return;
-        
-        // Store glow state in metadata
         player.setMetadata(GLOWING_METADATA_KEY, new FixedMetadataValue(Combat.getInstance(), glowing));
         
         if (glowing) {
@@ -81,8 +77,6 @@ public class GlowManager {
         } else {
             glowingPlayers.remove(player.getUniqueId());
         }
-        
-        // Update glowing for all online players
         for (Player observer : Bukkit.getOnlinePlayers()) {
             updateGlowingForPlayer(player, observer);
         }
@@ -96,8 +90,6 @@ public class GlowManager {
     public void updateGlowingForPlayer(Player target, Player observer) {
         if (!glowingEnabled || !packetEventsAvailable) return;
         if (target == null || observer == null) return;
-        
-        // Don't show glowing effect to the player themselves
         if (target.equals(observer)) return;
         
         boolean shouldGlow = glowingPlayers.contains(target.getUniqueId());
@@ -105,24 +97,16 @@ public class GlowManager {
         try {
             User user = PacketEvents.getAPI().getPlayerManager().getUser(observer);
             if (user != null) {
-                // Create entity metadata packet to update glowing status
                 List<EntityData<?>> metadata = new ArrayList<>();
-                
-                // Get the current entity flags
                 byte entityFlags = 0;
-                // Check fire ticks instead of using isOnFire which doesn't exist
                 if (target.getFireTicks() > 0) entityFlags |= 0x01;
                 if (target.isSneaking()) entityFlags |= 0x02;
                 if (target.isSprinting()) entityFlags |= 0x08;
                 if (target.isSwimming()) entityFlags |= 0x10;
                 if (target.isInvisible()) entityFlags |= 0x20;
-                if (shouldGlow) entityFlags |= 0x40; // Set glowing flag
+                if (shouldGlow) entityFlags |= 0x40;
                 if (target.isGliding()) entityFlags |= 0x80;
-                
-                // Use properly parameterized EntityData constructor
                 metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, entityFlags));
-                
-                // Create the metadata packet correctly
                 WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                     target.getEntityId(),
                     metadata
@@ -151,8 +135,6 @@ public class GlowManager {
 
     public void cleanup() {
         if (!glowingEnabled || !packetEventsAvailable) return;
-        
-        // Remove glowing effect from all players
         for (UUID playerId : new HashSet<>(glowingPlayers)) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline()) {
@@ -162,8 +144,6 @@ public class GlowManager {
         
         glowingPlayers.clear();
         entityIdMap.clear();
-        
-        // Clean up metadata
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.removeMetadata(GLOWING_METADATA_KEY, Combat.getInstance());
         }

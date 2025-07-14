@@ -19,6 +19,7 @@ public final class EntityDamageByEntityListener implements Listener {
 
     @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
     public void handle(EntityDamageByEntityEvent event) {
+
         if (event.isCancelled()) return;
         if (!(event.getEntity() instanceof Player player)) return;
         
@@ -75,10 +76,11 @@ public final class EntityDamageByEntityListener implements Listener {
             }
         }
 
-        // Set the killer for fatal damage
         if (damagerPlayer != null && player.getHealth() <= event.getFinalDamage()) {
             player.setKiller(damagerPlayer);
         }
+        
+        if (event.getFinalDamage() <= 0) return;
 
         boolean linkRespawnAnchors = combat.getConfig().getBoolean("link-respawn-anchor", true);
         if (linkRespawnAnchors && damager.getType() == EntityType.TNT) {
@@ -92,8 +94,6 @@ public final class EntityDamageByEntityListener implements Listener {
                     } else {
                         combat.setCombat(player, activator);
                         combat.setCombat(activator, player);
-                        
-                        // Set the killer for fatal damage
                         if (player.getHealth() <= event.getFinalDamage()) {
                             player.setKiller(activator);
                         }
@@ -107,8 +107,6 @@ public final class EntityDamageByEntityListener implements Listener {
             if (damagerP.getUniqueId().equals(player.getUniqueId())) {
                 if (combat.getConfig().getBoolean("self-combat", false)) {
                     combat.directSetCombat(player, player);
-                    
-                    // If self-damage is fatal, check if player is in combat with someone else
                     if (player.getHealth() <= event.getFinalDamage()) {
                         Player opponent = combat.getCombatOpponent(player);
                         if (opponent != null && !opponent.equals(player)) {
@@ -120,8 +118,6 @@ public final class EntityDamageByEntityListener implements Listener {
             }
             combat.directSetCombat(player, damagerP);
             combat.directSetCombat(damagerP, player);
-            
-            // Set the killer for fatal damage
             if (player.getHealth() <= event.getFinalDamage()) {
                 player.setKiller(damagerP);
             }
@@ -137,8 +133,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (shooter.getUniqueId().equals(player.getUniqueId())) {
                     if (selfCombat) {
                         combat.directSetCombat(player, player);
-                        
-                        // If self-damage is fatal, check if player is in combat with someone else
                         if (player.getHealth() <= event.getFinalDamage()) {
                             Player opponent = combat.getCombatOpponent(player);
                             if (opponent != null && !opponent.equals(player)) {
@@ -149,8 +143,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 } else {
                     combat.directSetCombat(player, shooter);
                     combat.directSetCombat(shooter, player);
-                    
-                    // Set the killer for fatal damage
                     if (player.getHealth() <= event.getFinalDamage()) {
                         player.setKiller(shooter);
                     }
@@ -169,8 +161,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 }
                 combat.directSetCombat(player, placer);
                 combat.directSetCombat(placer, player);
-                
-                // Set the killer for fatal damage
                 if (player.getHealth() <= event.getFinalDamage()) {
                     player.setKiller(placer);
                 }
@@ -183,8 +173,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (owner.getUniqueId().equals(player.getUniqueId())) return;
                 combat.directSetCombat(player, owner);
                 combat.directSetCombat(owner, player);
-                
-                // Set the killer for fatal damage
                 if (player.getHealth() <= event.getFinalDamage()) {
                     player.setKiller(owner);
                 }
@@ -197,8 +185,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (shooter.getUniqueId().equals(player.getUniqueId())) return;
                 combat.directSetCombat(player, shooter);
                 combat.directSetCombat(shooter, player);
-                
-                // Set the killer for fatal damage
                 if (player.getHealth() <= event.getFinalDamage()) {
                     player.setKiller(shooter);
                 }
@@ -211,8 +197,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 if (source.getUniqueId().equals(player.getUniqueId())) {
                     if (combat.getConfig().getBoolean("self-combat", false)) {
                         combat.directSetCombat(player, player);
-                        
-                        // If self-damage is fatal, check if player is in combat with someone else
                         if (player.getHealth() <= event.getFinalDamage()) {
                             Player opponent = combat.getCombatOpponent(player);
                             if (opponent != null && !opponent.equals(player)) {
@@ -223,8 +207,6 @@ public final class EntityDamageByEntityListener implements Listener {
                 } else {
                     combat.directSetCombat(player, source);
                     combat.directSetCombat(source, player);
-                    
-                    // Set the killer for fatal damage
                     if (player.getHealth() <= event.getFinalDamage()) {
                         player.setKiller(source);
                     }

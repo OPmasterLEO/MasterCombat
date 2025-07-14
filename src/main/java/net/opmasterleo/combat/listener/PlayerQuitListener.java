@@ -14,9 +14,6 @@ public class PlayerQuitListener implements Listener {
         Combat combat = Combat.getInstance();
         if (combat.isInCombat(player)) {
             Player opponent = combat.getCombatOpponent(player);
-
-            // Set the opponent as the killer before applying damage
-            // This ensures the kill is properly attributed
             if (opponent != null) {
                 player.setKiller(opponent);
             }

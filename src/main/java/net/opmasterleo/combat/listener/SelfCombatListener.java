@@ -18,6 +18,7 @@ public class SelfCombatListener implements Listener {
     public void handle(EntityDamageByEntityEvent event) {
         if (event.isCancelled()) return;
         if (!(event.getEntity() instanceof Player player)) return;
+        if (event.getFinalDamage() <= 0) return;
 
         Combat combat = Combat.getInstance();
         if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player)) {
@@ -28,22 +29,21 @@ public class SelfCombatListener implements Listener {
             projectile.getType() == EntityType.ENDER_PEARL) {
             return;
         }
-        
-        // If player is about to die from self-damage, attribute kill to their combat opponent
+
         if (player.getHealth() <= event.getFinalDamage()) {
             Player opponent = combat.getCombatOpponent(player);
             if (opponent != null && !opponent.equals(player)) {
                 player.setKiller(opponent);
             }
         }
-        
+
         if (event.getDamager() instanceof Projectile projectile) {
             if (isIgnoredProjectile(combat, projectile)) {
                 return;
             }
             
             if (projectile.getShooter() instanceof Player shooter && shooter.getUniqueId().equals(player.getUniqueId())) {
-                if (combat.getConfig().getBoolean("self-combat", false)) {
+                if (combat.getConfig().getBoolean("self-combat", false) && event.getFinalDamage() > 0) {
                     combat.setCombat(player, player);
                 }
                 return;
@@ -51,7 +51,7 @@ public class SelfCombatListener implements Listener {
         }
 
         if (event.getDamager() instanceof Player damager && damager.getUniqueId().equals(player.getUniqueId())) {
-            if (combat.getConfig().getBoolean("self-combat", false)) {
+            if (combat.getConfig().getBoolean("self-combat", false) && event.getFinalDamage() > 0) {
                 combat.setCombat(player, player);
             }
             return;

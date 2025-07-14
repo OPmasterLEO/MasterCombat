@@ -164,3 +164,6 @@ update-confirmation-timeout: 10000
 
 # Interval for update checks in minutes
 update-check-interval: 120
+
+# Whether to detect combat attempts from arm swings even when hit doesn't register
+detect-combat-from-swings: false

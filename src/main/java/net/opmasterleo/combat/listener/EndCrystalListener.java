@@ -84,6 +84,9 @@ public class EndCrystalListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!Combat.getInstance().getConfig().getBoolean("link-end-crystals", true)) return;
+        
+        // Skip if there's no actual damage
+        if (event.getFinalDamage() <= 0) return;
 
         Entity damager = event.getDamager();
         if (damager.getType() != EntityType.END_CRYSTAL) return;
@@ -93,6 +96,7 @@ public class EndCrystalListener implements Listener {
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
 
         if (event.getEntity() instanceof Player victim) {
+            // Maintain all protection checks
             if (combat.getSuperVanishManager() != null && 
                 ((placer != null && combat.getSuperVanishManager().isVanished(placer)) || 
                  combat.getSuperVanishManager().isVanished(victim))) {
@@ -118,14 +122,11 @@ public class EndCrystalListener implements Listener {
                 }
                 return;
             }
-
-            if (placer != null && !shouldBypass(placer) && event.getFinalDamage() > 0) {
+            if (placer != null && !shouldBypass(placer)) {
                 boolean selfCombat = Combat.getInstance().getConfig().getBoolean("self-combat", false);
                 if (victim.getUniqueId().equals(placer.getUniqueId())) {
                     if (selfCombat) {
                         Combat.getInstance().directSetCombat(victim, victim);
-                        
-                        // If fatal self-damage, attribute to opponent
                         if (victim.getHealth() <= event.getFinalDamage()) {
                             Player opponent = combat.getCombatOpponent(victim);
                             if (opponent != null && !opponent.equals(victim)) {
@@ -136,14 +137,11 @@ public class EndCrystalListener implements Listener {
                 } else {
                     Combat.getInstance().directSetCombat(victim, placer);
                     Combat.getInstance().directSetCombat(placer, victim);
-                    
-                    // Set killer for fatal damage
                     if (victim.getHealth() <= event.getFinalDamage()) {
                         victim.setKiller(placer);
                     }
                 }
-            } else if (event.getFinalDamage() > 0) {
-                // If a crystal is about to kill a player but we don't know the placer
+            } else {
                 if (victim.getHealth() <= event.getFinalDamage()) {
                     Player opponent = combat.getCombatOpponent(victim);
                     if (opponent != null) {
@@ -171,12 +169,10 @@ public class EndCrystalListener implements Listener {
     }
 
     private void linkCrystalByProximity(Entity crystal, Player victim) {
-        // Use more efficient nearby entity retrieval
         List<Entity> nearbyEntities = crystal.getNearbyEntities(4, 4, 4);
         if (nearbyEntities.isEmpty()) return;
         
-        // Sort by distance to prioritize closer players
-        nearbyEntities.sort((e1, e2) -> {
+            nearbyEntities.sort((e1, e2) -> {
             if (!(e1 instanceof Player) && !(e2 instanceof Player)) return 0;
             if (!(e1 instanceof Player)) return 1;
             if (!(e2 instanceof Player)) return -1;

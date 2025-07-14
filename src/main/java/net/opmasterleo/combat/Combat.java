@@ -22,7 +22,6 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.github.retrooper.packetevents.PacketEvents;
 import net.opmasterleo.combat.api.MasterCombatAPIBackend;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.api.events.MasterCombatLoadEvent;
@@ -100,9 +99,14 @@ public class Combat extends JavaPlugin implements Listener {
         new Metrics(this, pluginId);
 
         if (isPacketEventsAvailable()) {
-            packetHandler = new PacketHandler(this);
-            PacketEvents.getAPI().getEventManager().registerListener(packetHandler);
-            getLogger().info("PacketEvents integration enabled for enhanced performance");
+            try {
+                packetHandler = new PacketHandler(this);
+                // Register using the handler's register method
+                packetHandler.register();
+                getLogger().info("PacketEvents integration enabled for enhanced performance");
+            } catch (Exception e) {
+                getLogger().warning("Failed to register PacketEvents handler: " + e.getMessage());
+            }
         } else {
             getLogger().warning("PacketEvents not found. Some features will be limited.");
         }
@@ -713,52 +717,12 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void handlePacketEvent(Player player, Player opponent) {
-        if (!combatEnabled || player == null || opponent == null) return;
+        // We'll no longer apply combat directly from packets
+        // Instead, we'll let the damage event handle it
+        // This ensures combat only happens when actual damage is dealt
         
-        // Check for vanish status before putting in combat
-        if (superVanishManager != null && 
-            (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
-            return;
-        }
-        
-        // Check WorldGuard protection - don't allow combat in protected regions
-        if (worldGuardUtil != null) {
-            boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player);
-            boolean opponentInProtectedRegion = worldGuardUtil.isPvpDenied(opponent);
-            
-            if (playerInProtectedRegion || opponentInProtectedRegion) {
-                return;
-            }
-        }
-        
-        long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
-        
-        UUID playerUUID = player.getUniqueId();
-        UUID opponentUUID = opponent.getUniqueId();
-        
-        combatOpponents.put(playerUUID, opponentUUID);
-        combatPlayers.put(playerUUID, expiry);
-        
-        if (!playerUUID.equals(opponentUUID)) {
-            combatOpponents.put(opponentUUID, playerUUID);
-            combatPlayers.put(opponentUUID, expiry);
-        }
-        
-        if (!combatPlayers.containsKey(playerUUID) && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
-            player.sendMessage(prefix + nowInCombatMsg);
-        }
-        
-        if (!playerUUID.equals(opponentUUID) && !combatPlayers.containsKey(opponentUUID) && 
-            nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
-            opponent.sendMessage(prefix + nowInCombatMsg);
-        }
-        
-        if (glowingEnabled && glowManager != null) {
-            glowManager.setGlowing(player, true);
-            if (!playerUUID.equals(opponentUUID)) {
-                glowManager.setGlowing(opponent, true);
-            }
-        }
+        // This method can remain for other packet-related processing
+        // but should not automatically tag players just from an interaction
     }
 
     @Deprecated
@@ -796,15 +760,22 @@ public class Combat extends JavaPlugin implements Listener {
 
         boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
         if (packetEventsLoaded) {
-            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §aPacketEvents found, loaded!");
+            Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aPacketEvents loaded!");
         } else {
-            Bukkit.getConsoleSender().sendMessage("§bINFO §8» §cPacketEvents NOT found, unloading!");
+            Bukkit.getConsoleSender().sendMessage("§cINFO §8» §cPacketEvents not loaded!!");
+        }
+
+        String displayText;
+        if (pluginName.contains(version)) {
+            displayText = pluginName;
+        } else {
+            displayText = pluginName + " - v" + version;
         }
 
         String asciiArt =
             "&b   ____                _           _               \n" +
             "&b  / ___|___  _ __ ___ | |__   __ _| |_             \n" +
-            "&b | |   / _ \\| '_ ` _ \\| '_ \\ / _` | __|   " + pluginName + " v" + version + "\n" +
+            "&b | |   / _ \\| '_ ` _ \\| '_ \\ / _` | __|   " + displayText + "\n" +
             "&b | |__| (_) | | | | | | |_) | (_| | |_    Currently using " + apiType + " - " + serverJarName + "\n" +
             "&b  \\____\\___/|_| |_| |_|_.__/ \\__,_|\\__|   \n";
 
