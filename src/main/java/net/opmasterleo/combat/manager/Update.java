@@ -29,6 +29,7 @@ public class Update {
     private static volatile boolean isShuttingDown = false;
     private static final Set<HttpURLConnection> activeConnections = ConcurrentHashMap.newKeySet();
     private static final Set<BukkitTask> updateTasks = ConcurrentHashMap.newKeySet();
+    private static boolean updateFound = false;
 
     public static void setShuttingDown(boolean shuttingDown) {
         isShuttingDown = shuttingDown;
@@ -198,6 +199,14 @@ public class Update {
         }
     }
 
+    public static boolean isUpdateFound() {
+        return updateFound;
+    }
+
+    public static void setUpdateFound(boolean found) {
+        updateFound = found;
+    }
+
     private static void performUpdateCheck(Plugin plugin) {
         if (isShuttingDown) return;
         
@@ -265,8 +274,12 @@ public class Update {
                 Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to create update folder.");
                 return;
             }
-
-            File tempFile = new File(updateFolder, pluginName + "-" + latestVersion + ".jar");
+            
+            String fixedName = pluginName;
+            if (fixedName.toLowerCase().contains("mastercombat-mastercombat")) {
+                fixedName = "MasterCombat";
+            }
+            File tempFile = new File(updateFolder, fixedName + "-" + latestVersion + ".jar");
             URL website = URI.create(downloadUrl).toURL();
             connection = (HttpURLConnection) website.openConnection();
             activeConnections.add(connection);
@@ -288,7 +301,7 @@ public class Update {
                     position += transferred;
                 }
             }
-
+            
             if (tempFile.exists() && tempFile.length() > 0) {
                 Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» Update successfully downloaded!");
                 Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» The new version has been placed in the update folder.");

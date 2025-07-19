@@ -166,10 +166,17 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                         }
                         if (normalizeVersion(currentVersion).equalsIgnoreCase(normalizeVersion(latestVersion))) {
                             sender.sendMessage(Component.text("You already have the latest version (" + currentVersion + ").").color(NamedTextColor.GREEN));
+                            Update.setUpdateFound(false);
                             return;
                         }
-                        sender.sendMessage(Component.text("Downloading and applying the update (if available)...").color(NamedTextColor.YELLOW));
-                        Update.downloadAndReplaceJar(plugin);
+                        if (!Update.isUpdateFound()) {
+                            sender.sendMessage(Component.text("Update found! Run /combat update again to update.").color(NamedTextColor.YELLOW));
+                            Update.setUpdateFound(true);
+                        } else {
+                            sender.sendMessage(Component.text("Downloading the update...").color(NamedTextColor.YELLOW));
+                            Update.downloadAndReplaceJar(plugin);
+                            Update.setUpdateFound(false);
+                        }
                     }, 40L);
                     break;
                 case "api":
