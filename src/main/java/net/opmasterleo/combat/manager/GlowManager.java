@@ -91,11 +91,13 @@ public class GlowManager {
         if (!glowingEnabled || !packetEventsAvailable) return;
         if (target == null || observer == null) return;
         if (target.equals(observer)) return;
-        
+
         boolean shouldGlow = glowingPlayers.contains(target.getUniqueId());
-        
+
         try {
-            User user = PacketEvents.getAPI().getPlayerManager().getUser(observer);
+            var playerManager = PacketEvents.getAPI().getPlayerManager();
+            if (playerManager == null) return;
+            User user = playerManager.getUser(observer.getUniqueId());
             if (user != null) {
                 List<EntityData<?>> metadata = new ArrayList<>();
                 byte entityFlags = 0;
@@ -106,16 +108,18 @@ public class GlowManager {
                 if (target.isInvisible()) entityFlags |= 0x20;
                 if (shouldGlow) entityFlags |= 0x40;
                 if (target.isGliding()) entityFlags |= 0x80;
-                metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, entityFlags));
+                if (EntityDataTypes.BYTE != null) {
+                    metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, entityFlags));
+                }
                 WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                     target.getEntityId(),
                     metadata
                 );
-                
-                PacketEvents.getAPI().getPlayerManager().sendPacket(user, metadataPacket);
+
+                playerManager.sendPacket(user, metadataPacket);
             }
         } catch (Exception e) {
-            Combat.getInstance().getLogger().warning("Failed to update glowing status: " + e.getMessage());
+            Combat.getInstance().getLogger().warning("Failed to update glowing status: " + (e.getMessage() != null ? e.getMessage() : "unknown error"));
         }
     }
     

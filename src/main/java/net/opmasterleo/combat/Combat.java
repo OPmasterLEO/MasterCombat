@@ -27,6 +27,7 @@ import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.api.events.MasterCombatLoadEvent;
 import net.opmasterleo.combat.command.CombatCommand;
 import net.opmasterleo.combat.listener.CustomDeathMessageListener;
+import net.opmasterleo.combat.listener.BedExplosionListener;
 import net.opmasterleo.combat.listener.EndCrystalListener;
 import net.opmasterleo.combat.listener.EntityDamageByEntityListener;
 import net.opmasterleo.combat.listener.EntityPlaceListener;
@@ -70,6 +71,7 @@ public class Combat extends JavaPlugin implements Listener {
     private String elytraDisabledMsg;
     private final Set<String> ignoredProjectiles = ConcurrentHashMap.newKeySet();
     private RespawnAnchorListener respawnAnchorListener;
+    private BedExplosionListener bedExplosionListener;
     
     private String prefix;
     private String nowInCombatMsg;
@@ -653,6 +655,10 @@ public class Combat extends JavaPlugin implements Listener {
 
     public RespawnAnchorListener getRespawnAnchorListener() {
         return respawnAnchorListener;
+    }
+
+    public BedExplosionListener getBedExplosionListener() {
+        return bedExplosionListener;
     }
 
     public void forceSetCombat(Player player, Player opponent) {

@@ -2,6 +2,7 @@ package net.opmasterleo.combat.listener;
 
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -10,6 +11,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.HashMap;
@@ -46,28 +48,32 @@ public class BedExplosionListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
-        if (event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) return;
-        if (event.getFinalDamage() <= 0) return;
+        if (event.getCause() != DamageCause.BLOCK_EXPLOSION) return;
+
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-bed-explosions", true)) return;
-        if (combat.getSuperVanishManager() != null && combat.getSuperVanishManager().isVanished(victim)) {
-            return;
-        }
+
         int radius = 6;
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 for (int z = -radius; z <= radius; z++) {
-                    if (x*x + y*y + z*z > radius*radius) continue;
+                    if (x * x + y * y + z * z > radius * radius) continue;
                     Block block = victim.getLocation().add(x, y, z).getBlock();
                     if (block.getType().name().endsWith("_BED")) {
                         UUID bedId = UUID.nameUUIDFromBytes(block.getLocation().toString().getBytes());
                         Player activator = recentBedInteractions.get(bedId);
                         if (activator != null && activator.isOnline()) {
-                            if (combat.getSuperVanishManager() != null && 
-                                combat.getSuperVanishManager().isVanished(activator)) {
-                                continue;
+                            if (combat.getSuperVanishManager() != null && combat.getSuperVanishManager().isVanished(activator)) {
+                                return;
                             }
-                            
+                            NewbieProtectionListener protection = combat.getNewbieProtectionListener();
+                            if (protection != null) {
+                                boolean activatorProtected = protection.isActuallyProtected(activator);
+                                boolean victimProtected = protection.isActuallyProtected(victim);
+                                if (activatorProtected || victimProtected) {
+                                    return;
+                                }
+                            }
                             if (activator.getUniqueId().equals(victim.getUniqueId())) {
                                 if (combat.getConfig().getBoolean("self-combat", false)) {
                                     combat.directSetCombat(victim, victim);
@@ -75,9 +81,9 @@ public class BedExplosionListener implements Listener {
                             } else {
                                 combat.directSetCombat(victim, activator);
                                 combat.directSetCombat(activator, victim);
-                                if (victim.getHealth() <= event.getFinalDamage()) {
-                                    victim.setKiller(activator);
-                                }
+                            }
+                            if (victim.getHealth() <= event.getFinalDamage()) {
+                                victim.setKiller(activator);
                             }
                             return;
                         }
@@ -94,5 +100,17 @@ public class BedExplosionListener implements Listener {
     public void cleanup() {
         recentBedInteractions.clear();
         interactionTimestamps.clear();
+    }
+
+    public void registerPotentialExplosion(Location location, Player player) {
+        if (location == null || player == null) return;
+        UUID bedId = UUID.nameUUIDFromBytes(location.toString().getBytes());
+        recentBedInteractions.put(bedId, player);
+        interactionTimestamps.put(bedId, System.currentTimeMillis());
+        SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
+            long now = System.currentTimeMillis();
+            interactionTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > INTERACTION_TIMEOUT);
+            recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
+        }, 200L);
     }
 }

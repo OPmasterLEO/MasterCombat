@@ -11,7 +11,9 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.listener.NewbieProtectionListener;
+import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -59,7 +61,7 @@ public class PacketHandler extends PacketListenerAbstract {
     private void startCleanupTask() {
         if (plugin.isEnabled()) {
             try {
-                Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+                SchedulerUtil.runTaskTimerAsync(plugin, () -> {
                     if (!plugin.isEnabled() || isShuttingDown) return;
                     
                     long now = System.currentTimeMillis();
@@ -70,6 +72,7 @@ public class PacketHandler extends PacketListenerAbstract {
                     }
                 }, 1200L, 1200L);
             } catch (IllegalPluginAccessException e) {
+                plugin.getLogger().warning("Failed to start cleanup task: " + e.getMessage());
             }
         }
     }
@@ -78,13 +81,13 @@ public class PacketHandler extends PacketListenerAbstract {
     public void onPacketReceive(PacketReceiveEvent event) {
         if (!plugin.isEnabled() || isShuttingDown) return;
         if (!(event.getPlayer() instanceof Player player)) return;
-        
+
         try {
             if (processingCount.incrementAndGet() > 5000) {
                 processingCount.decrementAndGet();
                 return;
             }
-            
+
             if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
                 handleEntityInteract(event, player);
             } else if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
@@ -102,16 +105,25 @@ public class PacketHandler extends PacketListenerAbstract {
             processingCount.decrementAndGet();
         }
     }
-    
+
     @Override
     public void onPacketSend(PacketSendEvent event) {
         if (!plugin.isEnabled() || isShuttingDown) return;
         if (!(event.getPlayer() instanceof Player player)) return;
-        if (event.getPacketType() == PacketType.Play.Server.ENTITY_METADATA) {
+
+        if (event.getPacketType() == PacketType.Play.Server.EXPLOSION) {
+            handleExplosionPacket(event, player);
+        } else if (event.getPacketType() == PacketType.Play.Server.ENTITY_METADATA) {
             handleEntityMetadata(event, player);
         }
     }
-    
+
+    private void handleExplosionPacket(PacketSendEvent event, Player player) {
+        Location explosionLocation = player.getLocation();
+        plugin.getRespawnAnchorListener().registerPotentialExplosion(explosionLocation, player);
+        plugin.getBedExplosionListener().registerPotentialExplosion(explosionLocation, player);
+    }
+
     private void handleEntityMetadata(PacketSendEvent event, Player player) {
         if (!plugin.getConfig().getBoolean("CombatTagGlowing.Enabled", false)) return;
         
@@ -173,8 +185,6 @@ public class PacketHandler extends PacketListenerAbstract {
         UUID playerUUID = player.getUniqueId();
         lastArmSwing.put(playerUUID, System.currentTimeMillis());
         if (plugin.isInCombat(player)) {
-            // Refresh their combat timer if they're swinging during combat
-            // This helps prevent people from escaping combat by just barely avoiding hits
             if (plugin.getConfig().getBoolean("refresh-on-swing", false)) {
                 plugin.keepPlayerInCombat(player);
             }
@@ -184,7 +194,7 @@ public class PacketHandler extends PacketListenerAbstract {
                     if (entity instanceof Player target && !target.equals(player)) {
                         if (isPlayerFacingEntity(player, target)) {
                             if (plugin.canDamage(player, target)) {
-                                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                                SchedulerUtil.runTaskLater(plugin, () -> {
                                     if (!plugin.isInCombat(player) && plugin.isCombatEnabled()) {
                                         if (isHoldingWeapon(player)) {
                                             plugin.directSetCombat(player, target);
@@ -327,24 +337,29 @@ public class PacketHandler extends PacketListenerAbstract {
         if (!plugin.isEnabled() || isShuttingDown) return null;
         Entity entity = entityCache.get(entityId);
         if (entity != null && entity.isValid()) return entity;
-        for (Entity e : player.getWorld().getEntities()) {
-            if (e.getEntityId() == entityId) {
-                entityCache.put(entityId, e);
-                return e;
-            }
-        }
-
-        for (org.bukkit.World world : Bukkit.getWorlds()) {
-            if (world.equals(player.getWorld())) continue;
-            
-            for (Entity e : world.getEntities()) {
-                if (e.getEntityId() == entityId) {
-                    entityCache.put(entityId, e);
-                    return e;
+        try {
+            return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
+                for (Entity e : player.getWorld().getEntities()) {
+                    if (e.getEntityId() == entityId) {
+                        entityCache.put(entityId, e);
+                        return e;
+                    }
                 }
-            }
+                for (org.bukkit.World world : Bukkit.getWorlds()) {
+                    if (world.equals(player.getWorld())) continue;
+                    for (Entity e : world.getEntities()) {
+                        if (e.getEntityId() == entityId) {
+                            entityCache.put(entityId, e);
+                            return e;
+                        }
+                    }
+                }
+                return null;
+            }).get();
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to fetch entity synchronously: " + e.getMessage());
+            return null;
         }
-        return null;
     }
 
     public void cleanup() {

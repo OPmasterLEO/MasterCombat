@@ -102,17 +102,7 @@ public class RespawnAnchorListener implements Listener {
     public void onEntityDamage(EntityDamageEvent event) {
         if (!isEnabled()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
-        
-        NewbieProtectionListener protectionListener = Combat.getInstance().getNewbieProtectionListener();
-        if (protectionListener != null && protectionListener.isActuallyProtected(victim)) {
-            if (event.getCause() == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION ||
-                event.getCause() == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
-                event.setCancelled(true);
-                return;
-            }
-        }
 
-        if (shouldBypass(victim)) return;
         if (event.getCause() != DamageCause.BLOCK_EXPLOSION && 
             event.getCause() != DamageCause.ENTITY_EXPLOSION) {
             return;
@@ -121,8 +111,19 @@ public class RespawnAnchorListener implements Listener {
         Location damageLocation = victim.getLocation();
         Player activator = findActivatorForDamage(damageLocation);
         if (activator != null && !shouldBypass(activator)) {
+            Combat combat = Combat.getInstance();
+            if (combat.getSuperVanishManager() != null && combat.getSuperVanishManager().isVanished(activator)) {
+                return;
+            }
+            NewbieProtectionListener protection = combat.getNewbieProtectionListener();
+            if (protection != null) {
+                boolean activatorProtected = protection.isActuallyProtected(activator);
+                boolean victimProtected = protection.isActuallyProtected(victim);
+                if (activatorProtected || victimProtected) {
+                    return;
+                }
+            }
             boolean selfCombat = plugin.getConfig().getBoolean("self-combat", false);
-            
             if (activator.getUniqueId().equals(victim.getUniqueId())) {
                 if (selfCombat) {
                     plugin.directSetCombat(activator, activator);
@@ -130,9 +131,9 @@ public class RespawnAnchorListener implements Listener {
             } else {
                 plugin.directSetCombat(activator, victim);
                 plugin.directSetCombat(victim, activator);
-                if (victim.getHealth() <= event.getFinalDamage()) {
-                    victim.setKiller(activator);
-                }
+            }
+            if (victim.getHealth() <= event.getFinalDamage()) {
+                victim.setKiller(activator);
             }
         }
     }
@@ -196,9 +197,6 @@ public class RespawnAnchorListener implements Listener {
         Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             explosionCache.remove(location);
         }, 100L);
-        if (plugin.getConfig().getBoolean("self-combat", false)) {
-            plugin.directSetCombat(player, player);
-        }
     }
     
     private boolean shouldBypass(Player player) {
