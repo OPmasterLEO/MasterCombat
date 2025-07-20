@@ -109,8 +109,12 @@ public class BedExplosionListener implements Listener {
         interactionTimestamps.put(bedId, System.currentTimeMillis());
         SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
             long now = System.currentTimeMillis();
-            interactionTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > INTERACTION_TIMEOUT);
-            recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
+            for (UUID key : new HashMap<>(interactionTimestamps).keySet()) {
+                if (now - interactionTimestamps.getOrDefault(key, 0L) > INTERACTION_TIMEOUT) {
+                    interactionTimestamps.remove(key);
+                    recentBedInteractions.remove(key);
+                }
+            }
         }, 200L);
     }
 }

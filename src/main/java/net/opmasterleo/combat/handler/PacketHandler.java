@@ -120,8 +120,13 @@ public class PacketHandler extends PacketListenerAbstract {
 
     private void handleExplosionPacket(PacketSendEvent event, Player player) {
         Location explosionLocation = player.getLocation();
-        plugin.getRespawnAnchorListener().registerPotentialExplosion(explosionLocation, player);
-        plugin.getBedExplosionListener().registerPotentialExplosion(explosionLocation, player);
+        Combat combat = Combat.getInstance();
+        if (combat.getRespawnAnchorListener() != null) {
+            combat.getRespawnAnchorListener().registerPotentialExplosion(explosionLocation, player);
+        }
+        if (combat.getBedExplosionListener() != null) {
+            combat.getBedExplosionListener().registerPotentialExplosion(explosionLocation, player);
+        }
     }
 
     private void handleEntityMetadata(PacketSendEvent event, Player player) {

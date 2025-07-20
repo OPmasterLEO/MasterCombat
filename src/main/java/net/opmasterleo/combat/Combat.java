@@ -103,7 +103,6 @@ public class Combat extends JavaPlugin implements Listener {
         if (isPacketEventsAvailable()) {
             try {
                 packetHandler = new PacketHandler(this);
-                // Register using the handler's register method
                 packetHandler.register();
                 getLogger().info("PacketEvents integration enabled for enhanced performance");
             } catch (Exception e) {
@@ -111,6 +110,13 @@ public class Combat extends JavaPlugin implements Listener {
             }
         } else {
             getLogger().warning("PacketEvents not found. Some features will be limited.");
+        }
+        
+        if (getConfig().getBoolean("link-bed-explosions", true)) {
+            bedExplosionListener = new BedExplosionListener();
+            Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
+        } else {
+            bedExplosionListener = null;
         }
     }
 
@@ -179,6 +185,13 @@ public class Combat extends JavaPlugin implements Listener {
 
         newbieProtectionListener = new NewbieProtectionListener();
         Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
+        
+        if (getConfig().getBoolean("link-bed-explosions", true)) {
+            bedExplosionListener = new BedExplosionListener();
+            Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
+        } else {
+            bedExplosionListener = null;
+        }
     }
     
     private void initializeAPI() {
@@ -326,29 +339,22 @@ public class Combat extends JavaPlugin implements Listener {
     
     public void forceCombatCleanup(UUID playerUUID) {
         if (playerUUID == null) return;
-        
-        // Remove the player from combat
         combatPlayers.remove(playerUUID);
         UUID opponentUUID = combatOpponents.remove(playerUUID);
         lastActionBarSeconds.remove(playerUUID);
-        
-        // Remove glowing effect if applicable
         Player player = Bukkit.getPlayer(playerUUID);
         if (player != null && glowingEnabled && glowManager != null) {
             glowManager.setGlowing(player, false);
         }
-        
-        // Also clean up opponent's reference to this player
+
         if (opponentUUID != null) {
             UUID currentOpponentRef = combatOpponents.get(opponentUUID);
             if (currentOpponentRef != null && currentOpponentRef.equals(playerUUID)) {
-                // Only remove if the opponent is still referencing this player
                 combatOpponents.remove(opponentUUID);
             }
             
             Player opponent = Bukkit.getPlayer(opponentUUID);
             if (opponent != null && glowingEnabled && glowManager != null) {
-                // Check if opponent is still in combat with anyone else before removing glowing
                 if (!combatPlayers.containsKey(opponentUUID)) {
                     glowManager.setGlowing(opponent, false);
                 }
@@ -357,22 +363,15 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     private void startCombatTimer() {
-        // Don't use the adaptive interval approach if we have PacketEvents
-        // as we'll be handling most interactions directly through packets
         final long timerInterval = isPacketEventsAvailable() ? 20L : Math.max(10L, Math.min(20L, getDynamicInterval()));
-        
-        // Calculate optimal batch size based on expected player count
         final int MAX_BATCH_SIZE = 2000;
         final int MIN_BATCH_SIZE = 50;
         final int OPTIMAL_BATCH_SIZE = Math.min(MAX_BATCH_SIZE, Math.max(MIN_BATCH_SIZE, Bukkit.getMaxPlayers() / 8));
         final UUID[] processBuffer = new UUID[OPTIMAL_BATCH_SIZE];
-        
-        // Use an adaptive interval based on server load
         final int[] tickCounter = {0};
         final int[] skippedTicks = {0};
         
         Runnable timerTask = () -> {
-            // Skip processing if previous task is still running
             if (skippedTicks[0] > 0) {
                 skippedTicks[0]--;
                 return;
@@ -381,8 +380,6 @@ public class Combat extends JavaPlugin implements Listener {
             long startTime = System.nanoTime();
             long currentTime = System.currentTimeMillis();
             int count = 0;
-            
-            // Use a thread-safe copy approach for iteration safety
             UUID[] playerKeys = combatPlayers.keySet().toArray(new UUID[0]);
             
             for (int i = 0; i < playerKeys.length && count < OPTIMAL_BATCH_SIZE; i++) {
@@ -392,13 +389,10 @@ public class Combat extends JavaPlugin implements Listener {
             for (int i = 0; i < count; i++) {
                 UUID uuid = processBuffer[i];
                 if (uuid == null) continue;
-                
                 Long endTime = combatPlayers.get(uuid);
                 if (endTime == null) continue;
-                
                 Player player = Bukkit.getPlayer(uuid);
                 if (player == null) {
-                    // Use atomic removal for thread safety
                     combatPlayers.remove(uuid);
                     combatOpponents.remove(uuid);
                     lastActionBarSeconds.remove(uuid);
@@ -410,37 +404,29 @@ public class Combat extends JavaPlugin implements Listener {
                     lastActionBarSeconds.remove(uuid);
                 } else {
                     Long lastUpdate = lastActionBarSeconds.get(uuid);
-                    // Only update actionbar every 500ms to reduce packet spam
                     if (lastUpdate == null || currentTime - lastUpdate >= 500) {
                         updateActionBar(player, endTime, currentTime);
                         lastActionBarSeconds.put(uuid, currentTime);
                     }
                 }
-                
-                // Every 25 players, check if we're taking too long
+
                 if (i % 25 == 0 && i > 0) {
-                    if ((System.nanoTime() - startTime) > 5_000_000) { // 5ms
-                        Thread.yield(); // Let other threads run
+                    if ((System.nanoTime() - startTime) > 5_000_000) {
+                        Thread.yield();
                     }
                 }
             }
-            
-            // Adjust timer execution frequency based on performance
+
             long elapsed = System.nanoTime() - startTime;
             tickCounter[0]++;
-            
-            // Every 20 ticks, check if we need to adjust our frequency
             if (tickCounter[0] >= 20) {
                 tickCounter[0] = 0;
-                
-                // If processing took more than 25ms, temporarily reduce frequency
                 if (elapsed > 25_000_000) {
-                    skippedTicks[0] = 2; // Skip next 2 ticks
+                    skippedTicks[0] = 2;
                 }
             }
         };
 
-        // Use an adaptive interval based on server conditions
         try {
             SchedulerUtil.runTaskTimerAsync(this, timerTask, timerInterval, timerInterval);
         } catch (Exception e) {
@@ -456,14 +442,12 @@ public class Combat extends JavaPlugin implements Listener {
         } catch (Throwable ignored) {
             tps = 20.0;
         }
-        
-        // More aggressive interval adjustments based on TPS
+
         long interval = tps >= 19.8 ? 10L : 
                         tps >= 19.0 ? 12L : 
                         tps >= 18.0 ? 15L : 
                         tps >= 16.0 ? 20L : 25L;
-        
-        // Scale based on player count more aggressively
+
         if (playerCount > 5000) interval = (long)(interval * 2.0);
         else if (playerCount > 2000) interval = (long)(interval * 1.5);
         else if (playerCount > 1000) interval = (long)(interval * 1.2);
@@ -538,7 +522,6 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         if (worldGuardUtil != null) {
-            // Check both players' locations for PvP denial
             if (worldGuardUtil.isPvpDenied(attacker) || worldGuardUtil.isPvpDenied(victim)) {
                 return false;
             }

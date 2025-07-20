@@ -18,29 +18,28 @@ public class PlayerDeathListener implements Listener {
         Combat combat = Combat.getInstance();
         Player combatOpponent = combat.getCombatOpponent(victim);
         Player killer = victim.getKiller();
-        if (killer == null && combatOpponent != null && 
-            event.deathMessage() != null && 
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.deathMessage()).contains(INTENTIONAL_GAME_DESIGN_KEYWORD)) {
+        if (killer == null && combatOpponent != null &&
+            event.deathMessage() != null &&
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(event.deathMessage()).contains(INTENTIONAL_GAME_DESIGN_KEYWORD)) {
             victim.setKiller(combatOpponent);
         }
 
         UUID victimUUID = victim.getUniqueId();
-        UUID opponentUUID = null;
+        UUID opponentUUID = combat.getCombatOpponents().get(victimUUID);
+
         boolean untagOnDeath = combat.getConfig().getBoolean("untag-on-death", true);
         boolean untagOnEnemyDeath = combat.getConfig().getBoolean("untag-on-enemy-death", true);
-        opponentUUID = combat.getCombatOpponents().get(victimUUID);
+
+
         if (untagOnDeath) {
-            combat.getCombatPlayers().remove(victimUUID);
-            combat.getCombatOpponents().remove(victimUUID);
-            
+            combat.forceCombatCleanup(victimUUID);
             if (combat.getGlowManager() != null) {
                 combat.getGlowManager().setGlowing(victim, false);
             }
         }
         if (untagOnEnemyDeath && opponentUUID != null) {
-            combat.getCombatPlayers().remove(opponentUUID);
-            combat.getCombatOpponents().remove(opponentUUID);
-            
+            combat.forceCombatCleanup(opponentUUID);
             Player opponent = combat.getServer().getPlayer(opponentUUID);
             if (opponent != null && opponent.isOnline()) {
                 if (combat.getGlowManager() != null) {
@@ -53,11 +52,6 @@ public class PlayerDeathListener implements Listener {
                     opponent.sendMessage(prefix + noLongerInCombatMsg);
                 }
             }
-        }
-
-        combat.forceCombatCleanup(victimUUID);
-        if (opponentUUID != null) {
-            combat.forceCombatCleanup(opponentUUID);
         }
     }
 }
