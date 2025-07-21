@@ -14,14 +14,14 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.player.PlayerInteractEvent;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class BedExplosionListener implements Listener {
 
-    private final Map<UUID, Player> recentBedInteractions = new HashMap<>();
-    private final Map<UUID, Long> interactionTimestamps = new HashMap<>();
+    private final Map<UUID, Player> recentBedInteractions = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> interactionTimestamps = new ConcurrentHashMap<>();
     private static final long INTERACTION_TIMEOUT = 5000; // 5 seconds
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -109,12 +109,8 @@ public class BedExplosionListener implements Listener {
         interactionTimestamps.put(bedId, System.currentTimeMillis());
         SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
             long now = System.currentTimeMillis();
-            for (UUID key : new HashMap<>(interactionTimestamps).keySet()) {
-                if (now - interactionTimestamps.getOrDefault(key, 0L) > INTERACTION_TIMEOUT) {
-                    interactionTimestamps.remove(key);
-                    recentBedInteractions.remove(key);
-                }
-            }
+            interactionTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > INTERACTION_TIMEOUT);
+            recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
         }, 200L);
     }
 }
