@@ -64,12 +64,9 @@ public class EndCrystalListener implements Listener {
         recentExplosions.put(explosionId, System.currentTimeMillis());
         crystal.setMetadata("explosion_id", new FixedMetadataValue(
             Combat.getInstance(), explosionId));
-
-        // Limit concurrent async tasks to prevent thread pool saturation
         if (pendingTasks.incrementAndGet() <= MAX_PENDING_TASKS) {
             SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
                 try {
-                    // Batch cleanup for better performance
                     long now = System.currentTimeMillis();
                     recentExplosions.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
                 } finally {
@@ -81,12 +78,11 @@ public class EndCrystalListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!Combat.getInstance().getConfig().getBoolean("link-end-crystals", true)) return;
         
-        // Skip if there's no actual damage
-        if (event.getFinalDamage() <= 0) return;
+        if (event.isCancelled() || event.getFinalDamage() <= 0) return;
 
         Entity damager = event.getDamager();
         if (damager.getType() != EntityType.END_CRYSTAL) return;
@@ -96,7 +92,6 @@ public class EndCrystalListener implements Listener {
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
 
         if (event.getEntity() instanceof Player victim) {
-            // Maintain all protection checks
             if (combat.getSuperVanishManager() != null && 
                 ((placer != null && combat.getSuperVanishManager().isVanished(placer)) || 
                  combat.getSuperVanishManager().isVanished(victim))) {

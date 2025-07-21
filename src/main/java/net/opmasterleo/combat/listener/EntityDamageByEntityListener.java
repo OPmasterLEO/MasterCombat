@@ -17,11 +17,12 @@ import net.opmasterleo.combat.manager.SuperVanishManager;
 
 public final class EntityDamageByEntityListener implements Listener {
 
-    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
     public void handle(EntityDamageByEntityEvent event) {
 
         if (event.isCancelled()) return;
         if (!(event.getEntity() instanceof Player player)) return;
+        if (event.getFinalDamage() <= 0) return;
         
         Combat combat = Combat.getInstance();
         if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player)) return;
@@ -79,8 +80,6 @@ public final class EntityDamageByEntityListener implements Listener {
         if (damagerPlayer != null && player.getHealth() <= event.getFinalDamage()) {
             player.setKiller(damagerPlayer);
         }
-        
-        if (event.getFinalDamage() <= 0) return;
 
         boolean linkRespawnAnchors = combat.getConfig().getBoolean("link-respawn-anchor", true);
         if (linkRespawnAnchors && damager.getType() == EntityType.TNT) {

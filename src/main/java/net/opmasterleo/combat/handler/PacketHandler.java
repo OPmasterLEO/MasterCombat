@@ -277,18 +277,24 @@ public class PacketHandler extends PacketListenerAbstract {
                     return;
                 }
             }
+
+            if (plugin.getCrystalManager() != null && attackType == AttackType.CRYSTAL) {
+                plugin.getCrystalManager().setPlacer(target, attacker);
+            }
         }
     }
 
     private void applyCombatDirectly(Player attacker, Player victim) {
         try {
-            if (plugin.isEnabled() && !isShuttingDown && attacker.isValid() && victim.isValid()) {
+            if (plugin.isEnabled() && !isShuttingDown && attacker.isValid() && victim.isValid() && 
+                attacker.getUniqueId().equals(victim.getUniqueId()) && 
+                plugin.getConfig().getBoolean("self-combat", false)) {
                 plugin.directSetCombat(attacker, victim);
             }
         } catch (Exception e) {
         }
     }
-    
+
     private boolean isThrottled(UUID uuid) {
         Long lastProcess = throttleMap.get(uuid);
         return lastProcess != null && System.currentTimeMillis() - lastProcess < THROTTLE_TIME;

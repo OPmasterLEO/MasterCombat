@@ -209,7 +209,7 @@ public class Update {
 
     private static void performUpdateCheck(Plugin plugin) {
         if (isShuttingDown) return;
-        
+
         String pluginName = plugin.getPluginMeta().getName();
         HttpURLConnection connection = null;
         try {
@@ -239,7 +239,12 @@ public class Update {
                 }
             } else {
                 Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to check for updates. HTTP Response Code: " + connection.getResponseCode());
+                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Response Message: " + connection.getResponseMessage());
             }
+        } catch (java.net.UnknownHostException e) {
+            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Unable to resolve host: " + e.getMessage());
+        } catch (java.net.SocketTimeoutException e) {
+            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Connection timed out: " + e.getMessage());
         } catch (Exception e) {
             if (!isShuttingDown) {
                 Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while checking for updates: " + e.getMessage());

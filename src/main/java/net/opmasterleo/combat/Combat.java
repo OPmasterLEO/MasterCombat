@@ -706,12 +706,6 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void handlePacketEvent(Player player, Player opponent) {
-        // We'll no longer apply combat directly from packets
-        // Instead, we'll let the damage event handle it
-        // This ensures combat only happens when actual damage is dealt
-        
-        // This method can remain for other packet-related processing
-        // but should not automatically tag players just from an interaction
     }
 
     @Deprecated
@@ -772,8 +766,6 @@ public class Combat extends JavaPlugin implements Listener {
             Bukkit.getConsoleSender().sendMessage(net.opmasterleo.combat.util.ChatUtil.parse(line));
         }
     }
-
-    // Add a method to update glowing via packets
     public void updateGlowing() {
         if (glowingEnabled && glowManager != null) {
             glowManager.updateGlowingForAll();
