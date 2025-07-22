@@ -62,9 +62,9 @@ You are free to DM me on Discord (`leqop`)!
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.x.x   | :white_check_mark: |
+| 5.x.x   | :soon:             |
 | 4.x.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| < 3.x.x | :x:                |
 
 ## Security Policy
 

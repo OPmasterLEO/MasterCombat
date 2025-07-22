@@ -13,12 +13,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.listener.NewbieProtectionListener;
 import net.opmasterleo.combat.manager.Update;
+import net.opmasterleo.combat.util.ChatUtil;
 
 public class CombatCommand implements CommandExecutor, TabCompleter {
 
@@ -51,42 +50,51 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         Combat combat = Combat.getInstance();
         NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
         String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
+        String pluginName = combat.getPluginMeta().getDisplayName();
+        String pluginVersion = combat.getPluginMeta().getVersion();
+        String pluginDescription = combat.getPluginMeta().getDescription();
+
         String cmdLabel = label.toLowerCase();
+
         if (cmdLabel.equals("protection")) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+                sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                 return true;
             }
             
             if (protectionListener != null && protectionListener.isActuallyProtected(player)) {
                 protectionListener.sendProtectionMessage(player);
             } else {
-                player.sendMessage(Component.text("You are not protected.").color(NamedTextColor.RED));
+                player.sendMessage(ChatUtil.parse("&cYou are not protected."));
             }
             return true;
         }
 
         if (cmdLabel.equals(disableCommand)) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+                sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                 return true;
             }
             if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
-                player.sendMessage(Component.text("You are not protected.").color(NamedTextColor.RED));
+                player.sendMessage(ChatUtil.parse("&cYou are not protected."));
                 return true;
             }
             if (args.length > 0 && args[0].equalsIgnoreCase("confirm")) {
                 protectionListener.removeProtection(player);
                 return true;
             }
-            player.sendMessage(Component.text("Are you sure you want to remove your protection? ")
-                    .color(NamedTextColor.YELLOW)
-                    .append(Component.text("Run '/" + disableCommand + " confirm' to confirm.").color(NamedTextColor.RED)));
+            player.sendMessage(ChatUtil.parse("&eAre you sure you want to remove your protection? &cRun '/" + disableCommand + " confirm' to confirm."));
             return true;
         }
 
         if (cmdLabel.equals("combat")) {
             if (args.length == 0) {
+                sender.sendMessage(ChatUtil.parse("&b" + pluginName + " &7v" + pluginVersion));
+                sender.sendMessage(ChatUtil.parse("&7" + pluginDescription));
+                sender.sendMessage(ChatUtil.parse("&7Type &e/combat help &7for command list."));
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("help")) {
                 sendHelp(sender, disableCommand);
                 return true;
             }
@@ -97,46 +105,40 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                     combat.reloadCombatConfig();
                     long endTime = System.nanoTime();
                     long durationMs = TimeUnit.NANOSECONDS.toMillis(endTime - startTime);
-                    sender.sendMessage(Component.text("Config reloaded in " + durationMs + "ms!").color(NamedTextColor.GREEN));
+                    sender.sendMessage(ChatUtil.parse("&aConfig reloaded in " + durationMs + "ms!"));
                     break;
                     
                 case "toggle":
                     Combat combatInstance = Combat.getInstance();
                     combatInstance.setCombatEnabled(!combatInstance.isCombatEnabled());
-                    String status = combatInstance.isCombatEnabled() ? "enabled" : "disabled";
-                    NamedTextColor statusColor = combatInstance.isCombatEnabled() ? NamedTextColor.GREEN : NamedTextColor.RED;
-                    sender.sendMessage(Component.text("Combat has been ").color(NamedTextColor.YELLOW)
-                            .append(Component.text(status).color(statusColor))
-                            .append(Component.text(".").color(NamedTextColor.YELLOW)));
+                    sender.sendMessage(ChatUtil.parse("&eCombat has been &" + (combatInstance.isCombatEnabled() ? "aenabled" : "cdisabled") + "&e."));
                     break;
 
                 case "removeprotect":
                 case "protection":
                     if (!(sender instanceof Player player)) {
-                        sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+                        sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                         return true;
                     }
                     
                     if (args[0].equalsIgnoreCase(disableCommand)) {
                         if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
-                            player.sendMessage(Component.text("You are not protected.").color(NamedTextColor.RED));
+                            player.sendMessage(ChatUtil.parse("&cYou are not protected."));
                             return true;
                         }
-                        player.sendMessage(Component.text("Are you sure you want to remove your protection? ")
-                                .color(NamedTextColor.YELLOW)
-                                .append(Component.text("Run '/"+ disableCommand +" confirm' to confirm.").color(NamedTextColor.RED)));
+                        player.sendMessage(ChatUtil.parse("&eAre you sure you want to remove your protection? &cRun '/"+ disableCommand +" confirm' to confirm."));
                         return true;
                     }
                     break;
                 
                 case "confirm":
                     if (!(sender instanceof Player player)) {
-                        sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+                        sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                         return true;
                     }
 
                     if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
-                        player.sendMessage(Component.text("You don't have active protection.").color(NamedTextColor.RED));
+                        player.sendMessage(ChatUtil.parse("&cYou don't have active protection."));
                         return true;
                     }
                     protectionListener.removeProtection(player);
@@ -144,11 +146,11 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                 
                 case "update":
                     if (updateCheckInProgress) {
-                        sender.sendMessage(Component.text("Update check is already in progress. Please wait...").color(NamedTextColor.YELLOW));
+                        sender.sendMessage(ChatUtil.parse("&eUpdate check is already in progress. Please wait..."));
                         break;
                     }
                     updateCheckInProgress = true;
-                    sender.sendMessage(Component.text("Checking for updates...").color(NamedTextColor.YELLOW));
+                    sender.sendMessage(ChatUtil.parse("&eChecking for updates..."));
                     Combat plugin = Combat.getInstance();
                     Update.checkForUpdates(plugin);
                     plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
@@ -156,19 +158,19 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                         String latestVersion = Update.getLatestVersion();
                         updateCheckInProgress = false;
                         if (latestVersion == null) {
-                            sender.sendMessage(Component.text("Could not fetch update information.").color(NamedTextColor.RED));
+                            sender.sendMessage(ChatUtil.parse("&cCould not fetch update information."));
                             return;
                         }
                         if (normalizeVersion(currentVersion).equalsIgnoreCase(normalizeVersion(latestVersion))) {
-                            sender.sendMessage(Component.text("You already have the latest version (" + currentVersion + ").").color(NamedTextColor.GREEN));
+                            sender.sendMessage(ChatUtil.parse("&aYou already have the latest version (" + currentVersion + ")."));
                             Update.setUpdateFound(false);
                             return;
                         }
                         if (!Update.isUpdateFound()) {
-                            sender.sendMessage(Component.text("Update found! Run /combat update again to update.").color(NamedTextColor.YELLOW));
+                            sender.sendMessage(ChatUtil.parse("&eUpdate found! Run /combat update again to update."));
                             Update.setUpdateFound(true);
                         } else {
-                            sender.sendMessage(Component.text("Downloading the update...").color(NamedTextColor.YELLOW));
+                            sender.sendMessage(ChatUtil.parse("&eDownloading the update..."));
                             Update.downloadAndReplaceJar(plugin);
                             Update.setUpdateFound(false);
                         }
@@ -176,13 +178,13 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                     break;
                 case "api":
                     if (MasterCombatAPIProvider.getAPI() != null) {
-                        sender.sendMessage(Component.text("MasterCombatAPI is loaded and available.").color(NamedTextColor.GREEN));
+                        sender.sendMessage(ChatUtil.parse("&aMasterCombatAPI is loaded and available."));
                     } else {
-                        sender.sendMessage(Component.text("MasterCombatAPI is not available.").color(NamedTextColor.RED));
+                        sender.sendMessage(ChatUtil.parse("&cMasterCombatAPI is not available."));
                     }
                     break;
                 default:
-                    sendHelp(sender, disableCommand);
+                    sender.sendMessage(ChatUtil.parse("&cUnknown command. Type &e/combat help &cfor usage."));
             }
             return true;
         }
@@ -194,13 +196,14 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender, String disableCommand) {
-        sender.sendMessage(Component.text("Usage:").color(NamedTextColor.RED));
-        sender.sendMessage(Component.text("/combat reload").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("/combat toggle").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("/combat update").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("/combat api").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("/combat " + disableCommand).color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("/combat protection").color(NamedTextColor.GRAY));
+        sender.sendMessage(ChatUtil.parse("&eMasterCombat Command List:"));
+        sender.sendMessage(ChatUtil.parse("/combat reload &7- Reloads the plugin configuration."));
+        sender.sendMessage(ChatUtil.parse("/combat toggle &7- Enables/disables combat tagging."));
+        sender.sendMessage(ChatUtil.parse("/combat update &7- Checks for and downloads plugin updates."));
+        sender.sendMessage(ChatUtil.parse("/combat api &7- Shows API status."));
+        sender.sendMessage(ChatUtil.parse("/combat protection &7- Shows your PvP protection time left."));
+        sender.sendMessage(ChatUtil.parse("/" + disableCommand + " &7- Disables your newbie PvP protection."));
+        sender.sendMessage(ChatUtil.parse("/combat help &7- Shows this help message."));
     }
 
     @Override

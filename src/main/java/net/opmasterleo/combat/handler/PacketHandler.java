@@ -63,7 +63,7 @@ public class PacketHandler extends PacketListenerAbstract {
     private void startCleanupTask() {
         if (plugin.isEnabled()) {
             try {
-                SchedulerUtil.runTaskTimerAsync(plugin, () -> {
+                SchedulerUtil.runTaskAsync(plugin, () -> {
                     if (!plugin.isEnabled() || isShuttingDown) return;
                     long now = System.currentTimeMillis();
                     if (now - lastCleanup > ENTITY_CACHE_CLEANUP_INTERVAL) {
@@ -85,7 +85,7 @@ public class PacketHandler extends PacketListenerAbstract {
                         
                         lastCleanup = now;
                     }
-                }, 1200L, 1200L);
+                });
             } catch (IllegalPluginAccessException e) {
                 plugin.getLogger().warning("Failed to start cleanup task: " + e.getMessage());
             }
@@ -368,19 +368,28 @@ public class PacketHandler extends PacketListenerAbstract {
         );
         entity = playerCache.get(entityId);
         if (entity != null && entity.isValid()) return entity;
-        try {
-            for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
-                if (nearby.getEntityId() == entityId) {
-                    entityCache.put(entityId, nearby);
-                    playerCache.put(entityId, nearby);
-                    return nearby;
+        boolean isMainThread = org.bukkit.Bukkit.isPrimaryThread() || net.opmasterleo.combat.util.SchedulerUtil.isFolia();
+        if (isMainThread) {
+            try {
+                for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
+                    if (nearby.getEntityId() == entityId) {
+                        entityCache.put(entityId, nearby);
+                        playerCache.put(entityId, nearby);
+                        return nearby;
+                    }
                 }
-            }
-        } catch (Exception ignored) {
+            } catch (Exception ignored) {}
         }
 
         try {
             return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
+                for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
+                    if (nearby.getEntityId() == entityId) {
+                        entityCache.put(entityId, nearby);
+                        playerCache.put(entityId, nearby);
+                        return nearby;
+                    }
+                }
                 for (Entity e : player.getWorld().getEntities()) {
                     if (e.getEntityId() == entityId) {
                         entityCache.put(entityId, e);
@@ -388,7 +397,6 @@ public class PacketHandler extends PacketListenerAbstract {
                         return e;
                     }
                 }
-
                 for (org.bukkit.World world : Bukkit.getWorlds()) {
                     if (world.equals(player.getWorld())) continue;
                     for (Entity e : world.getEntities()) {
