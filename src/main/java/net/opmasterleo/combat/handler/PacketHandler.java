@@ -23,6 +23,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.plugin.IllegalPluginAccessException;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +35,7 @@ public class PacketHandler extends PacketListenerAbstract {
     private final Combat plugin;
     private final AtomicInteger processingCount = new AtomicInteger(0);
     private final Map<Integer, Entity> entityCache = new ConcurrentHashMap<>(512);
+    private final Map<UUID, Map<Integer, Entity>> playerEntityCache = new ConcurrentHashMap<>();
     private final Map<UUID, Long> throttleMap = new ConcurrentHashMap<>(256);
     private final Map<UUID, BukkitTask> pendingCombatTasks = new ConcurrentHashMap<>(64);
     private final Set<UUID> pendingMetadataUpdates = ConcurrentHashMap.newKeySet();
@@ -63,11 +65,24 @@ public class PacketHandler extends PacketListenerAbstract {
             try {
                 SchedulerUtil.runTaskTimerAsync(plugin, () -> {
                     if (!plugin.isEnabled() || isShuttingDown) return;
-                    
                     long now = System.currentTimeMillis();
                     if (now - lastCleanup > ENTITY_CACHE_CLEANUP_INTERVAL) {
-                        entityCache.clear();
+                        int removedCount = 0;
+                        for (Iterator<Map.Entry<Integer, Entity>> it = entityCache.entrySet().iterator(); 
+                             it.hasNext() && removedCount < 1000; ) {
+                            Entity entity = it.next().getValue();
+                            if (!entity.isValid()) {
+                                it.remove();
+                                removedCount++;
+                            }
+                        }
+
                         throttleMap.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
+                        for (Map<Integer, Entity> playerCache : playerEntityCache.values()) {
+                            playerCache.entrySet().removeIf(entry -> 
+                                !entry.getValue().isValid());
+                        }
+                        
                         lastCleanup = now;
                     }
                 }, 1200L, 1200L);
@@ -348,29 +363,54 @@ public class PacketHandler extends PacketListenerAbstract {
         if (!plugin.isEnabled() || isShuttingDown) return null;
         Entity entity = entityCache.get(entityId);
         if (entity != null && entity.isValid()) return entity;
+        Map<Integer, Entity> playerCache = playerEntityCache.computeIfAbsent(
+            player.getUniqueId(), k -> new ConcurrentHashMap<>(64)
+        );
+        entity = playerCache.get(entityId);
+        if (entity != null && entity.isValid()) return entity;
+        try {
+            for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
+                if (nearby.getEntityId() == entityId) {
+                    entityCache.put(entityId, nearby);
+                    playerCache.put(entityId, nearby);
+                    return nearby;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
         try {
             return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
                 for (Entity e : player.getWorld().getEntities()) {
                     if (e.getEntityId() == entityId) {
                         entityCache.put(entityId, e);
+                        playerCache.put(entityId, e);
                         return e;
                     }
                 }
+
                 for (org.bukkit.World world : Bukkit.getWorlds()) {
                     if (world.equals(player.getWorld())) continue;
                     for (Entity e : world.getEntities()) {
                         if (e.getEntityId() == entityId) {
                             entityCache.put(entityId, e);
+                            playerCache.put(entityId, e);
                             return e;
                         }
                     }
                 }
                 return null;
-            }).get();
+            }).get(50, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to fetch entity synchronously: " + e.getMessage());
+            if (plugin.isEnabled()) {
+                plugin.getLogger().fine("Failed to fetch entity synchronously: " + e.getMessage());
+            }
             return null;
         }
+    }
+
+    public void removePlayerCache(UUID playerUuid) {
+        playerEntityCache.remove(playerUuid);
     }
 
     public void cleanup() {
@@ -383,6 +423,7 @@ public class PacketHandler extends PacketListenerAbstract {
         });
         
         entityCache.clear();
+        playerEntityCache.clear();
         throttleMap.clear();
         pendingCombatTasks.clear();
         pendingMetadataUpdates.clear();

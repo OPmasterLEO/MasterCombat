@@ -245,6 +245,10 @@ public class Combat extends JavaPlugin implements Listener {
         if (glowManager != null) {
             glowManager.untrackPlayer(player);
         }
+        
+        if (packetHandler != null) {
+            packetHandler.removePlayerCache(player.getUniqueId());
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -363,7 +367,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     private void startCombatTimer() {
-        final long timerInterval = isPacketEventsAvailable() ? 20L : Math.max(10L, Math.min(20L, getDynamicInterval()));
+        final long timerInterval = isPacketEventsAvailable() ? 20L : Math.min(40L, getDynamicInterval());
         final int MAX_BATCH_SIZE = 2000;
         final int MIN_BATCH_SIZE = 50;
         final int OPTIMAL_BATCH_SIZE = Math.min(MAX_BATCH_SIZE, Math.max(MIN_BATCH_SIZE, Bukkit.getMaxPlayers() / 8));
