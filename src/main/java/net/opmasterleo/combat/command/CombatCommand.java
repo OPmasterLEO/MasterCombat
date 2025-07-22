@@ -51,9 +51,7 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         Combat combat = Combat.getInstance();
         NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
         String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
-
         String cmdLabel = label.toLowerCase();
-
         if (cmdLabel.equals("protection")) {
             if (!(sender instanceof Player player)) {
                 sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
@@ -73,17 +71,14 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
                 return true;
             }
-            
             if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
                 player.sendMessage(Component.text("You are not protected.").color(NamedTextColor.RED));
                 return true;
             }
-            
             if (args.length > 0 && args[0].equalsIgnoreCase("confirm")) {
                 protectionListener.removeProtection(player);
                 return true;
             }
-            
             player.sendMessage(Component.text("Are you sure you want to remove your protection? ")
                     .color(NamedTextColor.YELLOW)
                     .append(Component.text("Run '/" + disableCommand + " confirm' to confirm.").color(NamedTextColor.RED)));
