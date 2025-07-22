@@ -280,11 +280,8 @@ public class Update {
                 return;
             }
             
-            String fixedName = pluginName;
-            if (fixedName.toLowerCase().contains("mastercombat-mastercombat")) {
-                fixedName = "MasterCombat";
-            }
-            File tempFile = new File(updateFolder, fixedName + "-" + latestVersion + ".jar");
+            String fixedName = "MasterCombat";
+            File tempFile = new File(updateFolder, fixedName + "-v" + latestVersion + ".jar");
             URL website = URI.create(downloadUrl).toURL();
             connection = (HttpURLConnection) website.openConnection();
             activeConnections.add(connection);
