@@ -14,7 +14,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
 import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.listener.NewbieProtectionListener;
 import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.util.ChatUtil;
@@ -48,6 +47,7 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         Combat combat = Combat.getInstance();
+        boolean newbieProtectionEnabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
         NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
         String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
         String pluginName = combat.getPluginMeta().getDisplayName();
@@ -55,6 +55,12 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         String pluginDescription = combat.getPluginMeta().getDescription();
 
         String cmdLabel = label.toLowerCase();
+
+        if (!newbieProtectionEnabled) {
+            if (cmdLabel.equals("protection") || cmdLabel.equals(disableCommand)) {
+                return false;
+            }
+        }
 
         if (cmdLabel.equals("protection")) {
             if (!(sender instanceof Player player)) {
@@ -89,7 +95,8 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
 
         if (cmdLabel.equals("combat")) {
             if (args.length == 0) {
-                sender.sendMessage(ChatUtil.parse("&b" + pluginName + " &7v" + pluginVersion));
+                String displayText = pluginName.contains(pluginVersion) ? pluginName : (pluginName + " v" + pluginVersion);
+                sender.sendMessage(ChatUtil.parse("&b" + displayText));
                 sender.sendMessage(ChatUtil.parse("&7" + pluginDescription));
                 sender.sendMessage(ChatUtil.parse("&7Type &e/combat help &7for command list."));
                 return true;
@@ -150,7 +157,6 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                         break;
                     }
                     updateCheckInProgress = true;
-                    sender.sendMessage(ChatUtil.parse("&eChecking for updates..."));
                     Combat plugin = Combat.getInstance();
                     Update.checkForUpdates(plugin);
                     plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
@@ -170,18 +176,10 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                             sender.sendMessage(ChatUtil.parse("&eUpdate found! Run /combat update again to update."));
                             Update.setUpdateFound(true);
                         } else {
-                            sender.sendMessage(ChatUtil.parse("&eDownloading the update..."));
                             Update.downloadAndReplaceJar(plugin);
                             Update.setUpdateFound(false);
                         }
                     }, 40L);
-                    break;
-                case "api":
-                    if (MasterCombatAPIProvider.getAPI() != null) {
-                        sender.sendMessage(ChatUtil.parse("&aMasterCombatAPI is loaded and available."));
-                    } else {
-                        sender.sendMessage(ChatUtil.parse("&cMasterCombatAPI is not available."));
-                    }
                     break;
                 default:
                     sender.sendMessage(ChatUtil.parse("&cUnknown command. Type &e/combat help &cfor usage."));
@@ -196,19 +194,26 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender, String disableCommand) {
+        Combat combat = Combat.getInstance();
+        boolean newbieProtectionEnabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
+
         sender.sendMessage(ChatUtil.parse("&eMasterCombat Command List:"));
         sender.sendMessage(ChatUtil.parse("/combat reload &7- Reloads the plugin configuration."));
         sender.sendMessage(ChatUtil.parse("/combat toggle &7- Enables/disables combat tagging."));
         sender.sendMessage(ChatUtil.parse("/combat update &7- Checks for and downloads plugin updates."));
-        sender.sendMessage(ChatUtil.parse("/combat api &7- Shows API status."));
-        sender.sendMessage(ChatUtil.parse("/combat protection &7- Shows your PvP protection time left."));
-        sender.sendMessage(ChatUtil.parse("/" + disableCommand + " &7- Disables your newbie PvP protection."));
+        if (newbieProtectionEnabled) {
+            sender.sendMessage(ChatUtil.parse("/protection &7- Shows your PvP protection time left."));
+            sender.sendMessage(ChatUtil.parse("/" + disableCommand + " &7- Disables your newbie PvP protection."));
+        }
         sender.sendMessage(ChatUtil.parse("/combat help &7- Shows this help message."));
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String label, String[] args) {
         List<String> completions = new ArrayList<>();
+        Combat combat = Combat.getInstance();
+        boolean newbieProtectionEnabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
+        String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
 
         if (args.length == 1) {
             if ("reload".startsWith(args[0].toLowerCase())) {
@@ -220,11 +225,11 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
             if ("update".startsWith(args[0].toLowerCase())) {
                 completions.add("update");
             }
-            if ("api".startsWith(args[0].toLowerCase())) {
-                completions.add("api");
-            }
-            if ("protection".startsWith(args[0].toLowerCase())) {
+            if (newbieProtectionEnabled && "protection".startsWith(args[0].toLowerCase())) {
                 completions.add("protection");
+            }
+            if (newbieProtectionEnabled && disableCommand.startsWith(args[0].toLowerCase())) {
+                completions.add(disableCommand);
             }
         }
 

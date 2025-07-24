@@ -72,7 +72,9 @@ public class Update {
         
         if (!updateCheckInProgress) {
             updateCheckInProgress = true;
-            Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eChecking for updates…");
+            if (!updateFound) {
+                Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eChecking for updates…");
+            }
             BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
                 try {
                     performUpdateCheck(plugin);
@@ -201,7 +203,9 @@ public class Update {
         
         if (!updateDownloadInProgress) {
             updateDownloadInProgress = true;
-            Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eDownloading and applying the update...");
+            if (updateFound) {
+                Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eDownloading and applying the update...");
+            }
             BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
                 try {
                     performJarReplacement(plugin);
@@ -301,7 +305,11 @@ public class Update {
             }
             
             String fixedName = "MasterCombat";
-            File tempFile = new File(updateFolder, fixedName + "-v" + latestVersion + ".jar");
+            String versionOnly = latestVersion;
+            if (versionOnly != null && versionOnly.toLowerCase().startsWith("mastercombat-v")) {
+                versionOnly = versionOnly.substring("mastercombat-v".length());
+            }
+            File tempFile = new File(updateFolder, fixedName + "-v" + versionOnly + ".jar");
             URL website = URI.create(downloadUrl).toURL();
             connection = (HttpURLConnection) website.openConnection();
             activeConnections.add(connection);
@@ -312,8 +320,6 @@ public class Update {
             
             try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
                  FileOutputStream fos = new FileOutputStream(tempFile)) {
-                
-                // Check for shutdown every 10MB
                 long maxChunk = 10 * 1024 * 1024;
                 long position = 0;
                 while (true) {

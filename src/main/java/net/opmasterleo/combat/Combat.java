@@ -156,11 +156,16 @@ public class Combat extends JavaPlugin implements Listener {
     }
     
     private void registerCommands() {
-        Objects.requireNonNull(getCommand("combat")).setExecutor(new CombatCommand());
-        Objects.requireNonNull(getCommand("protection")).setExecutor(new CombatCommand());
+        CombatCommand combatCommand = new CombatCommand();
+        Objects.requireNonNull(getCommand("combat")).setExecutor(combatCommand);
+        Objects.requireNonNull(getCommand("combat")).setTabCompleter(combatCommand);
+        Objects.requireNonNull(getCommand("protection")).setExecutor(combatCommand);
+        Objects.requireNonNull(getCommand("protection")).setTabCompleter(combatCommand);
+
         String disableCmd = getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
         if (getCommand(disableCmd) != null) {
-            getCommand(disableCmd).setExecutor(new CombatCommand());
+            getCommand(disableCmd).setExecutor(combatCommand);
+            getCommand(disableCmd).setTabCompleter(combatCommand);
         }
     }
 
