@@ -111,6 +111,8 @@ public class PacketHandler extends PacketListenerAbstract {
                 handlePlayerDigging(event, player);
             } else if (event.getPacketType() == PacketType.Play.Client.ANIMATION) {
                 handlePlayerAnimation(event, player);
+            } else if (event.getPacketType() == PacketType.Play.Client.ADVANCEMENT_TAB) {
+                handleAdvancement(event, player);
             }
         } catch (Exception e) {
             if (plugin.isEnabled()) {
@@ -359,6 +361,7 @@ public class PacketHandler extends PacketListenerAbstract {
         }
     }
     
+    private static final int ENTITY_SEARCH_RADIUS = 24;
     private Entity getEntityById(int entityId, Player player) {
         if (!plugin.isEnabled() || isShuttingDown) return null;
         Entity entity = entityCache.get(entityId);
@@ -371,7 +374,7 @@ public class PacketHandler extends PacketListenerAbstract {
         boolean isMainThread = org.bukkit.Bukkit.isPrimaryThread() || net.opmasterleo.combat.util.SchedulerUtil.isFolia();
         if (isMainThread) {
             try {
-                for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
+                for (Entity nearby : player.getNearbyEntities(ENTITY_SEARCH_RADIUS, ENTITY_SEARCH_RADIUS, ENTITY_SEARCH_RADIUS)) {
                     if (nearby.getEntityId() == entityId) {
                         entityCache.put(entityId, nearby);
                         playerCache.put(entityId, nearby);
@@ -383,7 +386,7 @@ public class PacketHandler extends PacketListenerAbstract {
 
         try {
             return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
-                for (Entity nearby : player.getNearbyEntities(32, 32, 32)) {
+                for (Entity nearby : player.getNearbyEntities(ENTITY_SEARCH_RADIUS, ENTITY_SEARCH_RADIUS, ENTITY_SEARCH_RADIUS)) {
                     if (nearby.getEntityId() == entityId) {
                         entityCache.put(entityId, nearby);
                         playerCache.put(entityId, nearby);
@@ -444,6 +447,33 @@ public class PacketHandler extends PacketListenerAbstract {
             plugin.getLogger().info("PacketHandler registered successfully");
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to register PacketHandler: " + e.getMessage());
+        }
+    }
+
+    private void handleAdvancement(PacketReceiveEvent event, Player player) {
+        NewbieProtectionListener protection = plugin.getNewbieProtectionListener();
+        if (protection != null) {
+            java.util.Set<java.util.UUID> pending = getPendingProtectionSet(protection);
+            if (pending != null && pending.remove(player.getUniqueId())) {
+                protection.addProtectedPlayer(player);
+                try {
+                    java.lang.reflect.Field joinLocations = protection.getClass().getDeclaredField("joinLocations");
+                    joinLocations.setAccessible(true);
+                    Map<?, ?> map = (Map<?, ?>) joinLocations.get(protection);
+                    map.remove(player.getUniqueId());
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Set<java.util.UUID> getPendingProtectionSet(NewbieProtectionListener protection) {
+        try {
+            java.lang.reflect.Field field = protection.getClass().getDeclaredField("pendingProtection");
+            field.setAccessible(true);
+            return (java.util.Set<java.util.UUID>) field.get(protection);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

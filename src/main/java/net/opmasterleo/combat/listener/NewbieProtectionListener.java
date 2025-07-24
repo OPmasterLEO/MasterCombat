@@ -7,6 +7,7 @@ import net.opmasterleo.combat.manager.PlaceholderManager;
 import net.opmasterleo.combat.util.ChatUtil;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.*;
@@ -18,7 +19,9 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.time.Duration;
@@ -52,6 +55,10 @@ public class NewbieProtectionListener implements Listener {
     private int titleStay = 70;
     private int titleFadeOut = 20;
     private Set<Material> blockedItems;
+
+    private final Set<UUID> pendingProtection = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Location> joinLocations = new ConcurrentHashMap<>();
+    private static final double MIN_DISTANCE = 32.0;
 
     public NewbieProtectionListener() {
         reloadConfig();
@@ -104,7 +111,9 @@ public class NewbieProtectionListener implements Listener {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
         if (!player.hasPlayedBefore()) {
-            addProtectedPlayer(player);
+
+            pendingProtection.add(playerId);
+            joinLocations.put(playerId, player.getLocation().clone());
         } else if (offlineProtection.containsKey(playerId)) {
             long remainingTime = offlineProtection.remove(playerId) - System.currentTimeMillis();
             if (remainingTime > 0) {
@@ -115,7 +124,45 @@ public class NewbieProtectionListener implements Listener {
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
+    public void onPlayerMove(PlayerMoveEvent event) {
+        if (!enabled) return;
+        Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
+        if (!pendingProtection.contains(playerId)) return;
+        Location from = joinLocations.getOrDefault(playerId, event.getFrom());
+        if (from.getWorld().equals(event.getTo().getWorld()) &&
+            from.distanceSquared(event.getTo()) < MIN_DISTANCE * MIN_DISTANCE) {
+            return;
+        }
+        startProtectionForPending(player);
+    }
+
+    @EventHandler
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
+        if (!enabled) return;
+        Player player = event.getPlayer();
+        if (pendingProtection.remove(player.getUniqueId())) {
+            addProtectedPlayer(player);
+            joinLocations.remove(player.getUniqueId());
+        }
+    }
+
+    @EventHandler
+    public void onPickup(PlayerAttemptPickupItemEvent event) {
+        if (!enabled) return;
+        Player player = event.getPlayer();
+        if (pendingProtection.remove(player.getUniqueId())) {
+            addProtectedPlayer(player);
+            joinLocations.remove(player.getUniqueId());
+        }
+    }
+
+    private void startProtectionForPending(Player player) {
+        UUID playerId = player.getUniqueId();
+        if (pendingProtection.remove(playerId)) {
+            addProtectedPlayer(player);
+            joinLocations.remove(playerId);
+        }
     }
 
     public void addProtectedPlayer(Player player) {

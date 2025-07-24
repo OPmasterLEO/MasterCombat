@@ -30,11 +30,11 @@ EnabledWorlds:
     - world2
 
 Messages:
-  Prefix: ''
-  NowInCombat: ''
-  NoLongerInCombat: ''
-  LogoutInCombat: ''
-  ElytraDisabled: '&cElytra usage is disabled while in combat.'
+  Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
+  NowInCombat: '%prefix% &7You are now in combat!'
+  NoLongerInCombat: '%prefix% &7You are no longer in combat!'
+  LogoutInCombat: '%prefix% &cYou cannot logout while in combat!'
+  ElytraDisabled: '%prefix% &cElytra usage is disabled while in combat.'
   # empty = disabled
 
 # Enable custom death messages

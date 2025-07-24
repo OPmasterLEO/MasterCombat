@@ -46,6 +46,7 @@ import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.handler.PacketHandler;
+import net.opmasterleo.combat.util.ConfigUtil;
 
 public class Combat extends JavaPlugin implements Listener {
 
@@ -82,6 +83,7 @@ public class Combat extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ConfigUtil.updateConfig(this);
         instance = this;
 
         if (!getConfig().contains("NewbieProtection.Messages.BlockedMessage")) {
@@ -576,6 +578,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void reloadCombatConfig() {
         reloadConfig();
+        ConfigUtil.updateConfig(this);
         loadConfigValues();
         
         if (newbieProtectionListener != null) {

@@ -88,7 +88,7 @@ public class Update {
 
     public static void notifyOnServerOnline(Plugin plugin) {
         if (isShuttingDown) return;
-        
+        final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
         BukkitTask task = SchedulerUtil.runTaskLater(plugin, () -> {
             String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
@@ -98,16 +98,21 @@ public class Update {
                 performUpdateCheck(plugin);
                 updateCheckInProgress = false;
             }
-            
+
             String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
 
             if (latestVersion == null) {
-                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Unable to fetch update information.");
+                Bukkit.getConsoleSender().sendMessage(prefix + "§c[" + pluginName + "]» Unable to fetch update information.");
                 return;
             }
 
             int comparison = compareVersions(normalizedCurrent, normalizedLatest);
-            
+            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
+            if (behind > 0) {
+                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
+                Bukkit.getConsoleSender().sendMessage(msg);
+            }
+
             if (comparison == 0) {
                 Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» This server is running the latest " + pluginName + " (v" + currentVersion + ").");
             } else if (comparison < 0) {
@@ -117,7 +122,7 @@ public class Update {
                 Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» You are running a developer build (v" + currentVersion + "), but the latest public version is v" + latestVersion + ".");
             }
         }, 20L * 3);
-        
+
         if (task != null) {
             updateTasks.add(task);
         }
@@ -130,6 +135,7 @@ public class Update {
 
         String pluginName = plugin.getName();
         String currentVersion = plugin.getPluginMeta().getVersion();
+        final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
         if (latestVersion == null && !updateCheckInProgress) {
             updateCheckInProgress = true;
             BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
@@ -140,6 +146,13 @@ public class Update {
                     SchedulerUtil.runTask(plugin, () -> {
                         if (!isShuttingDown) {
                             sendUpdateNotification(player, pluginName, currentVersion);
+                            String normalizedCurrent = normalizeVersion(currentVersion);
+                            String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
+                            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
+                            if (behind > 0) {
+                                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
+                                player.sendMessage(msg);
+                            }
                         }
                     });
                 }
@@ -149,6 +162,13 @@ public class Update {
             }
         } else {
             sendUpdateNotification(player, pluginName, currentVersion);
+            String normalizedCurrent = normalizeVersion(currentVersion);
+            String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
+            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
+            if (behind > 0) {
+                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
+                player.sendMessage(msg);
+            }
         }
     }
     
@@ -373,5 +393,30 @@ public class Update {
     
     public static void cleanupTasks() {
         setShuttingDown(true);
+    }
+
+    private static int getVersionsBehind(String current, String latest) {
+        if (current == null || latest == null) return 0;
+        String[] cur = current.split("\\.");
+        String[] lat = latest.split("\\.");
+        int min = Math.min(cur.length, lat.length);
+        for (int i = 0; i < min; i++) {
+            try {
+                int c = Integer.parseInt(cur[i]);
+                int l = Integer.parseInt(lat[i]);
+                if (c < l) {
+                    return l - c;
+                } else if (c > l) {
+                    return 0;
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+        if (cur.length < lat.length) {
+            try {
+                int l = Integer.parseInt(lat[min]);
+                return l;
+            } catch (Exception ignored) {}
+        }
+        return 0;
     }
 }
