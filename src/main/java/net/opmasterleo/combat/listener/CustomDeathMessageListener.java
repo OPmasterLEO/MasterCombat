@@ -29,6 +29,10 @@ public class CustomDeathMessageListener implements Listener {
         }
 
         Component finalMessage = prefix.append(vanillaMessage);
-        event.deathMessage(finalMessage);
+        try {
+            event.deathMessage(finalMessage);
+        } catch (NoSuchMethodError | UnsupportedOperationException e) {
+            event.deathMessage(Component.text(ChatUtil.legacy(finalMessage)));
+        }
     }
 }
