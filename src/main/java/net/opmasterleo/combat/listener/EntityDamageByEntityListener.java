@@ -1,226 +1,219 @@
 package net.opmasterleo.combat.listener;
 
-import java.util.Set;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.FishHook;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
-import org.bukkit.entity.TNTPrimed;
-import org.bukkit.entity.Tameable;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.GameMode;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.manager.SuperVanishManager;
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.entity.*;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public final class EntityDamageByEntityListener implements Listener {
+public final class EntityDamageByEntityListener implements PacketListener {
 
-    @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
-    public void handle(EntityDamageByEntityEvent event) {
+    private final Map<UUID, Player> projectileOwners = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> attackTimestamps = new ConcurrentHashMap<>();
+    private static final long ATTACK_TIMEOUT = 5000;
 
-        if (event.isCancelled()) return;
-        if (!(event.getEntity() instanceof Player player)) return;
-        if (event.getFinalDamage() <= 0) return;
-        
+    @Override
+    public void onPacketReceive(PacketReceiveEvent event) {
         Combat combat = Combat.getInstance();
-        if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player)) return;
-        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+        if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
+            WrapperPlayClientInteractEntity interactPacket = new WrapperPlayClientInteractEntity(event);
+            if (interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) return;
+            
+            Player attacker = (Player) event.getPlayer();
+            Entity target = combat.getEntityManager().getEntity(interactPacket.getEntityId());
+            
+            if (target instanceof Player victim) {
+                handlePlayerAttack(combat, attacker, victim);
+            }
+            return;
+        }
+        if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
+            WrapperPlayClientUseItem useItemPacket = new WrapperPlayClientUseItem(event);
+            if (useItemPacket.getHand() != com.github.retrooper.packetevents.protocol.player.InteractionHand.MAIN_HAND) return;
+            Player shooter = (Player) event.getPlayer();
+            projectileOwners.put(shooter.getUniqueId(), shooter);
+            attackTimestamps.put(shooter.getUniqueId(), System.currentTimeMillis());
+            Bukkit.getScheduler().runTaskLater(combat, () -> {
+                long now = System.currentTimeMillis();
+                attackTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > ATTACK_TIMEOUT);
+                projectileOwners.keySet().retainAll(attackTimestamps.keySet());
+            }, 100L);
+        }
+    }
+
+    @Override
+    public void onPacketSend(PacketSendEvent event) {
+    }
+
+    private void handlePlayerAttack(Combat combat, Player attacker, Player victim) {
+        if (attacker.getGameMode() == GameMode.CREATIVE || 
+            attacker.getGameMode() == GameMode.SPECTATOR ||
+            victim.getGameMode() == GameMode.CREATIVE || 
+            victim.getGameMode() == GameMode.SPECTATOR) {
             return;
         }
 
-        Entity damager = event.getDamager();
-        if (damager instanceof Player damagerPlayer) {
-            if (damagerPlayer.getGameMode() == GameMode.CREATIVE || damagerPlayer.getGameMode() == GameMode.SPECTATOR) {
-                return;
-            }
-            NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
-            if (protectionListener != null) {
-                boolean damagerProtected = protectionListener.isActuallyProtected(damagerPlayer);
-                boolean victimProtected = protectionListener.isActuallyProtected(player);
-                if ((damagerProtected && !victimProtected) || (!damagerProtected && victimProtected)) {
-                    return;
-                }
-            }
-        }
-        
-        if (damager instanceof Projectile projectile) {
-            if (projectile.getType() == EntityType.ENDER_PEARL || isIgnoredProjectile(combat, projectile)) {
-                return;
-            }
+        if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(victim)) {
+            return;
         }
 
-        Player damagerPlayer = null;
-        if (damager instanceof Player p) {
-            damagerPlayer = p;
-        } else if (damager instanceof Projectile proj && proj.getShooter() instanceof Player shooter) {
-            damagerPlayer = shooter;
-        } else if (damager instanceof Tameable tame && tame.getOwner() instanceof Player owner) {
-            damagerPlayer = owner;
-        } else if (damager instanceof FishHook hook && hook.getShooter() instanceof Player shooter) {
-            damagerPlayer = shooter;
-        } else if (damager instanceof TNTPrimed tnt && tnt.getSource() instanceof Player source) {
-            damagerPlayer = source;
-        } else if (damager.getType() == EntityType.END_CRYSTAL && combat.getCrystalManager() != null) {
-            damagerPlayer = combat.getCrystalManager().getPlacer(damager);
+        NewbieProtectionListener protection = combat.getNewbieProtectionListener();
+        if (protection != null) {
+            boolean attackerProtected = protection.isActuallyProtected(attacker);
+            boolean victimProtected = protection.isActuallyProtected(victim);
+            if ((attackerProtected && !victimProtected) || (!attackerProtected && victimProtected)) {
+                return;
+            }
         }
 
         SuperVanishManager vanish = combat.getSuperVanishManager();
-        if (vanish != null) {
-            boolean victimVanished = vanish.isVanished(player);
-            boolean attackerVanished = damagerPlayer != null && vanish.isVanished(damagerPlayer);
+        if (vanish != null && (vanish.isVanished(attacker) || vanish.isVanished(victim))) {
+            return;
+        }
+
+        if (attacker.getUniqueId().equals(victim.getUniqueId())) {
+            if (combat.getConfig().getBoolean("self-combat", false)) {
+                combat.directSetCombat(victim, victim);
+            }
+            return;
+        }
+
+        combat.directSetCombat(victim, attacker);
+        combat.directSetCombat(attacker, victim);
+    }
+
+    public void handleDamage(Player victim, org.bukkit.event.entity.EntityDamageEvent.DamageCause cause, double damage) {
+        Combat combat = Combat.getInstance();
+        if (victim.getGameMode() == GameMode.CREATIVE || victim.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+
+        if (damage <= 0) return;
+        Player attacker = null;
+        long latestAttack = 0;
+        for (Map.Entry<UUID, Player> entry : projectileOwners.entrySet()) {
+            Long timestamp = attackTimestamps.get(entry.getKey());
+            if (timestamp != null && timestamp > latestAttack) {
+                latestAttack = timestamp;
+                attacker = entry.getValue();
+            }
+        }
+
+        if (attacker == null) return;
+        if (victim.getHealth() <= damage) {
+            victim.setKiller(attacker);
+        }
+        
+        combat.directSetCombat(victim, attacker);
+        combat.directSetCombat(attacker, victim);
+    }
+
+    public void handleCrystalDamage(Player victim, Entity crystal, double damage) {
+        Combat combat = Combat.getInstance();
+        if (!combat.getConfig().getBoolean("link-end-crystals", true)) return;
+        Player placer = combat.getCrystalManager() != null ? 
+            combat.getCrystalManager().getPlacer(crystal) : null;
+
+        if (placer != null) {
+            if (placer.getUniqueId().equals(victim.getUniqueId()) && 
+                !combat.getConfig().getBoolean("self-combat", false)) {
+                return;
+            }
             
-            if (victimVanished || attackerVanished) {
-                event.setCancelled(true);
-                return;
+            combat.directSetCombat(victim, placer);
+            combat.directSetCombat(placer, victim);
+            
+            if (victim.getHealth() <= damage) {
+                victim.setKiller(placer);
             }
         }
-
-        if (damagerPlayer != null && player.getHealth() <= event.getFinalDamage()) {
-            player.setKiller(damagerPlayer);
-        }
-
-        boolean linkRespawnAnchors = combat.getConfig().getBoolean("link-respawn-anchor", true);
-        if (linkRespawnAnchors && damager.getType() == EntityType.TNT) {
-            if (damager.hasMetadata("respawn_anchor_explosion")) {
-                Player activator = (Player) damager.getMetadata("respawn_anchor_activator").get(0).value();
-                if (activator != null) {
-                    if (activator.getUniqueId().equals(player.getUniqueId())) {
-                        if (combat.getConfig().getBoolean("self-combat", false)) {
-                            combat.setCombat(player, player);
-                        }
-                    } else {
-                        combat.setCombat(player, activator);
-                        combat.setCombat(activator, player);
-                        if (player.getHealth() <= event.getFinalDamage()) {
-                            player.setKiller(activator);
-                        }
-                    }
-                    return;
-                }
+    }
+    
+    public void handlePetDamage(Player victim, Tameable pet, double damage) {
+        Combat combat = Combat.getInstance();
+        if (!combat.getConfig().getBoolean("link-pets", true)) return;
+        
+        if (pet.getOwner() instanceof Player owner) {
+            if (owner.getUniqueId().equals(victim.getUniqueId())) return;
+            
+            combat.directSetCombat(victim, owner);
+            combat.directSetCombat(owner, victim);
+            
+            if (victim.getHealth() <= damage) {
+                victim.setKiller(owner);
             }
         }
-
-        if (damager instanceof Player damagerP) {
-            if (damagerP.getUniqueId().equals(player.getUniqueId())) {
+    }
+    
+    public void handleFishingRodDamage(Player victim, FishHook hook, double damage) {
+        Combat combat = Combat.getInstance();
+        if (!combat.getConfig().getBoolean("link-fishing-rod", true)) return;
+        
+        if (hook.getShooter() instanceof Player shooter) {
+            if (shooter.getUniqueId().equals(victim.getUniqueId())) return;
+            
+            combat.directSetCombat(victim, shooter);
+            combat.directSetCombat(shooter, victim);
+            
+            if (victim.getHealth() <= damage) {
+                victim.setKiller(shooter);
+            }
+        }
+    }
+    
+    public void handleTNTDamage(Player victim, TNTPrimed tnt, double damage) {
+        Combat combat = Combat.getInstance();
+        if (!combat.getConfig().getBoolean("link-tnt", true)) return;
+        
+        if (tnt.getSource() instanceof Player source) {
+            if (source.getUniqueId().equals(victim.getUniqueId())) {
                 if (combat.getConfig().getBoolean("self-combat", false)) {
-                    combat.directSetCombat(player, player);
-                    if (player.getHealth() <= event.getFinalDamage()) {
-                        Player opponent = combat.getCombatOpponent(player);
-                        if (opponent != null && !opponent.equals(player)) {
-                            player.setKiller(opponent);
+                    combat.directSetCombat(victim, victim);
+                    if (victim.getHealth() <= damage) {
+                        Player opponent = combat.getCombatOpponent(victim);
+                        if (opponent != null && !opponent.equals(victim)) {
+                            victim.setKiller(opponent);
                         }
                     }
                 }
-                return;
-            }
-            combat.directSetCombat(player, damagerP);
-            combat.directSetCombat(damagerP, player);
-            if (player.getHealth() <= event.getFinalDamage()) {
-                player.setKiller(damagerP);
-            }
-            return;
-        }
-
-        if (damager instanceof Projectile projectile) {
-            boolean linkProjectiles = combat.getConfig().getBoolean("link-projectiles", true);
-            boolean selfCombat = combat.getConfig().getBoolean("self-combat", false);
-            if (!linkProjectiles) return;
-
-            if (projectile.getShooter() instanceof Player shooter) {
-                if (shooter.getUniqueId().equals(player.getUniqueId())) {
-                    if (selfCombat) {
-                        combat.directSetCombat(player, player);
-                        if (player.getHealth() <= event.getFinalDamage()) {
-                            Player opponent = combat.getCombatOpponent(player);
-                            if (opponent != null && !opponent.equals(player)) {
-                                player.setKiller(opponent);
-                            }
-                        }
-                    }
-                } else {
-                    combat.directSetCombat(player, shooter);
-                    combat.directSetCombat(shooter, player);
-                    if (player.getHealth() <= event.getFinalDamage()) {
-                        player.setKiller(shooter);
-                    }
-                }
-            }
-        }
-
-        if (combat.getConfig().getBoolean("link-end-crystals", true) && damager.getType() == EntityType.END_CRYSTAL) {
-            Player placer = combat.getCrystalManager() != null ? 
-                combat.getCrystalManager().getPlacer(damager) : null;
-                
-            if (placer != null) {
-                if (placer.getUniqueId().equals(player.getUniqueId()) && 
-                    !combat.getConfig().getBoolean("self-combat", false)) {
-                    return;
-                }
-                combat.directSetCombat(player, placer);
-                combat.directSetCombat(placer, player);
-                if (player.getHealth() <= event.getFinalDamage()) {
-                    player.setKiller(placer);
-                }
-            }
-            return;
-        }
-
-        if (combat.getConfig().getBoolean("link-pets", true) && damager instanceof Tameable tameable) {
-            if (tameable.getOwner() instanceof Player owner) {
-                if (owner.getUniqueId().equals(player.getUniqueId())) return;
-                combat.directSetCombat(player, owner);
-                combat.directSetCombat(owner, player);
-                if (player.getHealth() <= event.getFinalDamage()) {
-                    player.setKiller(owner);
-                }
-            }
-            return;
-        }
-
-        if (combat.getConfig().getBoolean("link-fishing-rod", true) && damager instanceof FishHook fishHook) {
-            if (fishHook.getShooter() instanceof Player shooter) {
-                if (shooter.getUniqueId().equals(player.getUniqueId())) return;
-                combat.directSetCombat(player, shooter);
-                combat.directSetCombat(shooter, player);
-                if (player.getHealth() <= event.getFinalDamage()) {
-                    player.setKiller(shooter);
-                }
-            }
-            return;
-        }
-
-        if (combat.getConfig().getBoolean("link-tnt", true) && damager instanceof TNTPrimed tnt) {
-            if (tnt.getSource() instanceof Player source) {
-                if (source.getUniqueId().equals(player.getUniqueId())) {
-                    if (combat.getConfig().getBoolean("self-combat", false)) {
-                        combat.directSetCombat(player, player);
-                        if (player.getHealth() <= event.getFinalDamage()) {
-                            Player opponent = combat.getCombatOpponent(player);
-                            if (opponent != null && !opponent.equals(player)) {
-                                player.setKiller(opponent);
-                            }
-                        }
-                    }
-                } else {
-                    combat.directSetCombat(player, source);
-                    combat.directSetCombat(source, player);
-                    if (player.getHealth() <= event.getFinalDamage()) {
-                        player.setKiller(source);
-                    }
+            } else {
+                combat.directSetCombat(victim, source);
+                combat.directSetCombat(source, victim);
+                if (victim.getHealth() <= damage) {
+                    victim.setKiller(source);
                 }
             }
         }
     }
     
-    private boolean isIgnoredProjectile(Combat combat, Projectile projectile) {
-        if (projectile.getType() == EntityType.ENDER_PEARL) {
-            return true;
+    public void handleRespawnAnchorDamage(Player victim, Entity explosion, double damage) {
+        Combat combat = Combat.getInstance();
+        if (!combat.getConfig().getBoolean("link-respawn-anchor", true)) return;
+        
+        if (explosion.hasMetadata("respawn_anchor_explosion")) {
+            Player activator = (Player) explosion.getMetadata("respawn_anchor_activator").get(0).value();
+            if (activator != null) {
+                if (activator.getUniqueId().equals(victim.getUniqueId())) {
+                    if (combat.getConfig().getBoolean("self-combat", false)) {
+                        combat.setCombat(victim, victim);
+                    }
+                } else {
+                    combat.setCombat(victim, activator);
+                    combat.setCombat(activator, victim);
+                    if (victim.getHealth() <= damage) {
+                        victim.setKiller(activator);
+                    }
+                }
+            }
         }
-
-        String projType = projectile.getType().name().toUpperCase();
-        Set<String> ignoredProjectiles = combat.getIgnoredProjectiles();
-        return ignoredProjectiles != null && ignoredProjectiles.contains(projType);
     }
 }

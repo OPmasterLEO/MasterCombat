@@ -33,8 +33,6 @@ public class Update {
 
     public static void setShuttingDown(boolean shuttingDown) {
         isShuttingDown = shuttingDown;
-        
-        // Close any active connections
         if (shuttingDown) {
             for (HttpURLConnection conn : activeConnections) {
                 try {
@@ -42,8 +40,6 @@ public class Update {
                 } catch (Exception ignored) {}
             }
             activeConnections.clear();
-            
-            // Cancel any tasks
             for (BukkitTask task : updateTasks) {
                 try {
                     if (!task.isCancelled()) {

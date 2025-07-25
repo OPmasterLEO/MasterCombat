@@ -17,14 +17,12 @@ import java.util.LinkedHashMap;
 
 public class WorldGuardUtil {
     private final RegionQuery regionQuery;
-    private final Map<Long, CacheEntry> pvpCache = new LRUCache<>(1024); // Use LRU cache with limited size
-    private static final long CACHE_TIMEOUT = 30000; // Increased cache time to 30s
+    private final Map<Long, CacheEntry> pvpCache = new LRUCache<>(1024);
+    private static final long CACHE_TIMEOUT = 30000;
     private long lastCleanupTime = System.currentTimeMillis();
-    
-    // LRU Cache implementation to limit memory usage
     private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
         private final int maxSize;
-        
+
         public LRUCache(int maxSize) {
             super(16, 0.75f, true);
             this.maxSize = maxSize;

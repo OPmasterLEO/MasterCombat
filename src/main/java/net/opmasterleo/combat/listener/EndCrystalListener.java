@@ -1,19 +1,23 @@
 package net.opmasterleo.combat.listener;
 
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.event.Listener;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 
 import java.util.List;
 import java.util.Map;
@@ -21,30 +25,36 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class EndCrystalListener implements Listener {
+public class EndCrystalListener implements PacketListener, Listener {
 
-    private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>(256); // Smaller initial capacity
+    private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>(256);
     private final AtomicInteger pendingTasks = new AtomicInteger(0);
     private static final int MAX_PENDING_TASKS = 10;
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
-        if (event.getRightClicked().getType() != EntityType.END_CRYSTAL) return;
+    @Override
+    public void onPacketReceive(PacketReceiveEvent event) {
+        if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) return;
+        
+        WrapperPlayClientInteractEntity interactPacket = new WrapperPlayClientInteractEntity(event);
+        if (interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.INTERACT) return;
 
-        Player player = event.getPlayer();
-        Entity crystal = event.getRightClicked();
+        Player player = (Player) event.getPlayer();
         Combat combat = Combat.getInstance();
+        Entity entity = combat.getEntityManager().getEntity(interactPacket.getEntityId());
+        
+        if (entity == null || entity.getType() != EntityType.END_CRYSTAL) return;
+        
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
-
-        combat.getCrystalManager().setPlacer(crystal, player);
+        combat.getCrystalManager().setPlacer(entity, player);
 
         if (protection != null && protection.isActuallyProtected(player)) {
-            for (Entity nearby : crystal.getNearbyEntities(6.0, 6.0, 6.0)) {
-                if (nearby instanceof Player target
-                    && !player.getUniqueId().equals(target.getUniqueId())
-                    && !protection.isActuallyProtected(target)) {
-                    event.setCancelled(true);
+            for (Entity nearby : entity.getNearbyEntities(6.0, 6.0, 6.0)) {
+                if (nearby instanceof Player target &&
+                    !player.getUniqueId().equals(target.getUniqueId()) &&
+                    !protection.isActuallyProtected(target)) {
+                    
                     protection.sendBlockedMessage(player, protection.getCrystalBlockMessage());
+                    event.setCancelled(true);
                     return;
                 }
             }
@@ -55,6 +65,10 @@ public class EndCrystalListener implements Listener {
         }
     }
 
+    @Override
+    public void onPacketSend(PacketSendEvent event) {
+    }
+
     @EventHandler(priority = EventPriority.NORMAL)
     public void onExplosionPrime(ExplosionPrimeEvent event) {
         if (event.getEntity().getType() != EntityType.END_CRYSTAL) return;
@@ -62,8 +76,8 @@ public class EndCrystalListener implements Listener {
         Entity crystal = event.getEntity();
         UUID explosionId = UUID.randomUUID();
         recentExplosions.put(explosionId, System.currentTimeMillis());
-        crystal.setMetadata("explosion_id", new FixedMetadataValue(
-            Combat.getInstance(), explosionId));
+        crystal.setMetadata("explosion_id", new FixedMetadataValue(Combat.getInstance(), explosionId));
+        
         if (pendingTasks.incrementAndGet() <= MAX_PENDING_TASKS) {
             SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
                 try {
@@ -81,12 +95,10 @@ public class EndCrystalListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!Combat.getInstance().getConfig().getBoolean("link-end-crystals", true)) return;
-        
         if (event.isCancelled() || event.getFinalDamage() <= 0) return;
+        if (event.getDamager().getType() != EntityType.END_CRYSTAL) return;
 
         Entity damager = event.getDamager();
-        if (damager.getType() != EntityType.END_CRYSTAL) return;
-
         Player placer = Combat.getInstance().getCrystalManager().getPlacer(damager);
         Combat combat = Combat.getInstance();
         NewbieProtectionListener protection = combat.getNewbieProtectionListener();
@@ -117,11 +129,12 @@ public class EndCrystalListener implements Listener {
                 }
                 return;
             }
+            
             if (placer != null && !shouldBypass(placer)) {
-                boolean selfCombat = Combat.getInstance().getConfig().getBoolean("self-combat", false);
+                boolean selfCombat = combat.getConfig().getBoolean("self-combat", false);
                 if (victim.getUniqueId().equals(placer.getUniqueId())) {
                     if (selfCombat) {
-                        Combat.getInstance().directSetCombat(victim, victim);
+                        combat.directSetCombat(victim, victim);
                         if (victim.getHealth() <= event.getFinalDamage()) {
                             Player opponent = combat.getCombatOpponent(victim);
                             if (opponent != null && !opponent.equals(victim)) {
@@ -130,8 +143,8 @@ public class EndCrystalListener implements Listener {
                         }
                     }
                 } else {
-                    Combat.getInstance().directSetCombat(victim, placer);
-                    Combat.getInstance().directSetCombat(placer, victim);
+                    combat.directSetCombat(victim, placer);
+                    combat.directSetCombat(placer, victim);
                     if (victim.getHealth() <= event.getFinalDamage()) {
                         victim.setKiller(placer);
                     }
@@ -143,7 +156,6 @@ public class EndCrystalListener implements Listener {
                         victim.setKiller(opponent);
                     }
                 }
-                
                 linkCrystalByProximity(damager, victim);
             }
         }
@@ -167,7 +179,7 @@ public class EndCrystalListener implements Listener {
         List<Entity> nearbyEntities = crystal.getNearbyEntities(4, 4, 4);
         if (nearbyEntities.isEmpty()) return;
         
-            nearbyEntities.sort((e1, e2) -> {
+        nearbyEntities.sort((e1, e2) -> {
             if (!(e1 instanceof Player) && !(e2 instanceof Player)) return 0;
             if (!(e1 instanceof Player)) return 1;
             if (!(e2 instanceof Player)) return -1;
@@ -191,8 +203,7 @@ public class EndCrystalListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityExplode(EntityExplodeEvent event) {
         if (event.getEntityType() != EntityType.END_CRYSTAL) return;
-        Entity crystal = event.getEntity();
-        Combat.getInstance().getCrystalManager().removeCrystal(crystal);
+        Combat.getInstance().getCrystalManager().removeCrystal(event.getEntity());
     }
 
     private boolean shouldBypass(Player player) {
