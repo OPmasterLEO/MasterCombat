@@ -29,7 +29,6 @@ import net.opmasterleo.combat.command.CombatCommand;
 import net.opmasterleo.combat.listener.CustomDeathMessageListener;
 import net.opmasterleo.combat.listener.BedExplosionListener;
 import net.opmasterleo.combat.listener.EndCrystalListener;
-import net.opmasterleo.combat.listener.EntityDamageByEntityListener;
 import net.opmasterleo.combat.listener.EntityPlaceListener;
 import net.opmasterleo.combat.listener.PlayerCommandPreprocessListener;
 import net.opmasterleo.combat.listener.PlayerDeathListener;
@@ -43,6 +42,7 @@ import net.opmasterleo.combat.manager.CrystalManager;
 import net.opmasterleo.combat.manager.GlowManager;
 import net.opmasterleo.combat.manager.WorldGuardUtil;
 import net.opmasterleo.combat.manager.SuperVanishManager;
+import net.opmasterleo.combat.manager.EntityManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.handler.PacketHandler;
@@ -79,6 +79,7 @@ public class Combat extends JavaPlugin implements Listener {
     private String noLongerInCombatMsg;
     
     private PacketHandler packetHandler;
+    private final EntityManager entityManager = new EntityManager();
     
     @Override
     public void onEnable() {
@@ -108,7 +109,6 @@ public class Combat extends JavaPlugin implements Listener {
         } else {
             getLogger().warning("PacketEvents not found. Some features will be limited.");
         }
-        
         if (getConfig().getBoolean("link-bed-explosions", true)) {
             bedExplosionListener = new BedExplosionListener();
             Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
@@ -166,7 +166,6 @@ public class Combat extends JavaPlugin implements Listener {
 
     private void registerListeners() {
         playerMoveListener = new PlayerMoveListener();
-        Bukkit.getPluginManager().registerEvents(new EntityDamageByEntityListener(), this);
         Bukkit.getPluginManager().registerEvents(new PlayerCommandPreprocessListener(), this);
         Bukkit.getPluginManager().registerEvents(playerMoveListener, this);
         Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
@@ -175,11 +174,10 @@ public class Combat extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(new CustomDeathMessageListener(), this);
         Bukkit.getPluginManager().registerEvents(new SelfCombatListener(), this);
         Bukkit.getPluginManager().registerEvents(this, this);
-        
+
         endCrystalListener = new EndCrystalListener();
         Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
         Bukkit.getPluginManager().registerEvents(new EntityPlaceListener(), this);
-
         if (getConfig().getBoolean("link-respawn-anchor", true)) {
             respawnAnchorListener = new RespawnAnchorListener();
             Bukkit.getPluginManager().registerEvents(respawnAnchorListener, this);
@@ -187,7 +185,6 @@ public class Combat extends JavaPlugin implements Listener {
 
         newbieProtectionListener = new NewbieProtectionListener();
         Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
-        
         if (getConfig().getBoolean("link-bed-explosions", true)) {
             bedExplosionListener = new BedExplosionListener();
             Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
@@ -777,5 +774,9 @@ public class Combat extends JavaPlugin implements Listener {
         if (glowingEnabled && glowManager != null) {
             glowManager.updateGlowingForAll();
         }
+    }
+
+    public EntityManager getEntityManager() {
+        return entityManager;
     }
 }
