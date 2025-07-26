@@ -27,11 +27,8 @@ public class PlayerDeathListener implements Listener {
 
         UUID victimUUID = victim.getUniqueId();
         UUID opponentUUID = combat.getCombatOpponents().get(victimUUID);
-
         boolean untagOnDeath = combat.getConfig().getBoolean("untag-on-death", true);
         boolean untagOnEnemyDeath = combat.getConfig().getBoolean("untag-on-enemy-death", true);
-
-
         if (untagOnDeath) {
             combat.forceCombatCleanup(victimUUID);
             if (combat.getGlowManager() != null) {

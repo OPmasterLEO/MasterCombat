@@ -313,7 +313,7 @@ public class Combat extends JavaPlugin implements Listener {
             opponent.sendMessage(prefix + nowInCombatMsg);
         }
 
-        if (glowingEnabled && glowManager != null) {
+        if (glowingEnabled && getConfig().getBoolean("CombatTagGlowing.Enabled", false) && glowManager != null) {
             if (!playerWasInCombat) glowManager.setGlowing(player, true);
             if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
         }

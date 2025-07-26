@@ -31,10 +31,8 @@ public final class PlayerCommandPreprocessListener implements Listener {
     public void handle(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
         if (!Combat.getInstance().isInCombat(player)) return;
-
         String command = event.getMessage().substring(1).trim();
         String baseCommand = command.split(" ")[0].toLowerCase(Locale.ROOT);
-
         if (blockedCommands.contains(baseCommand)) {
             event.setCancelled(true);
             String prefix = Combat.getInstance().getMessage("Messages.Prefix");

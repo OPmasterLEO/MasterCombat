@@ -26,11 +26,10 @@ public final class EntityDamageByEntityListener implements PacketListener {
         if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
             WrapperPlayClientInteractEntity interactPacket = new WrapperPlayClientInteractEntity(event);
             if (interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) return;
-            
             Player attacker = (Player) event.getPlayer();
             Entity target = combat.getEntityManager().getEntity(interactPacket.getEntityId());
-            
             if (target instanceof Player victim) {
+                if (attacker.isDead() || victim.isDead() || attacker.getHealth() <= 0 || victim.getHealth() <= 0) return;
                 handlePlayerAttack(combat, attacker, victim);
             }
             return;
@@ -72,13 +71,13 @@ public final class EntityDamageByEntityListener implements PacketListener {
             return;
         }
 
+        if (attacker.isDead() || victim.isDead() || attacker.getHealth() <= 0 || victim.getHealth() <= 0) return;
         if (attacker.getUniqueId().equals(victim.getUniqueId())) {
             if (combat.getConfig().getBoolean("self-combat", false)) {
                 combat.directSetCombat(victim, victim);
             }
             return;
         }
-
         combat.directSetCombat(victim, attacker);
         combat.directSetCombat(attacker, victim);
     }
@@ -133,13 +132,10 @@ public final class EntityDamageByEntityListener implements PacketListener {
     public void handlePetDamage(Player victim, Tameable pet, double damage) {
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-pets", true)) return;
-        
         if (pet.getOwner() instanceof Player owner) {
             if (owner.getUniqueId().equals(victim.getUniqueId())) return;
-            
             combat.directSetCombat(victim, owner);
             combat.directSetCombat(owner, victim);
-            
             if (victim.getHealth() <= damage) {
                 victim.setKiller(owner);
             }
@@ -149,13 +145,10 @@ public final class EntityDamageByEntityListener implements PacketListener {
     public void handleFishingRodDamage(Player victim, FishHook hook, double damage) {
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-fishing-rod", true)) return;
-        
         if (hook.getShooter() instanceof Player shooter) {
             if (shooter.getUniqueId().equals(victim.getUniqueId())) return;
-            
             combat.directSetCombat(victim, shooter);
             combat.directSetCombat(shooter, victim);
-            
             if (victim.getHealth() <= damage) {
                 victim.setKiller(shooter);
             }

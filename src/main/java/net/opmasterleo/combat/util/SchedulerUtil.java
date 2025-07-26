@@ -1,329 +1,188 @@
 package net.opmasterleo.combat.util;
 
-import java.util.concurrent.TimeUnit;
-import java.util.Set;
-import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-public class SchedulerUtil {
-    private static final boolean IS_FOLIA = isFolia();
-    private static final boolean IS_CANVAS = isCanvas();
-    private static final boolean IS_PAPER = isPaper();
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public final class SchedulerUtil {
+    private static final boolean IS_FOLIA = checkClass("io.papermc.paper.threadedregions.RegionizedServer");
+    private static final boolean IS_CANVAS = checkClass("io.papermc.canvas.scheduler.CanvasScheduler");
+    private static final AtomicBoolean isShuttingDown = new AtomicBoolean(false);
     private static final Set<BukkitTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private static volatile boolean isShuttingDown = false;
-    private static final int MAX_ACTIVE_TASKS = 2048;
+    private static final int MAX_ACTIVE_TASKS = 1024;
+    private static final long CLEANUP_INTERVAL = 6000L; // 5 minutes
 
     static {
-        Bukkit.getScheduler().runTaskTimerAsynchronously(
-            Bukkit.getPluginManager().getPlugin("MasterCombat"),
-            () -> {
-                activeTasks.removeIf(task -> task == null || task.isCancelled() || !task.isSync());
-            },
-            6000L, 6000L
-        );
+        scheduleCleanupTask();
     }
 
     public static boolean isFolia() {
+        return IS_FOLIA;
+    }
+
+    private static boolean checkClass(String className) {
         try {
-            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            Class.forName(className);
             return true;
         } catch (ClassNotFoundException e) {
             return false;
         }
     }
 
-    public static boolean isCanvas() {
-        try {
-            Class.forName("io.papermc.canvas.scheduler.CanvasScheduler");
-            return true;
-        } catch (ClassNotFoundException e) {
-            return false;
-        }
+    private static void scheduleCleanupTask() {
+        runTaskTimerAsync(
+            getPlugin(),
+            () -> activeTasks.removeIf(task -> task == null || task.isCancelled()),
+            CLEANUP_INTERVAL, CLEANUP_INTERVAL
+        );
     }
 
-    public static boolean isPaper() {
-        try {
-            Class.forName("io.papermc.paper.scheduler.PaperScheduler");
-            return true;
-        } catch (ClassNotFoundException e) {
-            return false;
-        }
+    private static Plugin getPlugin() {
+        return Bukkit.getPluginManager().getPlugin("MasterCombat");
     }
 
     public static void setShuttingDown(boolean shuttingDown) {
-        isShuttingDown = shuttingDown;
+        isShuttingDown.set(shuttingDown);
     }
 
     public static void cancelAllTasks(Plugin plugin) {
         if (plugin == null) return;
-        try {
-            Bukkit.getScheduler().cancelTasks(plugin);
-        } catch (Exception e) {}
-        synchronized (activeTasks) {
-            for (BukkitTask task : activeTasks) {
-                try {
-                    if (task != null && !task.isCancelled()) {
-                        task.cancel();
-                    }
-                } catch (Exception e) {}
+        Bukkit.getScheduler().cancelTasks(plugin);
+        activeTasks.removeIf(task -> {
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
             }
-            activeTasks.clear();
-        }
+            return true;
+        });
     }
 
+    // Maintain old method signatures for compatibility
     public static BukkitTask runTask(Plugin plugin, Runnable task) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getGlobalRegionScheduler().execute(plugin, task);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getGlobalRegionScheduler().execute(plugin, task);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTask(plugin, task);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
-            }
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getGlobalRegionScheduler().execute(plugin, task);
+            return null;
         } else {
-            bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTask(plugin, task);
+            trackTask(bukkitTask);
+            return bukkitTask;
         }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
     }
 
     public static BukkitTask runTaskAsync(Plugin plugin, Runnable task) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> task.run());
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> task.run());
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
-            }
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getAsyncScheduler().runNow(plugin, t -> task.run());
+            return null;
         } else {
-            bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
+            trackTask(bukkitTask);
+            return bukkitTask;
         }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
     }
 
     public static BukkitTask runTaskLater(Plugin plugin, Runnable task, long delay) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> task.run(), delay);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> task.run(), delay);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTaskLater(plugin, task, delay);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
-            }
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> task.run(), delay);
+            return null;
         } else {
-            bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, task, delay);
+            trackTask(bukkitTask);
+            return bukkitTask;
         }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
-    }
-
-    public static BukkitTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(), delay, period);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(), delay, period);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-            }
-        } else {
-            bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-        }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
-    }
-
-    public static BukkitTask runTaskTimerAsync(Plugin plugin, Runnable task, long delay, long period) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getAsyncScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(),
-                        delay * 50, period * 50, TimeUnit.MILLISECONDS);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getAsyncScheduler().runAtFixedRate(plugin, scheduledTask -> task.run(),
-                        delay * 50, period * 50, TimeUnit.MILLISECONDS);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
-            }
-        } else {
-            bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
-        }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
     }
 
     public static BukkitTask runTaskLaterAsync(Plugin plugin, Runnable task, long delay) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return null;
-        BukkitTask bukkitTask = null;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getAsyncScheduler().runDelayed(plugin, scheduledTask -> task.run(),
-                        delay * 50, TimeUnit.MILLISECONDS);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getAsyncScheduler().runDelayed(plugin, scheduledTask -> task.run(),
-                        delay * 50, TimeUnit.MILLISECONDS);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
-            }
-        } else if (IS_PAPER) {
-            try {
-                Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
-                return null;
-            } catch (Exception e) {
-                bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
-            }
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getAsyncScheduler().runDelayed(plugin, t -> task.run(), delay * 50, TimeUnit.MILLISECONDS);
+            return null;
         } else {
-            bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delay);
+            trackTask(bukkitTask);
+            return bukkitTask;
         }
-        if (bukkitTask != null) trackTask(bukkitTask);
-        return bukkitTask;
+    }
+
+    public static BukkitTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period) {
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, t -> task.run(), delay, period);
+            return null;
+        } else {
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
+            trackTask(bukkitTask);
+            return bukkitTask;
+        }
+    }
+
+    public static BukkitTask runTaskTimerAsync(Plugin plugin, Runnable task, long delay, long period) {
+        if (shouldSkip(plugin)) return null;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getAsyncScheduler().runAtFixedRate(plugin, 
+                t -> task.run(), delay * 50, period * 50, TimeUnit.MILLISECONDS);
+            return null;
+        } else {
+            BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delay, period);
+            trackTask(bukkitTask);
+            return bukkitTask;
+        }
     }
 
     public static void runTaskForEntity(Plugin plugin, Entity entity, Runnable task) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return;
-        if (IS_FOLIA) {
-            try {
-                entity.getScheduler().run(plugin, scheduledTask -> task.run(), null);
-            } catch (Exception e) {
-                runTask(plugin, task);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                entity.getScheduler().run(plugin, scheduledTask -> task.run(), null);
-            } catch (Exception e) {
-                runTask(plugin, task);
-            }
+        if (shouldSkip(plugin)) return;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            entity.getScheduler().run(plugin, t -> task.run(), null);
         } else {
             runTask(plugin, task);
         }
     }
 
     public static void runTaskForLocation(Plugin plugin, Location location, Runnable task) {
-        if (isShuttingDown || plugin == null || !plugin.isEnabled()) return;
-        if (IS_FOLIA) {
-            try {
-                Bukkit.getRegionScheduler().execute(plugin, location, task);
-            } catch (Exception e) {
-                runTask(plugin, task);
-            }
-        } else if (IS_CANVAS) {
-            try {
-                Bukkit.getRegionScheduler().execute(plugin, location, task);
-            } catch (Exception e) {
-                runTask(plugin, task);
-            }
+        if (shouldSkip(plugin)) return;
+        
+        if (IS_FOLIA || IS_CANVAS) {
+            Bukkit.getRegionScheduler().execute(plugin, location, task);
         } else {
             runTask(plugin, task);
+        }
+    }
+
+    private static boolean shouldSkip(Plugin plugin) {
+        return isShuttingDown.get() || plugin == null || !plugin.isEnabled();
+    }
+
+    private static void trackTask(BukkitTask task) {
+        if (task == null) return;
+        
+        if (activeTasks.size() >= MAX_ACTIVE_TASKS) {
+            activeTasks.removeIf(t -> t == null || t.isCancelled());
+        }
+        
+        if (activeTasks.size() < MAX_ACTIVE_TASKS) {
+            activeTasks.add(task);
         }
     }
 
     public static void removeTask(BukkitTask task) {
         if (task != null) {
             activeTasks.remove(task);
-        }
-    }
-
-    public static Set<BukkitTask> getActiveTasks() {
-        return activeTasks;
-    }
-
-    private static void trackTask(BukkitTask bukkitTask) {
-        if (bukkitTask != null) {
-            if (activeTasks.size() < MAX_ACTIVE_TASKS) {
-                activeTasks.add(bukkitTask);
-            } else {
-                activeTasks.removeIf(task -> task == null || task.isCancelled());
-                if (activeTasks.size() < MAX_ACTIVE_TASKS) {
-                    activeTasks.add(bukkitTask);
-                }
-            }
         }
     }
 }
