@@ -43,6 +43,12 @@ public final class EntityDamageByEntityListener implements Listener {
                     return;
                 }
             }
+            combat.directSetCombat(player, damagerPlayer);
+            combat.directSetCombat(damagerPlayer, player);
+            if (player.getHealth() <= event.getFinalDamage()) {
+                player.setKiller(damagerPlayer);
+            }
+            return;
         }
         
         if (damager instanceof Projectile projectile) {
