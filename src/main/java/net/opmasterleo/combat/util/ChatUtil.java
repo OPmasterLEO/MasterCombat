@@ -26,4 +26,8 @@ public class ChatUtil {
         }
         return null;
     }
+
+    public static String legacy(Component component) {
+        return LegacyComponentSerializer.legacySection().serialize(component);
+    }
 }

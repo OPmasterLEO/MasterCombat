@@ -101,7 +101,6 @@ NewbieProtection:
     AttackerMessage: "&cYou cannot attack that user while in protected mode."
     CrystalBlockMessage: "&cYou cannot attack unprotected players with crystals while protected."
     ProtectionLeftMessage: "&aProtection Left: %time%" # Message shown when a player checks their protection time left
-
     # Message shown when a player tries to use a blocked item while protected
     BlockedMessage: "&cYou can't do that while protected."
 

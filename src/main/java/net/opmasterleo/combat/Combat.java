@@ -87,11 +87,6 @@ public class Combat extends JavaPlugin implements Listener {
         ConfigUtil.updateConfig(this);
         instance = this;
 
-        if (!getConfig().contains("NewbieProtection.Messages.BlockedMessage")) {
-            getConfig().set("NewbieProtection.Messages.BlockedMessage", "&cYou can't use this item while protected.");
-            saveConfig();
-        }
-
         loadConfigValues();
         initializeManagers();
         registerCommands();

@@ -49,16 +49,24 @@ public final class EntityDamageByEntityListener implements PacketListener {
             }, 100L);
         }
     }
-
-    @Override
-    public void onPacketSend(PacketSendEvent event) {
-    }
-
-    private void handlePlayerAttack(Combat combat, Player attacker, Player victim) {
-        if (attacker.getGameMode() == GameMode.CREATIVE || 
-            attacker.getGameMode() == GameMode.SPECTATOR ||
-            victim.getGameMode() == GameMode.CREATIVE || 
-            victim.getGameMode() == GameMode.SPECTATOR) {
+        Entity damager = event.getDamager();
+        if (damager instanceof Player damagerPlayer) {
+            if (damagerPlayer.getGameMode() == GameMode.CREATIVE || damagerPlayer.getGameMode() == GameMode.SPECTATOR) {
+                return;
+            }
+            NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
+            if (protectionListener != null) {
+                boolean damagerProtected = protectionListener.isActuallyProtected(damagerPlayer);
+                boolean victimProtected = protectionListener.isActuallyProtected(player);
+                if ((damagerProtected && !victimProtected) || (!damagerProtected && victimProtected)) {
+                    return;
+                }
+            }
+            combat.directSetCombat(player, damagerPlayer);
+            combat.directSetCombat(damagerPlayer, player);
+            if (player.getHealth() <= event.getFinalDamage()) {
+                player.setKiller(damagerPlayer);
+            }
             return;
         }
 
