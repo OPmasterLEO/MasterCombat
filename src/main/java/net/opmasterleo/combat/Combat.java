@@ -45,7 +45,6 @@ import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.manager.EntityManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
 import net.opmasterleo.combat.manager.Update;
-import net.opmasterleo.combat.handler.PacketHandler;
 import net.opmasterleo.combat.util.ConfigUtil;
 
 public class Combat extends JavaPlugin implements Listener {
@@ -78,7 +77,6 @@ public class Combat extends JavaPlugin implements Listener {
     private String nowInCombatMsg;
     private String noLongerInCombatMsg;
     
-    private PacketHandler packetHandler;
     private final EntityManager entityManager = new EntityManager();
     
     @Override
@@ -98,17 +96,6 @@ public class Combat extends JavaPlugin implements Listener {
         int pluginId = 25701;
         new Metrics(this, pluginId);
 
-        if (isPacketEventsAvailable()) {
-            try {
-                packetHandler = new PacketHandler(this);
-                packetHandler.register();
-                getLogger().info("PacketEvents integration enabled for enhanced performance");
-            } catch (Exception e) {
-                getLogger().warning("Failed to register PacketEvents handler: " + e.getMessage());
-            }
-        } else {
-            getLogger().warning("PacketEvents not found. Some features will be limited.");
-        }
         if (getConfig().getBoolean("link-bed-explosions", true)) {
             bedExplosionListener = new BedExplosionListener();
             Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
@@ -204,10 +191,6 @@ public class Combat extends JavaPlugin implements Listener {
         net.opmasterleo.combat.manager.Update.setShuttingDown(true);
         net.opmasterleo.combat.manager.Update.cleanupTasks();
         
-        if (packetHandler != null) {
-            packetHandler.cleanup();
-        }
-        
         if (glowManager != null) {
             glowManager.cleanup();
         }
@@ -243,10 +226,6 @@ public class Combat extends JavaPlugin implements Listener {
         
         if (glowManager != null) {
             glowManager.untrackPlayer(player);
-        }
-        
-        if (packetHandler != null) {
-            packetHandler.removePlayerCache(player.getUniqueId());
         }
     }
 

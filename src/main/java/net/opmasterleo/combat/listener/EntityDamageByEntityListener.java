@@ -2,7 +2,6 @@ package net.opmasterleo.combat.listener;
 
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
@@ -49,38 +48,23 @@ public final class EntityDamageByEntityListener implements PacketListener {
             }, 100L);
         }
     }
-        Entity damager = event.getDamager();
-        if (damager instanceof Player damagerPlayer) {
-            if (damagerPlayer.getGameMode() == GameMode.CREATIVE || damagerPlayer.getGameMode() == GameMode.SPECTATOR) {
+
+    private void handlePlayerAttack(Combat combat, Player attacker, Player victim) {
+        if (attacker.getGameMode() == GameMode.CREATIVE || attacker.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+
+        NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
+        if (protectionListener != null) {
+            boolean attackerProtected = protectionListener.isActuallyProtected(attacker);
+            boolean victimProtected = protectionListener.isActuallyProtected(victim);
+            if ((attackerProtected && !victimProtected) || (!attackerProtected && victimProtected)) {
                 return;
             }
-            NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
-            if (protectionListener != null) {
-                boolean damagerProtected = protectionListener.isActuallyProtected(damagerPlayer);
-                boolean victimProtected = protectionListener.isActuallyProtected(player);
-                if ((damagerProtected && !victimProtected) || (!damagerProtected && victimProtected)) {
-                    return;
-                }
-            }
-            combat.directSetCombat(player, damagerPlayer);
-            combat.directSetCombat(damagerPlayer, player);
-            if (player.getHealth() <= event.getFinalDamage()) {
-                player.setKiller(damagerPlayer);
-            }
-            return;
         }
 
         if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(victim)) {
             return;
-        }
-
-        NewbieProtectionListener protection = combat.getNewbieProtectionListener();
-        if (protection != null) {
-            boolean attackerProtected = protection.isActuallyProtected(attacker);
-            boolean victimProtected = protection.isActuallyProtected(victim);
-            if ((attackerProtected && !victimProtected) || (!attackerProtected && victimProtected)) {
-                return;
-            }
         }
 
         SuperVanishManager vanish = combat.getSuperVanishManager();
