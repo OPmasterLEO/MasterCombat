@@ -65,10 +65,11 @@ public class Combat extends JavaPlugin implements Listener {
     private CrystalManager crystalManager;
     private SuperVanishManager superVanishManager;
     private GlowManager glowManager;
-    private boolean disableElytra;
     private boolean enderPearlEnabled;
     private long enderPearlDistance;
-    private String elytraDisabledMsg;
+    private boolean disableElytraEnabled;
+    private String disableElytraMsg;
+    private String disableElytraType;
     private final Set<String> ignoredProjectiles = ConcurrentHashMap.newKeySet();
     private RespawnAnchorListener respawnAnchorListener;
     private BedExplosionListener bedExplosionListener;
@@ -79,25 +80,30 @@ public class Combat extends JavaPlugin implements Listener {
     private String noLongerInCombatType;
 
     private void loadConfigValues() {
-        combatEnabled = getConfig().getBoolean("combat-enabled", true);
-        glowingEnabled = getConfig().getBoolean("CombatTagGlowing.Enabled", false);
+        combatEnabled = getConfig().getBoolean("General.combat-enabled", true);
+        glowingEnabled = getConfig().getBoolean("General.CombatTagGlowing", false);
         enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
         enabledWorlds = getConfig().getStringList("EnabledWorlds.worlds");
-        disableElytra = getConfig().getBoolean("disable-elytra", false);
         enderPearlEnabled = getConfig().getBoolean("EnderPearl.Enabled", false);
         enderPearlDistance = getConfig().getLong("EnderPearl.Distance", 0);
-        
-        prefix = getConfig().getString("Messages.Prefix", "");
-        nowInCombatMsg = getConfig().getString("Messages.NowInCombat", "");
-        if (getConfig().isConfigurationSection("Messages.NoLongerInCombat")) {
-            noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat.text", "");
-            noLongerInCombatType = getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+        if (getConfig().isConfigurationSection("General.disable-elytra")) {
+            disableElytraEnabled = getConfig().getBoolean("General.disable-elytra.enabled", false);
+            disableElytraMsg = getConfig().getString("General.disable-elytra.text", "");
+            disableElytraType = getConfig().getString("General.disable-elytra.type", "chat");
         } else {
-            noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat", "");
-            noLongerInCombatType = getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+            disableElytraEnabled = getConfig().getBoolean("General.disable-elytra", false);
+            disableElytraMsg = "";
+            disableElytraType = "chat";
         }
-        elytraDisabledMsg = getConfig().getString("Messages.ElytraDisabled", "§cElytra usage is disabled while in combat.");
-        
+
+        prefix = getConfig().getString("Messages.Prefix", "");
+        nowInCombatMsg = getConfig().isConfigurationSection("Messages.NowInCombat")
+            ? getConfig().getString("Messages.NowInCombat.text", "")
+            : getConfig().getString("Messages.NowInCombat", "");
+        noLongerInCombatMsg = getConfig().isConfigurationSection("Messages.NoLongerInCombat")
+            ? getConfig().getString("Messages.NoLongerInCombat.text", "")
+            : getConfig().getString("Messages.NoLongerInCombat", "");
+
         List<String> ignoredList = getConfig().getStringList("ignored-projectiles");
         for (String s : ignoredList) {
             ignoredProjectiles.add(s.toUpperCase());
@@ -293,7 +299,7 @@ public class Combat extends JavaPlugin implements Listener {
             opponent.sendMessage(prefix + nowInCombatMsg);
         }
 
-        if (glowingEnabled && getConfig().getBoolean("CombatTagGlowing.Enabled", false) && glowManager != null) {
+        if (glowingEnabled && getConfig().getBoolean("General.CombatTagGlowing", false) && glowManager != null) {
             if (!playerWasInCombat) glowManager.setGlowing(player, true);
             if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
         }
@@ -456,12 +462,18 @@ public class Combat extends JavaPlugin implements Listener {
 
     private void updateActionBar(Player player, long endTime, long currentTime) {
         long seconds = (endTime - currentTime + 999) / 1000;
-        String format = getConfig().getString("ActionBar.Format");
+        String format = getConfig().getString("General.Format");
         if (format == null || format.isEmpty()) return;
 
         String message = format.replace("%seconds%", String.valueOf(seconds));
         net.kyori.adventure.text.Component component = net.opmasterleo.combat.util.ChatUtil.parse(message);
         player.sendActionBar(component);
+    }
+
+    private boolean shouldBypass(Player player) {
+        return (getConfig().getBoolean("General.ignore-op", true) && player.isOp()) 
+            || player.getGameMode() == GameMode.CREATIVE 
+            || player.getGameMode() == GameMode.SPECTATOR;
     }
 
     public boolean isCombatEnabledInWorld(Player player) {
@@ -522,12 +534,6 @@ public class Combat extends JavaPlugin implements Listener {
         return true;
     }
 
-    private boolean shouldBypass(Player player) {
-        return (getConfig().getBoolean("ignore-op", true) && player.isOp()) 
-            || player.getGameMode() == GameMode.CREATIVE 
-            || player.getGameMode() == GameMode.SPECTATOR;
-    }
-
     public Player getCombatOpponent(Player player) {
         UUID opponentUUID = combatOpponents.get(player.getUniqueId());
         if (opponentUUID == null) {
@@ -559,10 +565,11 @@ public class Combat extends JavaPlugin implements Listener {
         }
     }
 
-    public boolean isDisableElytra() { return disableElytra; }
+    public boolean isDisableElytra() { return disableElytraEnabled; }
+    public String getElytraDisabledMsg() { return disableElytraMsg; }
+    public String getElytraDisabledType() { return disableElytraType; }
     public boolean isEnderPearlEnabled() { return enderPearlEnabled; }
     public long getEnderPearlDistance() { return enderPearlDistance; }
-    public String getElytraDisabledMsg() { return elytraDisabledMsg; }
     public Set<String> getIgnoredProjectiles() { return ignoredProjectiles; }
 
     public void setCombatEnabled(boolean enabled) {

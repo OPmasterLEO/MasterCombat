@@ -13,77 +13,39 @@ generated-by-version: "v${project.version}" # DO NOT CHANGE
 # Notify opped players about updates when they join the server
 update-notify-chat: true
 
-# Duration of the combat timer in seconds
-Duration: 20
+# ---------------------------------------------------------------------------
+General:
+  combat-enabled: true #Enable combat globally
+  duration: 20 # Duration of the combat timer in seconds
+  Format: "&#C7CEDCCombat: &#37bff9%seconds%s"
+  CombatTagGlowing: true # Enable combat tag glowing visual indicator
+  ignore-op: false # Should OPs be ignored by the combat system?
+# ---------------------------------------------------------------------------
+  disable-elytra:
+    enabled: false # Disable Elytra usage in combat
+    text: "%prefix% &cElytra usage is disabled while in combat."
+    type: both # Options type: chat, actionbar, both 
+# ---------------------------------------------------------------------------
+  # Enable custom death messages
+  CustomDeathMessage: # Enable custom death messages
+    enabled: false # Should custom death messages be enabled?
+    prefix: '&c☠ ' # Prefix for custom death messages
+# ---------------------------------------------------------------------------
+EnderPearl:
+  Enabled: false # Enables restrictions on ender pearl usage during combat
+  Distance: 25 # Maximum allowed teleport distance with ender pearls
+  Format: '&cYou cannot teleport that far away in combat!'
+# ---------------------------------------------------------------------------
 
-# Enable combat globally
-combat-enabled: true
-
-# Enable combat only in specific worlds | HIGHLY EXPERIMENTAL
+# Enable combat only in specific worlds | MOSTLY UNTESTED
 # This feature is not fully tested and may cause issues.
 # Use at your own risk!
 # If you want to enable this feature, set 'enabled' to true and specify the worlds.
 EnabledWorlds:
   enabled: false
   worlds:
-    - world1
-    - world2
-
-Messages:
-  Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
-  NowInCombat:
-    text: '%prefix% &7You are now in combat!'
-    type: chat # Options: chat, actionbar, both
-  NoLongerInCombat:
-    text: '%prefix% &7You are no longer in combat!'
-    type: both # Options: chat, actionbar, both
-  LogoutInCombat:
-    text: '%prefix% &cYou cannot logout while in combat!'
-    type: chat # Options: chat, actionbar, both
-  ElytraDisabled:
-    text: '%prefix% &cElytra usage is disabled while in combat.'
-    type: chat # Options: chat, actionbar, both
-  # empty = disabled
-
-# Enable custom death messages
-# This feature does not modify vanilla death messages.
-# It only adds a prefix to the death message.
-CustomDeathMessage:
-  enabled: false
-  prefix: '&c☠ '  
-
-# Disable Combat for all with OP permissions
-ignore-op: false
-
-# Disable Elytra in combat
-disable-elytra: false
-
-# Settings for the action bar message during combat
-ActionBar:
-  Enabled: true # Enables the action bar message
-  Format: '&#C7CEDCCombat: &#37bff9%seconds%s'
-
-# Combat Tag Glowing visual indicator
-CombatTagGlowing:
-  Enabled: true
-
-Commands:
-  Blocked: # List of commands that are blocked during combat
-    - spawn
-    - tpa
-    - tpahere
-    - home
-    - homes
-    - rtp
-    - afk 
-    - warp
-    - warps
-  Format: '&7You cannot use &c%command% &7while in combat!'
-
-EnderPearl:
-  Enabled: false # Enables restrictions on ender pearl usage during combat
-  Distance: 25 # Maximum allowed teleport distance with ender pearls
-  Format: '&cYou cannot teleport that far away in combat!'
+    - world
+    - pvpworld
 
 # New Protection system for new players
 # This system protects new players from PvP for a certain time after they join the server.
@@ -111,6 +73,34 @@ NewbieProtection:
     ProtectionLeftMessage: "&aProtection Left: %time%" # Message shown when a player checks their protection time left
     # Message shown when a player tries to use a blocked item while protected
     BlockedMessage: "&cYou can't do that while protected."
+
+
+Messages:
+  Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
+  NowInCombat:
+    text: '%prefix% &7You are now in combat!'
+    type: both 
+  NoLongerInCombat:
+    text: '%prefix% &7You are no longer in combat!'
+    type: both
+  LogoutInCombat:
+    text: '%prefix% &cYou cannot logout while in combat!'
+    type: both
+  # empty = disabled
+  # Options type: chat, actionbar, both 
+
+Commands:
+  Blocked: # List of commands that are blocked during combat
+    - spawn
+    - tpa
+    - tpahere
+    - home
+    - homes
+    - rtp
+    - afk 
+    - warp
+    - warps
+  Format: '&7You cannot use &c%command% &7while in combat!'
 
 # Should MasterCombat tag players when they damage themselves?
 # Default: false
