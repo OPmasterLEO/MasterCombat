@@ -31,7 +31,7 @@ public class PlayerDeathListener implements Listener {
         UUID opponentUUID = combat.getCombatOpponents().get(victimUUID);
         boolean untagOnDeath = combat.getConfig().getBoolean("untag-on-death", true);
         boolean untagOnEnemyDeath = combat.getConfig().getBoolean("untag-on-enemy-death", true);
-        boolean lightningEnabled = combat.getConfig().getBoolean("combat-lightning-on-kill", false);
+        boolean lightningEnabled = combat.getConfig().getBoolean("lightning-on-kill", false);
         if (lightningEnabled && killer != null && !killer.equals(victim)) {
             Location loc = victim.getLocation();
             World world = loc.getWorld();

@@ -487,7 +487,6 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void setCombat(Player player, Player opponent) {
         if (player == null || opponent == null) return;
-        
         if (player.equals(opponent)) {
             if (getConfig().getBoolean("self-combat", false)) {
                 forceSetCombat(player, player);
@@ -633,31 +632,27 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void forceSetCombat(Player player, Player opponent) {
         if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
-        
         if (worldGuardUtil != null) {
             boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player);
-            boolean opponentInProtectedRegion = opponent != null && 
-                                               !player.equals(opponent) && 
-                                               worldGuardUtil.isPvpDenied(opponent);
-            
+            boolean opponentInProtectedRegion = opponent != null &&
+                                                !player.equals(opponent) &&
+                                                worldGuardUtil.isPvpDenied(opponent);
+
             if (playerInProtectedRegion || opponentInProtectedRegion) {
                 return;
             }
         }
 
-        long expiry = System.currentTimeMillis() + (getConfig().getLong("Duration", 0) * 1000L);
-        
+        long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
         if (player != null) {
             UUID playerUUID = player.getUniqueId();
-            boolean wasInCombat = combatPlayers.containsKey(playerUUID);
-            
             combatOpponents.put(playerUUID, opponent != null ? opponent.getUniqueId() : null);
             combatPlayers.put(playerUUID, expiry);
-            
+            boolean wasInCombat = combatPlayers.containsKey(playerUUID) && combatPlayers.get(playerUUID) > System.currentTimeMillis();
             if (!wasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
                 player.sendMessage(prefix + nowInCombatMsg);
             }
-            
+
             if (glowingEnabled) {
                 if (!wasInCombat && player.isGliding()) player.setGliding(false);
                 if (!wasInCombat && player.isFlying()) {
@@ -675,15 +670,13 @@ public class Combat extends JavaPlugin implements Listener {
         
         if (opponent != null && !opponent.equals(player)) {
             UUID opponentUUID = opponent.getUniqueId();
-            boolean wasInCombat = combatPlayers.containsKey(opponentUUID);
-            
             combatOpponents.put(opponentUUID, player.getUniqueId());
             combatPlayers.put(opponentUUID, expiry);
-            
+            boolean wasInCombat = combatPlayers.containsKey(opponentUUID) && combatPlayers.get(opponentUUID) > System.currentTimeMillis();
             if (!wasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
                 opponent.sendMessage(prefix + nowInCombatMsg);
             }
-            
+
             if (glowingEnabled && glowManager != null) {
                 glowManager.setGlowing(opponent, true);
             }

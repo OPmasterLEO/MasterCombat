@@ -1,96 +1,111 @@
-# ---------------------------------------------------------------------------
-#
-#         Developed by OPmasterLEO
-#
-#         https://github.com/OPmasterLEO
-#         https://builtbybit.com/resources/moderncombat.65133/
-#
-# ---------------------------------------------------------------------------
+# ========================================================================
+#                      MasterCombat Configuration
+#         Developed by OPmasterLEO • https://github.com/OPmasterLEO
+# ========================================================================
 
-# Version of the plugin that generated this configuration
-generated-by-version: "v${project.version}" # DO NOT CHANGE
- 
-# Notify opped players about updates when they join the server
-update-notify-chat: true
+# ________________________________________________________________________
+#                           CORE SETTINGS
+# ========================================================================
+generated-by-version: "v${project.version}"  # Auto-generated - DO NOT MODIFY
+update-notify-chat: true                     # Notify OPs about updates on join
+update-check-interval: 120                   # Update check interval (minutes)
+update-confirmation-timeout: 10000           # Update confirmation timeout (ms)
 
-# ---------------------------------------------------------------------------
+# ________________________________________________________________________
+#                       GENERAL COMBAT SETTINGS
+# ________________________________________________________________________
 General:
-  combat-enabled: true #Enable combat globally
-  duration: 20 # Duration of the combat timer in seconds
+  combat-enabled: true       # Master combat toggle
+  duration: 20               # Combat tag duration (seconds)
   Format: "&#C7CEDCCombat: &#37bff9%seconds%s"
-  CombatTagGlowing: true # Enable combat tag glowing visual indicator
-  ignore-op: false # Should OPs be ignored by the combat system?
-# ---------------------------------------------------------------------------
+  CombatTagGlowing: true     # Visual glowing indicator
+  ignore-op: false           # Exclude server operators
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
   disable-elytra:
-    enabled: false # Disable Elytra usage in combat
+    enabled: false           # Block elytra during combat
     text: "%prefix% &cElytra usage is disabled while in combat."
-    type: both # Options type: chat, actionbar, both 
-# ---------------------------------------------------------------------------
-  # Enable custom death messages
-  CustomDeathMessage: # Enable custom death messages
-    enabled: false # Should custom death messages be enabled?
-    prefix: '&c☠ ' # Prefix for custom death messages
-# ---------------------------------------------------------------------------
-EnderPearl:
-  Enabled: false # Enables restrictions on ender pearl usage during combat
-  Distance: 25 # Maximum allowed teleport distance with ender pearls
-  Format: '&cYou cannot teleport that far away in combat!'
-# ---------------------------------------------------------------------------
+    type: both               # [chat/actionbar/both]
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  EnderPearl:                # Ender pearl combat restrictions
+    Enabled: false           # Block long pearl throws in combat
+    Distance: 25             # Maximum allowed throw distance
+    Format: '&cYou cannot teleport that far away in combat!'
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  CustomDeathMessage:        # Custom death messages
+    enabled: false
+    prefix: '&c☠ '
 
-# Enable combat only in specific worlds | MOSTLY UNTESTED
-# This feature is not fully tested and may cause issues.
-# Use at your own risk!
-# If you want to enable this feature, set 'enabled' to true and specify the worlds.
+# ________________________________________________________________________
+#                         WORLD RESTRICTIONS
+# ========================================================================
+#   ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ███████╗
+#   ██║    ██║██╔═══██╗██╔══██╗██║     ██╔══██╗██╔════╝
+#   ██║ █╗ ██║██║   ██║██████╔╝██║     ██║  ██║███████╗
+#   ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║╚════██║
+#   ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝███████║
+#    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ╚══════╝
+#   EXPERIMENTAL - May cause issues. Use at own risk.
 EnabledWorlds:
   enabled: false
   worlds:
     - world
     - pvpworld
 
-# New Protection system for new players
-# This system protects new players from PvP for a certain time after they join the server.
+# ________________________________________________________________________
+#                         NEWBIE PROTECTION
+# ========================================================================
 NewbieProtection:
-  enabled: true # Should new players be protected from PvP?
-  time: 300 # Time of protection in seconds
-
+  enabled: true            # Protect new players from PvP
+  time: 300                # Protection duration (seconds)
+  
   settings:
-    MobsProtect: false # Protects players from mobs during newbie protection
-    disableCommand: "removeprotect" # Command to disable newbie protection
-    MessageType: ActionBar # Type of message to show, can be ActionBar, Chat, title, etc.
+    MobsProtect: false     # Include mob protection
+    disableCommand: "pvpon"
+    MessageType: ActionBar # [ActionBar/Chat/Title]
     BlockedItems:
       - END_CRYSTAL
       - RESPAWN_ANCHOR
 
-  # Messages for newbie protection
+  # ──────────────────────────────────────────────────────────────────────
+  #                        PROTECTION MESSAGES
+  # ──────────────────────────────────────────────────────────────────────
   Messages:
-    ExpiredMessage: "&cYour newbie protection has expired." # Message shown when newbie protection expires
-    protectedMessage: "&aYou are protected from PvP for %time% seconds." # Message shown when a player is protected
-    DisabledMessage: "&cYou are no longer protected from PvP." # Message shown when a player disables newbie protection
-    disableMessage: "&cWarning! &fYou'll be vulnerable to PvP. Use /combat %command% confirm to disable protection."
-    TriedAttackMessage: "&cYou cannot attack while protected. Use /combat %command% to disable."
+    ExpiredMessage: "&cYour newbie protection has expired."
+    protectedMessage: "&aYou are protected from PvP for %time% seconds."
+    DisabledMessage: "&cYou are no longer protected from PvP."
+    disableMessage: "&cWarning! &fYou'll be vulnerable to PvP. Use /%command% confirm to disable protection."
+    TriedAttackMessage: "&cYou cannot attack while protected. Use /%command% to disable."
     AttackerMessage: "&cYou cannot attack that user while in protected mode."
     CrystalBlockMessage: "&cYou cannot attack unprotected players with crystals while protected."
-    ProtectionLeftMessage: "&aProtection Left: %time%" # Message shown when a player checks their protection time left
-    # Message shown when a player tries to use a blocked item while protected
+    ProtectionLeftMessage: "&aProtection Left: %time%"
     BlockedMessage: "&cYou can't do that while protected."
 
-
+# ________________________________________________________________________
+#                           COMBAT MESSAGES
+# ========================================================================
 Messages:
   Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
+  
   NowInCombat:
     text: '%prefix% &7You are now in combat!'
-    type: both 
+    type: both  # [chat/actionbar/both]
+  
   NoLongerInCombat:
     text: '%prefix% &7You are no longer in combat!'
     type: both
+  
   LogoutInCombat:
     text: '%prefix% &cYou cannot logout while in combat!'
     type: both
-  # empty = disabled
-  # Options type: chat, actionbar, both 
 
+# ________________________________________________________________________
+#                        COMMAND RESTRICTIONS
+# ========================================================================
 Commands:
-  Blocked: # List of commands that are blocked during combat
+  Blocked:   # Commands disabled during combat
     - spawn
     - tpa
     - tpahere
@@ -102,65 +117,44 @@ Commands:
     - warps
   Format: '&7You cannot use &c%command% &7while in combat!'
 
-# Should MasterCombat tag players when they damage themselves?
-# Default: false
-self-combat: false
+# ________________________________________________________________________
+#                      COMBAT MECHANICS & LOGIC
+# ========================================================================
+#  ██████╗ ██████╗ ███╗   ███╗██████╗  █████╗ ████████╗                   
+# ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██╔══██╗╚══██╔══╝                   
+# ██║     ██║   ██║██╔████╔██║██████╔╝███████║   ██║                      
+# ██║     ██║   ██║██║╚██╔╝██║██╔══██╗██╔══██║   ██║                      
+# ╚██████╗╚██████╔╝██║ ╚═╝ ██║██████╔╝██║  ██║   ██║                      
+#  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝                                                                                             
+# ███╗   ███╗███████╗ ██████╗██╗  ██╗ █████╗ ███╗   ██╗██╗ ██████╗███████╗
+# ████╗ ████║██╔════╝██╔════╝██║  ██║██╔══██╗████╗  ██║██║██╔════╝██╔════╝
+# ██╔████╔██║█████╗  ██║     ███████║███████║██╔██╗ ██║██║██║     ███████╗
+# ██║╚██╔╝██║██╔══╝  ██║     ██╔══██║██╔══██║██║╚██╗██║██║██║     ╚════██║
+# ██║ ╚═╝ ██║███████╗╚██████╗██║  ██║██║  ██║██║ ╚████║██║╚██████╗███████║
+# ╚═╝     ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝ ╚═════╝╚══════╝
+self-combat: false            # Tag players for self-damage?
+untag-on-death: true          # Remove tag on player death
+untag-on-enemy-death: true    # Remove tag when attacker dies
+lightning-on-kill: true       # Lightning effect on PvP kill
 
-# Should MasterCombat remove players from combat when they are killed?
-# Default: true
-untag-on-death: true
+# ________________________________________________________________________
+#                         ENTITY LINKING SYSTEM
+# ========================================================================
+link-pets: true               # Link tamed animals to owners
+link-projectiles: true        # Link projectiles to shooters
+link-fishing-rod: true        # EXPERIMENTAL: Link fishing rods
+link-tnt: true                # Link TNT to igniters
+link-end-crystals: true       # Link end crystals to placers
+link-respawn-anchor: true     # Link respawn anchor explosions
+link-bed-explosions: true     # Link bed explosions in nether/end
 
-# Should MasterCombat remove players from combat when their enemy is killed?
-# This also removed combat if the enemy is a creeper and decides to explode.
-# Default: true
-untag-on-enemy-death: true
-
-# MasterCombat can link pets, such as wolves, cats, and other animals that can be tamed, to their owner.
-# This will only link the attacker, not the entity that was attacked.
-# Default: true
-link-pets: true
-
-# MasterCombat can link projectiles, such as arrows from skeletons, to their shooter.
-# This will only link the attacker, not the entity that was attacked.
-# Default: true
-link-projectiles: true
-
-# Which projectiles will be ignored when the 'link-projectiles' option is enabled?
-# If 'link-projectiles' is false, all projectiles will be ignored.
-# You can find a list of valid projectile types on the Spigot javadocs:
-# https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
+# ________________________________________________________________________
+#                   PROJECTILE LINKING EXCEPTIONS
+# ========================================================================
+#  Valid types: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
 ignored-projectiles:
   - EGG
   - ENDER_PEARL
   - SNOWBALL
 
-# MasterCombat can link a fishing rod to the entity that cast it.
-# This will only link the attacker, not the entity that was attacked.
-# Default: true
-# EXPERIMENTAL: This feature currently does not work as expected.
-link-fishing-rod: true
-
-# MasterCombat can sometimes link TNT to the entity that caused it to explode.
-# This will only link the attacker, not the entity that was attacked.
-# Default: true
-link-tnt: true
-
-# MasterCombat can link end crystals to their placer.
-# This will only link the attacker, not the entity that was attacked.
-# Default: true
-link-end-crystals: true
-
-# Link respawn anchor explosions to combat (cpvp)
-link-respawn-anchor: true
-
-# Link bed explosions in nether/end to combat
-link-bed-explosions: true
-
-# Lightning effect when someone dies from another player while in combat
-combat-lightning-on-kill: true
-
-# Timeout for update confirmation in milliseconds
-update-confirmation-timeout: 10000
-
-# Interval for update checks in minutes
-update-check-interval: 120
+# ============================= END OF CONFIG =============================
