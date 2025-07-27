@@ -6,6 +6,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.Location;
+import org.bukkit.World;
 import java.util.UUID;
 
 public class PlayerDeathListener implements Listener {
@@ -29,6 +31,15 @@ public class PlayerDeathListener implements Listener {
         UUID opponentUUID = combat.getCombatOpponents().get(victimUUID);
         boolean untagOnDeath = combat.getConfig().getBoolean("untag-on-death", true);
         boolean untagOnEnemyDeath = combat.getConfig().getBoolean("untag-on-enemy-death", true);
+        boolean lightningEnabled = combat.getConfig().getBoolean("combat-lightning-on-kill", false);
+        if (lightningEnabled && killer != null && !killer.equals(victim)) {
+            Location loc = victim.getLocation();
+            World world = loc.getWorld();
+            if (world != null) {
+                world.strikeLightningEffect(loc);
+            }
+        }
+
         if (untagOnDeath) {
             combat.forceCombatCleanup(victimUUID);
             if (combat.getGlowManager() != null) {
@@ -43,10 +54,29 @@ public class PlayerDeathListener implements Listener {
                     combat.getGlowManager().setGlowing(opponent, false);
                 }
 
-                String noLongerInCombatMsg = combat.getMessage("Messages.NoLongerInCombat");
-                if (noLongerInCombatMsg != null && !noLongerInCombatMsg.isEmpty()) {
-                    String prefix = combat.getMessage("Messages.Prefix");
-                    opponent.sendMessage(prefix + noLongerInCombatMsg);
+                String noLongerInCombatMsg;
+                String noLongerInCombatType;
+                if (combat.getConfig().isConfigurationSection("Messages.NoLongerInCombat")) {
+                    noLongerInCombatMsg = combat.getConfig().getString("Messages.NoLongerInCombat.text", "");
+                    noLongerInCombatType = combat.getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+                } else {
+                    noLongerInCombatMsg = combat.getConfig().getString("Messages.NoLongerInCombat", "");
+                    noLongerInCombatType = combat.getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+                }
+                String prefix = combat.getMessage("Messages.Prefix");
+                net.kyori.adventure.text.Component component = net.opmasterleo.combat.util.ChatUtil.parse(prefix + noLongerInCombatMsg);
+                switch (noLongerInCombatType == null ? "chat" : noLongerInCombatType.toLowerCase()) {
+                    case "actionbar":
+                        opponent.sendActionBar(component);
+                        break;
+                    case "both":
+                        opponent.sendMessage(component);
+                        opponent.sendActionBar(component);
+                        break;
+                    case "chat":
+                    default:
+                        opponent.sendMessage(component);
+                        break;
                 }
             }
         }

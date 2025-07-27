@@ -76,33 +76,7 @@ public class Combat extends JavaPlugin implements Listener {
     private String prefix;
     private String nowInCombatMsg;
     private String noLongerInCombatMsg;
-    
-    private final EntityManager entityManager = new EntityManager();
-    
-    @Override
-    public void onEnable() {
-        saveDefaultConfig();
-        ConfigUtil.updateConfig(this);
-        instance = this;
-
-        loadConfigValues();
-        initializeManagers();
-        registerCommands();
-        registerListeners();
-        startCombatTimer();
-        initializeAPI();
-        sendStartupMessage();
-        
-        int pluginId = 25701;
-        new Metrics(this, pluginId);
-
-        if (getConfig().getBoolean("link-bed-explosions", true)) {
-            bedExplosionListener = new BedExplosionListener();
-            Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
-        } else {
-            bedExplosionListener = null;
-        }
-    }
+    private String noLongerInCombatType;
 
     private void loadConfigValues() {
         combatEnabled = getConfig().getBoolean("combat-enabled", true);
@@ -115,7 +89,13 @@ public class Combat extends JavaPlugin implements Listener {
         
         prefix = getConfig().getString("Messages.Prefix", "");
         nowInCombatMsg = getConfig().getString("Messages.NowInCombat", "");
-        noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat", "");
+        if (getConfig().isConfigurationSection("Messages.NoLongerInCombat")) {
+            noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat.text", "");
+            noLongerInCombatType = getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+        } else {
+            noLongerInCombatMsg = getConfig().getString("Messages.NoLongerInCombat", "");
+            noLongerInCombatType = getConfig().getString("Messages.NoLongerInCombat.type", "chat");
+        }
         elytraDisabledMsg = getConfig().getString("Messages.ElytraDisabled", "§cElytra usage is disabled while in combat.");
         
         List<String> ignoredList = getConfig().getStringList("ignored-projectiles");
@@ -453,7 +433,24 @@ public class Combat extends JavaPlugin implements Listener {
         }
         
         if (noLongerInCombatMsg != null && !noLongerInCombatMsg.isEmpty()) {
-            player.sendMessage(prefix + noLongerInCombatMsg);
+            sendNoLongerInCombatMessage(player, noLongerInCombatMsg, noLongerInCombatType);
+        }
+    }
+
+    private void sendNoLongerInCombatMessage(Player player, String message, String type) {
+        net.kyori.adventure.text.Component component = net.opmasterleo.combat.util.ChatUtil.parse(prefix + message);
+        switch (type == null ? "chat" : type.toLowerCase()) {
+            case "actionbar":
+                player.sendActionBar(component);
+                break;
+            case "both":
+                player.sendMessage(component);
+                player.sendActionBar(component);
+                break;
+            case "chat":
+            default:
+                player.sendMessage(component);
+                break;
         }
     }
 
@@ -752,6 +749,33 @@ public class Combat extends JavaPlugin implements Listener {
     public void updateGlowing() {
         if (glowingEnabled && glowManager != null) {
             glowManager.updateGlowingForAll();
+        }
+    }
+
+    private final EntityManager entityManager = new EntityManager();
+
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+        ConfigUtil.updateConfig(this);
+        instance = this;
+
+        loadConfigValues();
+        initializeManagers();
+        registerCommands();
+        registerListeners();
+        startCombatTimer();
+        initializeAPI();
+        sendStartupMessage();
+
+        int pluginId = 25701;
+        new Metrics(this, pluginId);
+
+        if (getConfig().getBoolean("link-bed-explosions", true)) {
+            bedExplosionListener = new BedExplosionListener();
+            Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
+        } else {
+            bedExplosionListener = null;
         }
     }
 

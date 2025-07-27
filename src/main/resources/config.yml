@@ -31,10 +31,18 @@ EnabledWorlds:
 
 Messages:
   Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
-  NowInCombat: '%prefix% &7You are now in combat!'
-  NoLongerInCombat: '%prefix% &7You are no longer in combat!'
-  LogoutInCombat: '%prefix% &cYou cannot logout while in combat!'
-  ElytraDisabled: '%prefix% &cElytra usage is disabled while in combat.'
+  NowInCombat:
+    text: '%prefix% &7You are now in combat!'
+    type: chat # Options: chat, actionbar, both
+  NoLongerInCombat:
+    text: '%prefix% &7You are no longer in combat!'
+    type: both # Options: chat, actionbar, both
+  LogoutInCombat:
+    text: '%prefix% &cYou cannot logout while in combat!'
+    type: chat # Options: chat, actionbar, both
+  ElytraDisabled:
+    text: '%prefix% &cElytra usage is disabled while in combat.'
+    type: chat # Options: chat, actionbar, both
   # empty = disabled
 
 # Enable custom death messages
@@ -157,6 +165,9 @@ link-respawn-anchor: true
 
 # Link bed explosions in nether/end to combat
 link-bed-explosions: true
+
+# Lightning effect when someone dies from another player while in combat
+combat-lightning-on-kill: true
 
 # Timeout for update confirmation in milliseconds
 update-confirmation-timeout: 10000
