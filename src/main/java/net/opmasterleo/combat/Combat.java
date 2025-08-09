@@ -72,6 +72,7 @@ public class Combat extends JavaPlugin implements Listener {
     private String noLongerInCombatType;
     private boolean debugEnabled;
     private String combatFormat;
+    private boolean peInitialized;
     
     public static class CombatRecord {
         public final long expiry;
@@ -238,9 +239,11 @@ public class Combat extends JavaPlugin implements Listener {
         combatRecords.clear();
         lastActionBarUpdates.clear();
         try {
-            if (PacketEvents.getAPI() != null) {
+            if (peInitialized && PacketEvents.getAPI() != null) {
                 PacketEvents.getAPI().terminate();
                 debug("PacketEvents terminated successfully");
+            } else {
+                debug("Skipping PacketEvents terminate: not initialized");
             }
         } catch (Exception e) {
             debug("Error during PacketEvents shutdown: " + e.getMessage());
@@ -552,9 +555,6 @@ public class Combat extends JavaPlugin implements Listener {
     
     public void forceSetCombat(Player player, Player opponent) {
         if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
-        
-        // ...existing code...
-
         long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent != null ? opponent.getUniqueId() : null;
@@ -824,12 +824,15 @@ public class Combat extends JavaPlugin implements Listener {
         if (isPacketEventsAvailable()) {
             try {
                 PacketEvents.getAPI().init();
+                peInitialized = true;
                 debug("PacketEvents initialized successfully");
             } catch (Exception e) {
+                peInitialized = false;
                 getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
                 disablePacketEventsFeatures();
             }
         } else {
+            peInitialized = false;
             getLogger().warning("PacketEvents not found. Disabling PacketEvents-dependent features.");
             disablePacketEventsFeatures();
         }
@@ -848,6 +851,7 @@ public class Combat extends JavaPlugin implements Listener {
         EndCrystalListener.disablePacketEventsIntegration();
         BedExplosionListener.disablePacketEventsIntegration();
         PlayerMoveListener.disablePacketEventsIntegration();
+        ItemRestrictionListener.disablePacketEventsIntegration();
         if (glowManager != null) {
             glowManager.disablePacketEventsIntegration();
         }

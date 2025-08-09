@@ -34,6 +34,9 @@ import com.github.retrooper.packetevents.protocol.player.DiggingAction;
 
 public class ItemRestrictionListener extends PacketListenerAbstract implements Listener {
 
+    private static volatile boolean packetEventsEnabled = true;
+    public static void disablePacketEventsIntegration() { packetEventsEnabled = false; }
+
     private final Combat plugin;
     private final Set<Material> disabledItems = new HashSet<>();
     private boolean itemRestrictionsEnabled;
@@ -55,7 +58,9 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     public ItemRestrictionListener() {
         this.plugin = Combat.getInstance();
         reloadConfig();
-        PacketEvents.getAPI().getEventManager().registerListener(this);
+        if (plugin != null && plugin.isPacketEventsAvailable()) {
+            PacketEvents.getAPI().getEventManager().registerListener(this);
+        }
     }
 
     public void reloadConfig() {
@@ -110,6 +115,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
+        if (!packetEventsEnabled) return;
         if (!itemRestrictionsEnabled && !enderpearlCooldownEnabled && !tridentCooldownEnabled) return;
 
         Player player = (Player) event.getPlayer();
