@@ -1,6 +1,7 @@
 package net.opmasterleo.combat.util;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -166,6 +167,12 @@ public class ConfigUtil {
         } catch (IOException ex) {
             plugin.getLogger().log(Level.SEVERE, "Failed to save updated config", ex);
             tempFile.delete();
+        }
+    }
+
+    public static void updateOption(FileConfiguration config, String path, Object defaultValue) {
+        if (!config.contains(path)) {
+            config.set(path, defaultValue);
         }
     }
 }

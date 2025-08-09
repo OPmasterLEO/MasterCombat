@@ -1,4 +1,4 @@
-package net.opmasterleo.combat.listener;
+package net.opmasterleo.combat.command;
 
 import java.util.Locale;
 import java.util.Set;
@@ -12,11 +12,11 @@ import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
 
-public final class PlayerCommandPreprocessListener implements Listener {
+public final class PlayerCommandPreprocess implements Listener {
 
     private Set<String> blockedCommands;
 
-    public PlayerCommandPreprocessListener() {
+    public PlayerCommandPreprocess() {
         reloadBlockedCommands();
     }
 

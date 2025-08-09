@@ -19,28 +19,42 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
     public void tagPlayer(UUID uuid) {
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) {
-            if (plugin.getWorldGuardUtil() != null && plugin.getWorldGuardUtil().isPvpDenied(player)) {
+            if (!plugin.isCombatEnabled()) {
+                plugin.debug("API call ignored: combat disabled in config");
                 return;
             }
+            
+            if (!plugin.isCombatEnabledInWorld(player)) {
+                plugin.debug("API call ignored: world disabled for combat");
+                return;
+            }
+            
+            if (plugin.getWorldGuardUtil() != null && plugin.getWorldGuardUtil().isPvpDenied(player.getLocation())) {
+                plugin.debug("API call ignored: player in protected region");
+                return;
+            }
+            
             plugin.setCombat(player, player);
         }
     }
 
     @Override
     public void untagPlayer(UUID uuid) {
+        if (uuid == null) return;
+        
         Player player = Bukkit.getPlayer(uuid);
-        if (player != null) {
-            plugin.getCombatPlayers().remove(uuid);
-            UUID opponentUUID = plugin.getCombatOpponents().remove(uuid);
-            
-            if (plugin.getGlowManager() != null) {
-                plugin.getGlowManager().setGlowing(player, false);
-                
-                if (opponentUUID != null) {
-                    Player opponent = Bukkit.getPlayer(opponentUUID);
-                    if (opponent != null) {
-                        plugin.getGlowManager().setGlowing(opponent, false);
-                    }
+        Combat.CombatRecord record = plugin.getCombatRecords().remove(uuid);
+        
+        if (player != null && plugin.getGlowManager() != null) {
+            plugin.getGlowManager().setGlowing(player, false);
+        }
+        
+        if (record != null && record.opponent != null) {
+            Player opponent = Bukkit.getPlayer(record.opponent);
+            if (opponent != null && plugin.getGlowManager() != null) {
+                boolean stillInCombat = plugin.getCombatRecords().containsKey(record.opponent);
+                if (!stillInCombat) {
+                    plugin.getGlowManager().setGlowing(opponent, false);
                 }
             }
         }

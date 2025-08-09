@@ -10,6 +10,7 @@ generated-by-version: "v${project.version}"  # Auto-generated - DO NOT MODIFY
 update-notify-chat: true                     # Notify OPs about updates on join
 update-check-interval: 120                   # Update check interval (minutes)
 update-confirmation-timeout: 10000           # Update confirmation timeout (ms)
+debug: false                                 # Enable debug logging for troubleshooting
 
 # ________________________________________________________________________
 #                       GENERAL COMBAT SETTINGS
@@ -39,6 +40,55 @@ General:
     prefix: '&c☠ '
 
 # ________________________________________________________________________
+#                     ITEM & ABILITY RESTRICTIONS
+# ========================================================================
+item_restrictions:
+  # Enable or disable item restrictions during combat
+  enabled: false
+  # Items blocked during combat (Materials like CHORUS_FRUIT, ELYTRA, etc.)
+  disabled_items:
+    - CHORUS_FRUIT
+    - ELYTRA
+
+# ________________________________________________________________________
+#                    ENDER PEARL & TRIDENT SETTINGS
+# ========================================================================
+enderpearl:
+  # Refresh combat timer when player lands an ender pearl
+  refresh_combat_on_land: false
+
+enderpearl_cooldown:
+  # Enable/disable ender pearl cooldowns
+  enabled: false
+  # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
+  duration: "10s"
+  # Only apply cooldowns during combat
+  in_combat_only: true
+  # Per-world settings (overrides global setting)
+  worlds:
+    minigames: false  # Example: cooldowns disabled in minigames world
+
+trident:
+  # Refresh combat timer when trident lands (similar to enderpearl)
+  refresh_combat_on_land: false
+  # Worlds where tridents are completely banned
+  banned_worlds:
+    world_nether: true
+
+trident_cooldown:
+  # Enable/disable trident cooldowns globally
+  enabled: true
+  # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
+  duration: "10s"
+  # Only apply cooldown when player is in combat
+  in_combat_only: true
+  # Per-world cooldown settings (overrides global enabled setting)
+  worlds:
+    world: true          # Enable cooldown in overworld
+    world_nether: false  # Disable cooldown in nether
+    world_the_end: true  # Enable cooldown in end
+
+# ________________________________________________________________________
 #                         WORLD RESTRICTIONS
 # ========================================================================
 #   ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ███████╗
@@ -55,15 +105,39 @@ EnabledWorlds:
     - pvpworld
 
 # ________________________________________________________________________
+#                         SAFEZONE PROTECTION
+# ========================================================================
+safezone_protection:
+  # Enable/disable WorldGuard integration for safezone barriers
+  # This will prevent players from entering safezones while in combat
+  enabled: true
+  # Block type for the barrier
+  # Set "BARRIER" for invisible but solid barrier
+  barrier_material: "RED_STAINED_GLASS"
+  # How close to borders before barriers appear
+  barrier_detection_radius: 3 # blocks
+  # How tall the barriers are
+  barrier_height: 4
+  # Push force when player accidentally goes inside the barrier
+  push_back_force: 0.6
+
+# ________________________________________________________________________
 #                         NEWBIE PROTECTION
 # ========================================================================
 NewbieProtection:
   enabled: true            # Protect new players from PvP
-  time: 300                # Protection duration (seconds)
+  time: 5m                 # Protection duration (formats: 10s, 5m, 1h, 30m, etc.)
   
   settings:
     MobsProtect: false     # Include mob protection
-    disableCommand: "pvpon"
+    disableCommand: "enablepvp"
+    display:
+      use_bossbar: true
+      use_actionbar: true
+      bossbar:
+        title: "&#4CAF50PvP Protection: &#FFFFFF%time%"
+        color: "GREEN"      # BLUE, GREEN, PINK, PURPLE, RED, WHITE, YELLOW
+        style: "SOLID"      # SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
     MessageType: ActionBar # [ActionBar/Chat/Title]
     BlockedItems:
       - END_CRYSTAL
@@ -90,16 +164,20 @@ Messages:
   Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
   
   NowInCombat:
-    text: '%prefix% &7You are now in combat!'
+    text: '&7You are now in combat!'
     type: both  # [chat/actionbar/both]
   
   NoLongerInCombat:
-    text: '%prefix% &7You are no longer in combat!'
+    text: '&7You are no longer in combat!'
     type: both
   
   LogoutInCombat:
-    text: '%prefix% &cYou cannot logout while in combat!'
-    type: both
+    text: '&c%player% has logged out while in combat!'
+    type: chat
+    
+  CombatLogged:
+    text: '&c%player% has logged out while fighting you!' # Sent only to the attacker
+    type: chat
 
 # ________________________________________________________________________
 #                        COMMAND RESTRICTIONS

@@ -1,4 +1,4 @@
-package net.opmasterleo.combat.listener;
+package net.opmasterleo.combat.listener.player;
 
 import net.opmasterleo.combat.Combat;
 import org.bukkit.Location;
@@ -18,13 +18,14 @@ public final class PlayerTeleportListener implements Listener {
         final boolean disableElytra = combat.isDisableElytra();
         final boolean enderPearlEnabled = combat.isEnderPearlEnabled();
         final boolean inCombat = combat.isInCombat(player);
-        final boolean visualEffectsEnabled = combat.getConfig().getBoolean("CombatTagGlowing.Enabled", false);
-        if (disableElytra && inCombat && visualEffectsEnabled) {
+        if (disableElytra && inCombat) {
             if (player.isGliding() || player.isFlying()) {
                 player.setGliding(false);
                 player.setFlying(false);
                 player.setAllowFlight(false);
-                player.sendMessage(combat.getElytraDisabledMsg());
+                if (combat.getElytraDisabledMsg() != null && !combat.getElytraDisabledMsg().isEmpty()) {
+                    combat.sendCombatMessage(player, combat.getElytraDisabledMsg(), combat.getElytraDisabledType());
+                }
             }
         }
 
@@ -43,6 +44,7 @@ public final class PlayerTeleportListener implements Listener {
                 String msg = combat.getMessage("EnderPearl.Format");
                 event.setCancelled(true);
                 player.sendMessage(prefix + msg);
+                combat.debug("Cancelled ender pearl teleport: distance " + distance + " > " + maxDistance);
             }
         }
     }

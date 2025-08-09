@@ -14,23 +14,21 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
 import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.listener.NewbieProtectionListener;
 import net.opmasterleo.combat.manager.Update;
+import net.opmasterleo.combat.listener.NewbieProtectionListener;
 import net.opmasterleo.combat.util.ChatUtil;
 
 public class CombatCommand implements CommandExecutor, TabCompleter {
 
     private static boolean updateCheckInProgress = false;
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getPlayer();
         Combat combat = Combat.getInstance();
-        
-        combat.getCombatPlayers().remove(player.getUniqueId());
+        combat.getCombatRecords().remove(player.getUniqueId());
         Player opponent = combat.getCombatOpponent(player);
-        combat.getCombatOpponents().remove(player.getUniqueId());
-        
+        combat.getCombatRecords().remove(player.getUniqueId());
         if (combat.getGlowManager() != null) {
             combat.getGlowManager().setGlowing(player, false);
             if (opponent != null) {
@@ -39,8 +37,8 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         }
         
         if (opponent != null) {
-            combat.getCombatPlayers().remove(opponent.getUniqueId());
-            combat.getCombatOpponents().remove(opponent.getUniqueId());
+            combat.getCombatRecords().remove(opponent.getUniqueId());
+            combat.getCombatRecords().remove(opponent.getUniqueId());
         }
     }
 
@@ -158,25 +156,13 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                     }
                     updateCheckInProgress = true;
                     Combat plugin = Combat.getInstance();
-                    Update.checkForUpdates(plugin);
+                    Update.checkForUpdates(plugin, sender);
                     plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                        String currentVersion = plugin.getPluginMeta().getVersion();
-                        String latestVersion = Update.getLatestVersion();
                         updateCheckInProgress = false;
-                        if (latestVersion == null) {
-                            sender.sendMessage(ChatUtil.parse("&cCould not fetch update information."));
-                            return;
-                        }
-                        if (normalizeVersion(currentVersion).equalsIgnoreCase(normalizeVersion(latestVersion))) {
-                            sender.sendMessage(ChatUtil.parse("&aYou already have the latest version (" + currentVersion + ")."));
-                            Update.setUpdateFound(false);
-                            return;
-                        }
                         if (!Update.isUpdateFound()) {
-                            sender.sendMessage(ChatUtil.parse("&eUpdate found! Run /combat update again to update."));
                             Update.setUpdateFound(true);
                         } else {
-                            Update.downloadAndReplaceJar(plugin);
+                            Update.downloadAndReplaceJar(plugin, sender);
                             Update.setUpdateFound(false);
                         }
                     }, 40L);
@@ -187,10 +173,6 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         return false;
-    }
-
-    private String normalizeVersion(String version) {
-        return version.replaceAll("[^0-9.]", "");
     }
 
     private void sendHelp(CommandSender sender, String disableCommand) {

@@ -1,11 +1,11 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import net.opmasterleo.combat.Combat;
+
 import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -25,38 +25,51 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class EndCrystalListener implements PacketListener, Listener {
+public class EndCrystalListener extends Combat.PacketListenerAdapter implements Listener {
+
+    private static volatile boolean packetEventsEnabled = true;
+
+    public static void disablePacketEventsIntegration() {
+        packetEventsEnabled = false;
+    }
 
     private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>(256);
     private final AtomicInteger pendingTasks = new AtomicInteger(0);
     private static final int MAX_PENDING_TASKS = 10;
 
+    public EndCrystalListener() {
+        Combat combat = Combat.getInstance();
+        if (combat != null && combat.isPacketEventsAvailable()) {
+            combat.safelyRegisterPacketListener(this);
+        }
+    }
+
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
+        if (!packetEventsEnabled) return;
         if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) return;
-        
+
         WrapperPlayClientInteractEntity interactPacket = new WrapperPlayClientInteractEntity(event);
-        if (interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.INTERACT) return;
+        if (interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.INTERACT && 
+            interactPacket.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) return;
 
         Player player = (Player) event.getPlayer();
         Combat combat = Combat.getInstance();
         Entity entity = combat.getEntityManager().getEntity(interactPacket.getEntityId());
-        
         if (entity == null || entity.getType() != EntityType.END_CRYSTAL) return;
-        
-        NewbieProtectionListener protection = combat.getNewbieProtectionListener();
         combat.getCrystalManager().setPlacer(entity, player);
-
+        NewbieProtectionListener protection = combat.getNewbieProtectionListener();
         if (protection != null && protection.isActuallyProtected(player)) {
-            for (Entity nearby : entity.getNearbyEntities(6.0, 6.0, 6.0)) {
-                if (nearby instanceof Player target &&
-                    !player.getUniqueId().equals(target.getUniqueId()) &&
-                    !protection.isActuallyProtected(target)) {
-                    
-                    protection.sendBlockedMessage(player, protection.getCrystalBlockMessage());
-                    event.setCancelled(true);
-                    return;
-                }
+            List<Player> nearbyPlayers = entity.getNearbyEntities(6.0, 6.0, 6.0).stream()
+                .filter(e -> e instanceof Player && !e.getUniqueId().equals(player.getUniqueId()))
+                .map(e -> (Player)e)
+                .filter(p -> !protection.isActuallyProtected(p))
+                .toList();
+            
+            if (!nearbyPlayers.isEmpty()) {
+                protection.sendBlockedMessage(player, protection.getCrystalBlockMessage());
+                event.setCancelled(true);
+                return;
             }
         }
 
@@ -67,6 +80,7 @@ public class EndCrystalListener implements PacketListener, Listener {
 
     @Override
     public void onPacketSend(PacketSendEvent event) {
+        if (!packetEventsEnabled) return;
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
@@ -95,7 +109,7 @@ public class EndCrystalListener implements PacketListener, Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!Combat.getInstance().getConfig().getBoolean("link-end-crystals", true)) return;
-        if (event.isCancelled() || event.getFinalDamage() <= 0) return;
+        if (event.isCancelled() || event.getFinalDamage() <= 0.01) return;
         if (event.getDamager().getType() != EntityType.END_CRYSTAL) return;
 
         Entity damager = event.getDamager();
@@ -200,7 +214,7 @@ public class EndCrystalListener implements PacketListener, Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onEntityExplode(EntityExplodeEvent event) {
         if (event.getEntityType() != EntityType.END_CRYSTAL) return;
         Combat.getInstance().getCrystalManager().removeCrystal(event.getEntity());

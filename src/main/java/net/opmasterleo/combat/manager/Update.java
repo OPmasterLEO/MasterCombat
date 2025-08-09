@@ -17,17 +17,17 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
-
 import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
+import net.opmasterleo.combat.Combat;
 
 public class Update {
 
     private static final String GITHUB_API_URL = "https://api.github.com/repos/OPmasterLEO/MasterCombat/releases/latest";
     private static String latestVersion;
     private static String downloadUrl;
-    private static boolean updateCheckInProgress = false;
-    private static boolean updateDownloadInProgress = false;
+    private static volatile boolean updateCheckInProgress = false;
+    private static volatile boolean updateDownloadInProgress = false;
     private static volatile boolean isShuttingDown = false;
     private static final Set<HttpURLConnection> activeConnections = ConcurrentHashMap.newKeySet();
     private static final Set<BukkitTask> updateTasks = ConcurrentHashMap.newKeySet();
@@ -36,19 +36,13 @@ public class Update {
     public static void setShuttingDown(boolean shuttingDown) {
         isShuttingDown = shuttingDown;
         if (shuttingDown) {
-            for (HttpURLConnection conn : activeConnections) {
-                try {
-                    conn.disconnect();
-                } catch (Exception ignored) {}
-            }
+            activeConnections.forEach(conn -> {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            });
             activeConnections.clear();
-            for (BukkitTask task : updateTasks) {
-                try {
-                    if (!task.isCancelled()) {
-                        task.cancel();
-                    }
-                } catch (Exception ignored) {}
-            }
+            updateTasks.forEach(task -> {
+                try { if (!task.isCancelled()) task.cancel(); } catch (Exception ignored) {}
+            });
             updateTasks.clear();
         }
     }
@@ -67,27 +61,27 @@ public class Update {
 
     public static void checkForUpdates(Plugin plugin, CommandSender sender) {
         if (isShuttingDown) return;
+        if (updateCheckInProgress) return;
 
-        if (!updateCheckInProgress) {
-            updateCheckInProgress = true;
-            if (!updateFound) {
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage("§b[MasterCombat] §eChecking for updates…");
-                } else {
-                    Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eChecking for updates…");
-                }
+        updateCheckInProgress = true;
+        sendMessage(sender, "§b[MasterCombat] §eChecking for updates…");
+
+        BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
+            try {
+                performUpdateCheck(plugin);
+                SchedulerUtil.runTask(plugin, () -> {
+                    if (!isShuttingDown && sender != null) {
+                        String currentVersion = plugin.getPluginMeta().getVersion();
+                        String pluginName = plugin.getName();
+                        String prefix = plugin.getConfig().getString("Messages.Prefix", "");
+                        handleVersionNotification(sender, pluginName, currentVersion, prefix);
+                    }
+                });
+            } finally {
+                updateCheckInProgress = false;
             }
-            BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
-                try {
-                    performUpdateCheck(plugin);
-                } finally {
-                    updateCheckInProgress = false;
-                }
-            });
-            if (task != null) {
-                updateTasks.add(task);
-            }
-        }
+        });
+        if (task != null) updateTasks.add(task);
     }
 
     public static void checkForUpdates(Plugin plugin) {
@@ -100,50 +94,22 @@ public class Update {
         BukkitTask task = SchedulerUtil.runTaskLater(plugin, () -> {
             String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
-            String normalizedCurrent = normalizeVersion(currentVersion);
             if (latestVersion == null && !updateCheckInProgress && !isShuttingDown) {
                 updateCheckInProgress = true;
                 performUpdateCheck(plugin);
                 updateCheckInProgress = false;
             }
-
-            String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
-
-            if (latestVersion == null) {
-                Bukkit.getConsoleSender().sendMessage(prefix + "§c[" + pluginName + "]» Unable to fetch update information.");
-                return;
-            }
-
-            int comparison = compareVersions(normalizedCurrent, normalizedLatest);
-            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
-            if (behind > 0) {
-                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
-                Bukkit.getConsoleSender().sendMessage(msg);
-            }
-
-            if (comparison == 0) {
-                Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» This server is running the latest " + pluginName + " (v" + currentVersion + ").");
-            } else if (comparison < 0) {
-                Bukkit.getConsoleSender().sendMessage("§e[" + pluginName + "]» An update is required, installed version v" + currentVersion + ", but latest is v" + latestVersion + ".");
-                Bukkit.getConsoleSender().sendMessage("§eUse /combat update to update to the latest version.");
-            } else {
-                Bukkit.getConsoleSender().sendMessage("§a[" + pluginName + "]» You are running a developer build (v" + currentVersion + "), but the latest public version is v" + latestVersion + ".");
-            }
+            handleVersionNotification(null, pluginName, currentVersion, prefix);
         }, 20L * 3);
-
-        if (task != null) {
-            updateTasks.add(task);
-        }
+        if (task != null) updateTasks.add(task);
     }
 
     public static void notifyOnPlayerJoin(Player player, Plugin plugin) {
-        if (isShuttingDown || !player.isOp() || !plugin.getConfig().getBoolean("update-notify-chat", false)) {
-            return;
-        }
-
+        if (isShuttingDown || !player.isOp() || !plugin.getConfig().getBoolean("update-notify-chat", false)) return;
         String pluginName = plugin.getName();
         String currentVersion = plugin.getPluginMeta().getVersion();
         final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
+        
         if (latestVersion == null && !updateCheckInProgress) {
             updateCheckInProgress = true;
             BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
@@ -153,88 +119,88 @@ public class Update {
                     updateCheckInProgress = false;
                     SchedulerUtil.runTask(plugin, () -> {
                         if (!isShuttingDown) {
-                            sendUpdateNotification(player, pluginName, currentVersion);
-                            String normalizedCurrent = normalizeVersion(currentVersion);
-                            String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
-                            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
-                            if (behind > 0) {
-                                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
-                                player.sendMessage(msg);
-                            }
+                            handleVersionNotification(player, pluginName, currentVersion, prefix);
                         }
                     });
                 }
             });
-            if (task != null) {
-                updateTasks.add(task);
-            }
+            if (task != null) updateTasks.add(task);
         } else {
-            sendUpdateNotification(player, pluginName, currentVersion);
-            String normalizedCurrent = normalizeVersion(currentVersion);
-            String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
-            int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
-            if (behind > 0) {
-                String msg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update it using /combat update";
-                player.sendMessage(msg);
-            }
+            handleVersionNotification(player, pluginName, currentVersion, prefix);
         }
     }
     
-    private static void sendUpdateNotification(Player player, String pluginName, String currentVersion) {
-        if (isShuttingDown) return;
-        
-        String normalizedCurrent = normalizeVersion(currentVersion);
-        String normalizedLatest = latestVersion != null ? normalizeVersion(latestVersion) : null;
-        
+    private static void handleVersionNotification(CommandSender sender, String pluginName, String currentVersion, String prefix) {
+        CommandSender target = (sender != null) ? sender : Bukkit.getConsoleSender();
         if (latestVersion == null) {
-            player.sendMessage("§c[" + pluginName + "]» Unable to fetch update information.");
+            sendMessage(target, prefix + "§c[" + pluginName + "]» Unable to fetch update information.");
             return;
         }
-
-        int comparison = compareVersions(normalizedCurrent, normalizedLatest);
         
+        String normalizedCurrent = normalizeVersion(currentVersion);
+        String normalizedLatest = normalizeVersion(latestVersion);
+        int comparison = compareVersions(normalizedCurrent, normalizedLatest);
+        int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
+        
+        if (behind > 0 && comparison < 0) {
+            String behindMsg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update using §6/combat update";
+            sendMessage(target, behindMsg);
+        }
+
         if (comparison == 0) {
-            player.sendMessage("§a[" + pluginName + "]» This server is running the latest " + pluginName + " (v" + currentVersion + ").");
+            sendMessage(target, "§a[" + pluginName + "]» Running latest version §7(" + currentVersion.replaceFirst("^v", "") + ")");
         } else if (comparison < 0) {
-            player.sendMessage("§e[" + pluginName + "]» This server is running " + pluginName + " version v" + currentVersion +
-                    " but the latest is v" + latestVersion + ".");
-            player.sendMessage("§e[" + pluginName + "]» Use /combat update to update the plugin.");
+            sendMessage(target, "§e[" + pluginName + "]» Update required! §7(Installed: " + currentVersion.replaceFirst("^v", "") + ", Latest: " + latestVersion.replaceFirst("^v", "") + ")");
+            sendMessage(target, "§eUse §6/combat update §eto install the update");
         } else {
-            player.sendMessage("§a[" + pluginName + "]» You are running a developer build (v" + currentVersion + "), but the latest public version is " + latestVersion + ".");
+            sendMessage(target, "§a[" + pluginName + "]» Development build detected §7(" + currentVersion.replaceFirst("^v", "") + ")");
+            sendMessage(target, "§aLatest public version: §7" + latestVersion.replaceFirst("^v", ""));
         }
     }
 
     public static void downloadAndReplaceJar(Plugin plugin, CommandSender sender) {
-        if (isShuttingDown) return;
+        if (isShuttingDown || updateDownloadInProgress) return;
+        updateDownloadInProgress = true;
         
-        if (!updateDownloadInProgress) {
-            updateDownloadInProgress = true;
-            if (updateFound) {
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage("§b[MasterCombat] §eDownloading and applying the update...");
-                } else {
-                    Bukkit.getConsoleSender().sendMessage("§b[MasterCombat] §eDownloading and applying the update...");
+        BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
+            try {
+                String currentVersion = plugin.getPluginMeta().getVersion();
+                String normalizedCurrent = normalizeVersion(currentVersion);
+                
+                if (latestVersion == null) {
+                    performUpdateCheck(plugin);
                 }
-            }
-            BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
-                try {
-                    performJarReplacement(plugin, sender);
-                } catch (Exception e) {
-                    if (!isShuttingDown) {
-                        if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                            sender.sendMessage("§c[" + plugin.getName() + "]» Error during update: " + e.getMessage());
-                        } else {
-                            Bukkit.getConsoleSender().sendMessage("§c[" + plugin.getName() + "]» Error during update: " + e.getMessage());
-                        }
-                    }
-                } finally {
-                    updateDownloadInProgress = false;
+                
+                if (latestVersion == null) {
+                    sendMessage(sender, "§cUpdate failed: Could not fetch version information");
+                    return;
                 }
-            });
-            if (task != null) {
-                updateTasks.add(task);
+                
+                String normalizedLatest = normalizeVersion(latestVersion);
+                int comparison = compareVersions(normalizedCurrent, normalizedLatest);
+                
+                if (comparison > 0) {
+                    sendMessage(sender, "§aYou're running a development build §7(v" + currentVersion + ")");
+                    sendMessage(sender, "§aUpdate skipped to prevent downgrading");
+                    return;
+                }
+                
+                if (comparison == 0) {
+                    sendMessage(sender, "§aYou're already on the latest version §7(v" + currentVersion + ")");
+                    return;
+                }
+                
+                sendMessage(sender, "§b[MasterCombat] §eDownloading update...");
+                performJarReplacement(plugin, sender);
+            } catch (Exception e) {
+                if (!isShuttingDown) {
+                    sendMessage(sender, "§cUpdate error: " + e.getMessage());
+                }
+            } finally {
+                updateDownloadInProgress = false;
             }
-        }
+        });
+        if (task != null) updateTasks.add(task);
     }
 
     public static void downloadAndReplaceJar(Plugin plugin) {
@@ -251,212 +217,149 @@ public class Update {
 
     private static void performUpdateCheck(Plugin plugin) {
         if (isShuttingDown) return;
-
-        String pluginName = plugin.getPluginMeta().getName();
-        HttpURLConnection connection = null;
+        
         try {
             URL url = URI.create(GITHUB_API_URL).toURL();
-            connection = (HttpURLConnection) url.openConnection();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             activeConnections.add(connection);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
             connection.setRequestProperty("User-Agent", "MasterCombat-UpdateChecker");
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
-
-            if (isShuttingDown) {
+            
+            if (isShuttingDown) return;
+            if (connection.getResponseCode() != 200) {
                 return;
             }
-
-            if (connection.getResponseCode() == 200) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (isShuttingDown) return;
-                        response.append(line);
-                    }
-                    latestVersion = parseVersion(response.toString());
-                    downloadUrl = parseDownloadUrl(response.toString());
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (isShuttingDown) return;
+                    response.append(line);
                 }
-            } else {
-                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to check for updates. HTTP Response Code: " + connection.getResponseCode());
-                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Response Message: " + connection.getResponseMessage());
+                latestVersion = parseVersion(response.toString());
+                downloadUrl = parseDownloadUrl(response.toString());
+                updateFound = (latestVersion != null);
             }
-        } catch (java.net.UnknownHostException e) {
-            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Unable to resolve host: " + e.getMessage());
-        } catch (java.net.SocketTimeoutException e) {
-            Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Connection timed out: " + e.getMessage());
-        } catch (Exception e) {
-            if (!isShuttingDown) {
-                Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» An error occurred while checking for updates: " + e.getMessage());
-            }
+        } catch (Exception ignored) {
         } finally {
-            if (connection != null) {
-                try {
-                    connection.disconnect();
-                } catch (Exception ignored) {}
-                activeConnections.remove(connection);
-            }
-            updateCheckInProgress = false;
+            activeConnections.forEach(conn -> {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            });
+            activeConnections.clear();
         }
     }
 
     private static void performJarReplacement(Plugin plugin, CommandSender sender) {
         if (isShuttingDown) return;
-
-        String pluginName = plugin.getPluginMeta().getName();
-        HttpURLConnection connection = null;
+        
         try {
-            if (downloadUrl == null || latestVersion == null) {
-                performUpdateCheck(plugin);
-                if (downloadUrl == null) {
-                    if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                        sender.sendMessage("§c[" + pluginName + "]» Could not find download URL for the latest version.");
-                    } else {
-                        Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Could not find download URL for the latest version.");
-                    }
-                    return;
-                }
-            }
-
-            File updateFolder;
-            File bukkitYml = new File(plugin.getServer().getWorldContainer(), "bukkit.yml");
-            if (bukkitYml.exists()) {
-                YamlConfiguration bukkitConfig = YamlConfiguration.loadConfiguration(bukkitYml);
-                String updateFolderPath = bukkitConfig.getString("settings.update-folder");
-                if (updateFolderPath != null && !updateFolderPath.isEmpty()) {
-                    updateFolder = new File(plugin.getServer().getWorldContainer(), updateFolderPath);
-                } else {
-                    updateFolder = new File(plugin.getDataFolder().getParentFile(), "update");
-                }
-            } else {
-                updateFolder = new File(plugin.getDataFolder().getParentFile(), "update");
-            }
-
-            if (!updateFolder.exists() && !updateFolder.mkdirs()) {
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage("§c[" + pluginName + "]» Failed to create update folder.");
-                } else {
-                    Bukkit.getConsoleSender().sendMessage("§c[" + pluginName + "]» Failed to create update folder.");
-                }
+            File updateFolder = resolveUpdateFolder(plugin);
+            if (updateFolder == null) {
+                sendMessage(sender, "§cFailed to create update folder");
                 return;
             }
 
-            String fixedName = "MasterCombat";
-            String versionOnly = latestVersion;
-            if (versionOnly != null && versionOnly.toLowerCase().startsWith("v")) {
-                versionOnly = versionOnly.substring(1);
-            }
-            File tempFile = new File(updateFolder, fixedName + "-v" + versionOnly + ".jar");
-            URL website = URI.create(downloadUrl).toURL();
-            connection = (HttpURLConnection) website.openConnection();
+            String versionOnly = latestVersion.startsWith("v") ? latestVersion.substring(1) : latestVersion;
+            File tempFile = new File(updateFolder, "MasterCombat-v" + versionOnly + ".jar");
+            
+            HttpURLConnection connection = (HttpURLConnection) URI.create(downloadUrl).toURL().openConnection();
             activeConnections.add(connection);
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(30000);
-
-            if (isShuttingDown) return;
-
+            
             try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
                  FileOutputStream fos = new FileOutputStream(tempFile)) {
-                long maxChunk = 10 * 1024 * 1024;
-                long position = 0;
-                while (true) {
-                    if (isShuttingDown) return;
-                    long transferred = fos.getChannel().transferFrom(rbc, position, maxChunk);
-                    if (transferred == 0) break;
-                    position += transferred;
-                }
+                fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
             }
 
             if (tempFile.exists() && tempFile.length() > 0) {
-                String msg1 = "§a[" + pluginName + "]» Update successfully downloaded!";
-                String msg2 = "§a[" + pluginName + "]» The new version has been placed in the update folder (" + updateFolder.getAbsolutePath() + ").";
-                String msg3 = "§a[" + pluginName + "]» Please restart your server to apply the update.";
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage(msg1);
-                    sender.sendMessage(msg2);
-                    sender.sendMessage(msg3);
-                } else {
-                    Bukkit.getConsoleSender().sendMessage(msg1);
-                    Bukkit.getConsoleSender().sendMessage(msg2);
-                    Bukkit.getConsoleSender().sendMessage(msg3);
-                }
+                sendMessage(sender, "§aUpdate downloaded successfully!");
+                sendMessage(sender, "§aFile saved to: §7" + updateFolder.getName());
+                sendMessage(sender, "§aRestart server to apply update");
             } else {
-                String msg = "§c[" + pluginName + "]» Failed to download the latest jar. File does not exist or is empty.";
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage(msg);
-                } else {
-                    Bukkit.getConsoleSender().sendMessage(msg);
-                }
+                sendMessage(sender, "§cDownload failed: Empty file created");
             }
         } catch (Exception e) {
             if (!isShuttingDown) {
-                String msg = "§c[" + pluginName + "]» An error occurred while downloading the jar: " + e.getMessage();
-                if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    sender.sendMessage(msg);
-                } else {
-                    Bukkit.getConsoleSender().sendMessage(msg);
-                }
+                sendMessage(sender, "§cDownload error: " + e.getMessage());
             }
         } finally {
-            if (connection != null) {
-                try {
-                    connection.disconnect();
-                } catch (Exception ignored) {}
-                activeConnections.remove(connection);
-            }
-            updateDownloadInProgress = false;
+            activeConnections.forEach(conn -> {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            });
+            activeConnections.clear();
         }
     }
 
-    public static boolean isFolia() {
-        return SchedulerUtil.isFolia();
+    private static File resolveUpdateFolder(Plugin plugin) {
+        File bukkitYml = new File(plugin.getServer().getWorldContainer(), "bukkit.yml");
+        File updateFolder;
+        
+        if (bukkitYml.exists()) {
+            YamlConfiguration bukkitConfig = YamlConfiguration.loadConfiguration(bukkitYml);
+            String updateFolderPath = bukkitConfig.getString("settings.update-folder");
+            updateFolder = (updateFolderPath != null && !updateFolderPath.isEmpty()) 
+                ? new File(plugin.getServer().getWorldContainer(), updateFolderPath)
+                : new File(plugin.getDataFolder().getParentFile(), "update");
+        } else {
+            updateFolder = new File(plugin.getDataFolder().getParentFile(), "update");
+        }
+        
+        return (updateFolder.exists() || updateFolder.mkdirs()) ? updateFolder : null;
     }
 
-    private static String normalizeVersion(String version) {        if (version == null) return "";
-        return version.replaceAll("[^0-9.]", "");
+    private static void sendMessage(CommandSender sender, String message) {
+        if (sender == null) {
+            Bukkit.getConsoleSender().sendMessage(message);
+        } else {
+            sender.sendMessage(message);
+            if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                Combat combat = Combat.getInstance();
+                if (combat != null && combat.isDebugEnabled()) {
+                    Bukkit.getConsoleSender().sendMessage("[" + sender.getName() + "] " + message);
+                }
+            }
+        }
+    }
+
+    private static String normalizeVersion(String version) {
+        return (version == null) ? "" : version.replaceAll("[^0-9.]", "");
     }
 
     private static int compareVersions(String v1, String v2) {
         if (v1 == null || v2 == null) return 0;
-
         String[] parts1 = v1.split("\\.");
         String[] parts2 = v2.split("\\.");
-
         int length = Math.max(parts1.length, parts2.length);
         for (int i = 0; i < length; i++) {
-            int num1 = 0;
-            int num2 = 0;
-            try {
-                num1 = i < parts1.length && !parts1[i].isEmpty() ? Integer.parseInt(parts1[i]) : 0;
-            } catch (NumberFormatException ignored) {}
-            try {
-                num2 = i < parts2.length && !parts2[i].isEmpty() ? Integer.parseInt(parts2[i]) : 0;
-            } catch (NumberFormatException ignored) {}
-            if (num1 != num2) {
-                return num1 - num2;
-            }
+            int num1 = (i < parts1.length) ? safeParse(parts1[i]) : 0;
+            int num2 = (i < parts2.length) ? safeParse(parts2[i]) : 0;
+            if (num1 != num2) return Integer.compare(num1, num2);
         }
         return 0;
     }
 
+    private static int safeParse(String num) {
+        try { return Integer.parseInt(num); } 
+        catch (NumberFormatException e) { return 0; }
+    }
+
     private static String parseVersion(String jsonResponse) {
-        String tagPrefix = "\"tag_name\":\"";
-        int startIndex = jsonResponse.indexOf(tagPrefix);
-        if (startIndex == -1) return null;
-        startIndex += tagPrefix.length();
-        int endIndex = jsonResponse.indexOf("\"", startIndex);
-        return jsonResponse.substring(startIndex, endIndex);
+        int start = jsonResponse.indexOf("\"tag_name\":\"") + 12;
+        if (start < 12) return null;
+        int end = jsonResponse.indexOf("\"", start);
+        return (end > start) ? jsonResponse.substring(start, end) : null;
     }
 
     private static String parseDownloadUrl(String jsonResponse) {
-        String urlPrefix = "\"browser_download_url\":\"";
-        int startIndex = jsonResponse.indexOf(urlPrefix);
-        if (startIndex == -1) return null;
-        startIndex += urlPrefix.length();
-        int endIndex = jsonResponse.indexOf("\"", startIndex);
-        return jsonResponse.substring(startIndex, endIndex);
+        int start = jsonResponse.indexOf("\"browser_download_url\":\"") + 23;
+        if (start < 23) return null;
+        int end = jsonResponse.indexOf("\"", start);
+        return (end > start) ? jsonResponse.substring(start, end) : null;
     }
     
     public static void cleanupTasks() {
@@ -469,22 +372,15 @@ public class Update {
         String[] lat = latest.split("\\.");
         int min = Math.min(cur.length, lat.length);
         for (int i = 0; i < min; i++) {
-            try {
-                int c = Integer.parseInt(cur[i]);
-                int l = Integer.parseInt(lat[i]);
-                if (c < l) {
-                    return l - c;
-                } else if (c > l) {
-                    return 0;
-                }
-            } catch (NumberFormatException ignored) {}
+            int c = safeParse(cur[i]);
+            int l = safeParse(lat[i]);
+            if (c < l) return l - c;
+            if (c > l) return 0;
         }
-        if (cur.length < lat.length) {
-            try {
-                int l = Integer.parseInt(lat[min]);
-                return l;
-            } catch (Exception ignored) {}
-        }
-        return 0;
+        return (cur.length < lat.length) ? safeParse(lat[min]) : 0;
+    }
+
+    public static boolean isFolia() {
+        return SchedulerUtil.isFolia();
     }
 }

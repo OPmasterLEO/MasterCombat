@@ -21,7 +21,7 @@ public class SelfCombatListener implements Listener {
         if (event.getFinalDamage() <= 0) return;
 
         Combat combat = Combat.getInstance();
-        if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player)) {
+        if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player.getLocation())) {
             return;
         }
 

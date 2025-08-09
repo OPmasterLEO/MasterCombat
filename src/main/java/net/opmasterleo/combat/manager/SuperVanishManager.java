@@ -9,22 +9,26 @@ import java.lang.reflect.Method;
 
 public class SuperVanishManager {
 
-    private final Plugin superVanish;
+    private Plugin superVanish;
     private static boolean vanishApiAvailable = false;
     private static Method isInvisibleMethod;
 
-    static {
+    public SuperVanishManager() {
         try {
-            Class<?> vanishAPI = Class.forName("de.myzelyam.api.vanish.VanishAPI");
-            isInvisibleMethod = vanishAPI.getMethod("isInvisible", Player.class);
-            vanishApiAvailable = true;
-        } catch (ClassNotFoundException | NoSuchMethodException e) {
+            this.superVanish = Bukkit.getPluginManager().getPlugin("SuperVanish");
+            if (this.superVanish != null && this.superVanish.isEnabled()) {
+                try {
+                    Class<?> vanishAPI = Class.forName("de.myzelyam.api.vanish.VanishAPI");
+                    isInvisibleMethod = vanishAPI.getMethod("isInvisible", Player.class);
+                    vanishApiAvailable = true;
+                } catch (ClassNotFoundException | NoSuchMethodException e) {
+                    vanishApiAvailable = false;
+                }
+            }
+        } catch (Exception e) {
+            this.superVanish = null;
             vanishApiAvailable = false;
         }
-    }
-
-    public SuperVanishManager() {
-        this.superVanish = Bukkit.getPluginManager().getPlugin("SuperVanish");
     }
 
     public boolean isVanished(Player player) {

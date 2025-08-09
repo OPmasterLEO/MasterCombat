@@ -5,9 +5,8 @@ api-version: 1.21
 author: OPmasterLEO
 description: ${project.description}
 folia-supported: true
-depend:
-  - WorldGuard
 softdepend:
+  - WorldGuard
   - PacketEvents
   - PlaceholderAPI
   - SuperVanish
@@ -27,3 +26,13 @@ commands:
     usage: /${settings.disableCommand}
     permission: combat.protection
     permission-message: You do not have permission to use this command.
+permissions:
+  combat.admin:
+    description: Access to all combat admin commands
+    default: op
+  combat.protection:
+    description: Access to protection commands
+    default: true
+  combat.bypass.safezone:
+    description: Allows bypassing safezone barriers during combat
+    default: op
