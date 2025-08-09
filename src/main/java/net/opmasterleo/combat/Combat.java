@@ -240,6 +240,7 @@ public class Combat extends JavaPlugin implements Listener {
         lastActionBarUpdates.clear();
         try {
             if (peInitialized && PacketEvents.getAPI() != null) {
+                PacketEvents.getAPI().getEventManager().unregisterAllListeners();
                 PacketEvents.getAPI().terminate();
                 debug("PacketEvents terminated successfully");
             } else {
@@ -475,42 +476,52 @@ public class Combat extends JavaPlugin implements Listener {
         }
     }
 
-    private void sendNoLongerInCombatMessage(Player player, String message, String type) {
-        if (message == null || message.isEmpty()) return;
-        net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
-        switch (type == null ? "chat" : type.toLowerCase()) {
-            case "actionbar":
-                player.sendActionBar(component);
-                break;
-            case "both":
-                player.sendMessage(component);
-                player.sendActionBar(component);
-                break;
-            case "chat":
-            default:
-                player.sendMessage(component);
-                break;
-        }
-    }
-    
     public void sendCombatMessage(Player player, String message, String type) {
-        if (message == null || message.isEmpty()) return;
-        net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
-        switch (type == null ? "chat" : type.toLowerCase()) {
-            case "actionbar":
-                player.sendActionBar(component);
-                break;
-            case "both":
-                player.sendMessage(component);
-                player.sendActionBar(component);
-                break;
-            case "chat":
-            default:
-                player.sendMessage(component);
-                break;
+        if (message == null || message.isEmpty() || player == null) return;
+        
+        try {
+            net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
+            switch (type == null ? "chat" : type.toLowerCase()) {
+                case "actionbar":
+                    player.sendActionBar(component);
+                    break;
+                case "both":
+                    player.sendMessage(component);
+                    player.sendActionBar(component);
+                    break;
+                case "chat":
+                default:
+                    player.sendMessage(component);
+                    break;
+            }
+        } catch (Exception e) {
+            player.sendMessage(prefix + message);
         }
     }
 
+    private void sendNoLongerInCombatMessage(Player player, String message, String type) {
+        if (message == null || message.isEmpty() || player == null) return;
+        
+        try {
+            net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
+            switch (type == null ? "chat" : type.toLowerCase()) {
+                case "actionbar":
+                    player.sendActionBar(component);
+                    break;
+                case "both":
+                    player.sendMessage(component);
+                    player.sendActionBar(component);
+                    break;
+                case "chat":
+                default:
+                    player.sendMessage(component);
+                    break;
+            }
+        } catch (Exception e) {
+            player.sendMessage(prefix + message);
+        }
+    }
+    
     private void updateActionBar(Player player, long endTime, long currentTime) {
         if (player == null) return;
         long seconds = (endTime - currentTime + 999) / 1000;
@@ -797,17 +808,19 @@ public class Combat extends JavaPlugin implements Listener {
         boolean worldGuardDetected = Bukkit.getPluginManager().getPlugin("WorldGuard") != null;
         boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
 
-        Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aWorldGuard " + (worldGuardDetected ? "loaded!" : "not loaded!"));
-        Bukkit.getConsoleSender().sendMessage("§cINFO §8» §aPacketEvents " + (packetEventsLoaded ? "loaded!" : "not loaded!"));
+        Bukkit.getConsoleSender().sendMessage(ChatUtil.parse("&cINFO &8» &aWorldGuard " + (worldGuardDetected ? "loaded!" : "not loaded!")));
+        Bukkit.getConsoleSender().sendMessage(ChatUtil.parse("&cINFO &8» &aPacketEvents " + (packetEventsLoaded ? "loaded!" : "not loaded!")));
 
         String displayText = pluginName.contains(version) ? pluginName : pluginName + " - v" + version;
-        String asciiArt = "&b   ____                _           _               \n" +
-            "&b  / ___|___  _ __ ___ | |__   __ _| |_             \n" +
-            "&b | |   / _ \\| '_ ` _ \\| '_ \\ / _` | __|   " + displayText + "\n" +
-            "&b | |__| (_) | | | | | | |_) | (_| | |_    Currently using " + apiType + " - " + serverJarName + "\n" +
-            "&b  \\____\\___/|_| |_| |_|_.__/ \\__,_|\\__|   \n";
+        String[] asciiLines = {
+            "&b   ____                _           _               ",
+            "&b  / ___|___  _ __ ___ | |__   __ _| |_             ",
+            "&b | |   / _ \\| '_ ` _ \\| '_ \\ / _` | __|   " + displayText,
+            "&b | |__| (_) | | | | | | |_) | (_| | |_    Currently using " + apiType + " - " + serverJarName,
+            "&b  \\____\\___/|_| |_| |_|_.__/ \\__,_|\\__|   "
+        };
 
-        for (String line : asciiArt.split("\n")) {
+        for (String line : asciiLines) {
             Bukkit.getConsoleSender().sendMessage(ChatUtil.parse(line));
         }
     }
@@ -821,7 +834,7 @@ public class Combat extends JavaPlugin implements Listener {
         loadConfigValues();
         initializeManagers();
 
-        if (isPacketEventsAvailable()) {
+        if (isPacketEventsAvailable() && !peInitialized) {
             try {
                 PacketEvents.getAPI().init();
                 peInitialized = true;
@@ -831,7 +844,7 @@ public class Combat extends JavaPlugin implements Listener {
                 getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
                 disablePacketEventsFeatures();
             }
-        } else {
+        } else if (!isPacketEventsAvailable()) {
             peInitialized = false;
             getLogger().warning("PacketEvents not found. Disabling PacketEvents-dependent features.");
             disablePacketEventsFeatures();

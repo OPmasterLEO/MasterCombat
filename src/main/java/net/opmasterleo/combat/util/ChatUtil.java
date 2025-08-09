@@ -2,6 +2,7 @@ package net.opmasterleo.combat.util;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -11,9 +12,13 @@ import java.util.regex.Pattern;
 public class ChatUtil {
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
 
-    public static Component parse(String input) {
-        if (input == null || input.isEmpty()) return Component.empty();
-        Matcher matcher = HEX_COLOR_PATTERN.matcher(input);
+    public static Component parse(String message) {
+        if (message == null || message.isEmpty()) {
+            return Component.empty();
+        }
+
+        String processed = message.replace('&', '§');
+        Matcher matcher = HEX_COLOR_PATTERN.matcher(processed);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
             String hex = matcher.group(1);
@@ -24,11 +29,11 @@ public class ChatUtil {
             matcher.appendReplacement(sb, replacement.toString());
         }
         matcher.appendTail(sb);
-        input = sb.toString();
-        input = input.replace('&', '§');
-        
-        return LegacyComponentSerializer.legacySection()
-                .deserialize(input);
+        try {
+            return LegacyComponentSerializer.legacySection().deserialize(sb.toString());
+        } catch (Exception e) {
+            return Component.text(message).color(NamedTextColor.WHITE);
+        }
     }
     
     public static TextColor getLastColor(Component component) {
@@ -50,7 +55,7 @@ public class ChatUtil {
         if (input == null || input.isEmpty()) return "";
         input = input.replaceAll("&#[A-Fa-f0-9]{6}", "");
         input = input.replaceAll("§x§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]", "");
-        input = input.replaceAll("&x&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]", "");
+        input = input.replaceAll("&x&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]", "");
         input = input.replaceAll("[§&][0-9a-fk-or]", "");
         
         return input;
