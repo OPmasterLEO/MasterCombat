@@ -54,12 +54,10 @@ item_restrictions:
 #                    ENDER PEARL & TRIDENT SETTINGS
 # ========================================================================
 enderpearl:
+  # Enable/disable ender pearl settings below
+  enabled: false
   # Refresh combat timer when player lands an ender pearl
   refresh_combat_on_land: false
-
-enderpearl_cooldown:
-  # Enable/disable ender pearl cooldowns
-  enabled: false
   # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
   duration: "10s"
   # Only apply cooldowns during combat
@@ -69,15 +67,13 @@ enderpearl_cooldown:
     minigames: false  # Example: cooldowns disabled in minigames world
 
 trident:
+  # Enable/disable trident settings below
+  enabled: true
   # Refresh combat timer when trident lands (similar to enderpearl)
   refresh_combat_on_land: false
   # Worlds where tridents are completely banned
   banned_worlds:
     world_nether: true
-
-trident_cooldown:
-  # Enable/disable trident cooldowns globally
-  enabled: true
   # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
   duration: "10s"
   # Only apply cooldown when player is in combat
