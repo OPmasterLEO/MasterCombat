@@ -121,35 +121,47 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
-        if (!packetEventsEnabled || !barrierEnabled) return;
-        var type = event.getPacketType();
+        try {
+            if (!plugin.isEnabled() || !plugin.isPluginEnabled()) return;
 
-        if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
-            Player player = (Player) event.getPlayer();
-            if (player == null || !player.isOnline()) return;
-            if (player.hasPermission("combat.bypass.safezone")) return;
+            if (!packetEventsEnabled || !barrierEnabled) return;
+            var type = event.getPacketType();
 
-            Vector3d newPos;
-            if (type == Client.PLAYER_POSITION) {
-                WrapperPlayClientPlayerPosition wrapper = new WrapperPlayClientPlayerPosition(event);
-                newPos = wrapper.getPosition();
-            } else {
-                WrapperPlayClientPlayerPositionAndRotation wrapper = new WrapperPlayClientPlayerPositionAndRotation(event);
-                newPos = wrapper.getPosition();
+            if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
+                Player player = (Player) event.getPlayer();
+                if (player == null || !player.isOnline()) return;
+                if (player.hasPermission("combat.bypass.safezone")) return;
+
+                Vector3d newPos;
+                if (type == Client.PLAYER_POSITION) {
+                    WrapperPlayClientPlayerPosition wrapper = new WrapperPlayClientPlayerPosition(event);
+                    newPos = wrapper.getPosition();
+                } else {
+                    WrapperPlayClientPlayerPositionAndRotation wrapper = new WrapperPlayClientPlayerPositionAndRotation(event);
+                    newPos = wrapper.getPosition();
+                }
+
+                Vector3d lastPos = lastPositions.get(player.getUniqueId());
+                lastPositions.put(player.getUniqueId(), newPos);
+                if (lastPos != null && lastPos.getX() == newPos.getX() && lastPos.getZ() == newPos.getZ()) {
+                    return;
+                }
+
+                Location to = new Location(player.getWorld(), newPos.getX(), newPos.getY(), newPos.getZ());
+                Location from = lastPos != null
+                    ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
+                    : player.getLocation();
+
+                SchedulerUtil.runTask(plugin, () -> handlePlayerMovement(player, from, to));
             }
-
-            Vector3d lastPos = lastPositions.get(player.getUniqueId());
-            lastPositions.put(player.getUniqueId(), newPos);
-            if (lastPos != null && lastPos.getX() == newPos.getX() && lastPos.getZ() == newPos.getZ()) {
-                return;
+        } catch (IllegalStateException e) {
+            if (plugin.isEnabled()) {
+                plugin.debug("Error in WorldGuardUtil.onPacketReceive: " + e.getMessage());
             }
-
-            Location to = new Location(player.getWorld(), newPos.getX(), newPos.getY(), newPos.getZ());
-            Location from = lastPos != null
-                ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
-                : player.getLocation();
-
-            SchedulerUtil.runTask(plugin, () -> handlePlayerMovement(player, from, to));
+        } catch (Exception e) {
+            if (plugin.isEnabled()) {
+                plugin.debug("Unexpected error in WorldGuardUtil.onPacketReceive: " + e.getMessage());
+            }
         }
     }
 

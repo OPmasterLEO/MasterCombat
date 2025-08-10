@@ -121,7 +121,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         Player player = (Player) event.getPlayer();
         if (player == null || !player.isOnline()) return;
         if (player.hasPermission("combat.bypass.safezone")) return;
-        if (!plugin.isInCombat(player)) return;
+        if (!itemRestrictionsEnabled && !plugin.isInCombat(player)) return;
         if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
             handleUseItem(event, player);
         } else if (event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING) {
@@ -130,12 +130,13 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     }
 
     private void handleUseItem(PacketReceiveEvent event, Player player) {
+        if (!itemRestrictionsEnabled) return;
         WrapperPlayClientUseItem wrapper = new WrapperPlayClientUseItem(event);
         EquipmentSlot slot = wrapper.getHand() == InteractionHand.MAIN_HAND ?
                 EquipmentSlot.HAND : EquipmentSlot.OFF_HAND;
         ItemStack item = player.getInventory().getItem(slot);
         if (item == null) return;
-        if (itemRestrictionsEnabled && disabledItems.contains(item.getType())) {
+        if (disabledItems.contains(item.getType())) {
             event.setCancelled(true);
             player.sendActionBar(ChatUtil.parse(itemRestrictedMessage));
             return;
@@ -300,6 +301,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (!itemRestrictionsEnabled) return;
         Player player = event.getPlayer();
         Material item = player.getInventory().getItemInMainHand().getType();
         World world = player.getWorld();

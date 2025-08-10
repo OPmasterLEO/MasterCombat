@@ -13,13 +13,10 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.*;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -72,7 +69,8 @@ public class Combat extends JavaPlugin implements Listener {
     private String noLongerInCombatType;
     private boolean debugEnabled;
     private String combatFormat;
-    private boolean peInitialized;
+    private boolean packetEventsLoaded = false;
+    private boolean pluginEnabled = true;
     
     public static class CombatRecord {
         public final long expiry;
@@ -181,37 +179,120 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     private void registerListeners() {
-        commandProcessor = new PlayerCommandPreprocess();
-        Bukkit.getPluginManager().registerEvents(commandProcessor, this);
-        Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
-        Bukkit.getPluginManager().registerEvents(new PlayerTeleportListener(), this);
-        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(), this);
-        Bukkit.getPluginManager().registerEvents(new CustomDeathMessageListener(), this);
-        Bukkit.getPluginManager().registerEvents(new SelfCombatListener(), this);
-        Bukkit.getPluginManager().registerEvents(this, this);
-        Bukkit.getPluginManager().registerEvents(new DirectCombatListener(), this);
+        debug("Starting listener registration...");
+        
+        try {
+            commandProcessor = new PlayerCommandPreprocess();
+            Bukkit.getPluginManager().registerEvents(commandProcessor, this);
+            debug("Registered PlayerCommandPreprocess listener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register PlayerCommandPreprocess listener: " + e.getMessage());
+        }
 
-        endCrystalListener = new EndCrystalListener();
-        Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
+        try {
+            Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
+            debug("Registered PlayerQuitListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register PlayerQuitListener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(new PlayerTeleportListener(), this);
+            debug("Registered PlayerTeleportListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register PlayerTeleportListener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(), this);
+            debug("Registered PlayerDeathListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register PlayerDeathListener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(new CustomDeathMessageListener(), this);
+            debug("Registered CustomDeathMessageListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register CustomDeathMessageListener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(new SelfCombatListener(), this);
+            debug("Registered SelfCombatListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register SelfCombatListener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(this, this);
+            debug("Registered Combat as a listener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register Combat as a listener: " + e.getMessage());
+        }
+
+        try {
+            Bukkit.getPluginManager().registerEvents(new DirectCombatListener(), this);
+            debug("Registered DirectCombatListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register DirectCombatListener: " + e.getMessage());
+        }
+
+        try {
+            endCrystalListener = new EndCrystalListener();
+            Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
+            debug("Registered EndCrystalListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register EndCrystalListener: " + e.getMessage());
+        }
+
         if (getConfig().getBoolean("link-respawn-anchor", true)) {
-            respawnAnchorListener = new RespawnAnchorListener();
-            Bukkit.getPluginManager().registerEvents(respawnAnchorListener, this);
+            try {
+                respawnAnchorListener = new RespawnAnchorListener(this);
+                Bukkit.getPluginManager().registerEvents(respawnAnchorListener, this);
+                debug("Registered RespawnAnchorListener successfully.");
+            } catch (Exception e) {
+                debug("Failed to register RespawnAnchorListener: " + e.getMessage());
+            }
+        } else {
+            debug("RespawnAnchorListener is disabled in the configuration.");
         }
 
-        newbieProtectionListener = new NewbieProtectionListener();
-        Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
-        if (getConfig().getBoolean("link-bed-explosions", true)) {
-            bedExplosionListener = new BedExplosionListener();
-            Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
-        } else {
-            bedExplosionListener = null;
+        try {
+            newbieProtectionListener = new NewbieProtectionListener();
+            Bukkit.getPluginManager().registerEvents(newbieProtectionListener, this);
+            debug("Registered NewbieProtectionListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register NewbieProtectionListener: " + e.getMessage());
         }
-        
-        itemRestrictionListener = new ItemRestrictionListener();
-        Bukkit.getPluginManager().registerEvents(itemRestrictionListener, this);
-        
+
+        if (getConfig().getBoolean("link-bed-explosions", true)) {
+            try {
+                bedExplosionListener = new BedExplosionListener();
+                Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
+                debug("Registered BedExplosionListener successfully.");
+            } catch (Exception e) {
+                debug("Failed to register BedExplosionListener: " + e.getMessage());
+            }
+        } else {
+            debug("BedExplosionListener is disabled in the configuration.");
+        }
+
+        try {
+            itemRestrictionListener = new ItemRestrictionListener();
+            Bukkit.getPluginManager().registerEvents(itemRestrictionListener, this);
+            debug("Registered ItemRestrictionListener successfully.");
+        } catch (Exception e) {
+            debug("Failed to register ItemRestrictionListener: " + e.getMessage());
+        }
+
         if (worldGuardUtil != null && getConfig().getBoolean("safezone_protection.enabled", true)) {
-            worldGuardUtil.reloadConfig();
+            try {
+                worldGuardUtil.reloadConfig();
+                debug("WorldGuard safezone protection reloaded successfully.");
+            } catch (Exception e) {
+                debug("Failed to reload WorldGuard safezone protection: " + e.getMessage());
+            }
         }
     }
     
@@ -222,35 +303,66 @@ public class Combat extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        pluginEnabled = false;
+
+        if (packetEventsLoaded) {
+            try {
+                PacketEvents.getAPI().getEventManager().unregisterAllListeners();
+                debug("Packet listeners unregistered successfully.");
+            } catch (Exception e) {
+                debug("Error unregistering packet listeners: " + e.getMessage());
+            }
+        }
+
+        cleanUpPlayerData();
+
+        if (packetEventsLoaded) {
+            try {
+                PacketEvents.getAPI().terminate();
+                debug("PacketEvents terminated successfully.");
+            } catch (Exception e) {
+                debug("Error during PacketEvents termination: " + e.getMessage());
+            }
+        }
+
         SchedulerUtil.setShuttingDown(true);
         Update.setShuttingDown(true);
         Update.cleanupTasks();
-        
         if (glowManager != null) {
-            glowManager.cleanup();
+            try {
+                glowManager.cleanup();
+            } catch (Exception e) {
+                debug("Error cleaning up GlowManager: " + e.getMessage());
+            }
         }
 
         try {
             Thread.sleep(50);
         } catch (InterruptedException ignored) {}
 
-        SchedulerUtil.cancelAllTasks(this);
+        try {
+            SchedulerUtil.cancelAllTasks(this);
+        } catch (Exception e) {
+            debug("Error canceling tasks: " + e.getMessage());
+        }
 
         combatRecords.clear();
         lastActionBarUpdates.clear();
-        try {
-            if (peInitialized && PacketEvents.getAPI() != null) {
-                PacketEvents.getAPI().getEventManager().unregisterAllListeners();
-                PacketEvents.getAPI().terminate();
-                debug("PacketEvents terminated successfully");
-            } else {
-                debug("Skipping PacketEvents terminate: not initialized");
-            }
-        } catch (Exception e) {
-            debug("Error during PacketEvents shutdown: " + e.getMessage());
-        }
 
         getLogger().info("MasterCombat shutdown complete.");
+    }
+
+    private void cleanUpPlayerData() {
+        combatRecords.clear();
+        lastActionBarUpdates.clear();
+        if (glowManager != null) {
+            glowManager.cleanup();
+        }
+        debug("Player data cleaned up successfully.");
+    }
+
+    public boolean isPluginEnabled() {
+        return pluginEnabled;
     }
 
     @EventHandler
@@ -272,44 +384,6 @@ public class Combat extends JavaPlugin implements Listener {
         
         if (glowManager != null) {
             glowManager.untrackPlayer(player);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onEntityDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player victim)) return;
-        if (event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) return;
-
-        Location location = victim.getLocation();
-        Block anchorBlock = null;
-        
-        int blockX = location.getBlockX();
-        int blockY = location.getBlockY();
-        int blockZ = location.getBlockZ();
-        
-        for (int x = -2; x <= 2; x++) {
-            for (int y = -2; y <= 2; y++) {
-                for (int z = -2; z <= 2; z++) {
-                    Block block = location.getWorld().getBlockAt(blockX + x, blockY + y, blockZ + z);
-                    if (block.getType() == Material.RESPAWN_ANCHOR) {
-                        anchorBlock = block;
-                        x = y = z = 3;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (anchorBlock == null) return;
-
-        UUID anchorId = UUID.nameUUIDFromBytes(anchorBlock.getLocation().toString().getBytes());
-        Player activator = newbieProtectionListener.getAnchorActivator(anchorId);
-        if (activator == null) return;
-
-        if (newbieProtectionListener.isActuallyProtected(activator) &&
-            !newbieProtectionListener.isActuallyProtected(victim)) {
-            event.setCancelled(true);
-            newbieProtectionListener.sendBlockedMessage(activator, newbieProtectionListener.getAnchorBlockMessage());
         }
     }
 
@@ -726,6 +800,10 @@ public class Combat extends JavaPlugin implements Listener {
         return newbieProtectionListener;
     }
 
+    public RespawnAnchorListener getRespawnAnchorListener() {
+        return respawnAnchorListener;
+    }
+
     public Map<UUID, CombatRecord> getCombatRecords() {
         return combatRecords;
     }
@@ -772,11 +850,10 @@ public class Combat extends JavaPlugin implements Listener {
                 PacketEvents.getAPI().getSettings()
                     .reEncodeByDefault(true)
                     .checkForUpdates(false);
-                PacketEvents.getAPI().load();
-                debug("Successfully loaded PacketEvents");
+                debug("Successfully initialized PacketEvents settings");
             }
         } catch (Exception e) {
-            getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
+            getLogger().warning("Failed to initialize PacketEvents settings: " + e.getMessage());
             if (glowingEnabled) {
                 glowingEnabled = false;
                 getLogger().warning("Disabled glowing system due to PacketEvents initialization failure");
@@ -827,48 +904,39 @@ public class Combat extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        instance = this;
         saveDefaultConfig();
         ConfigUtil.updateConfig(this);
-        instance = this;
+
+        if (isPacketEventsAvailable() && !PacketEvents.getAPI().isLoaded()) {
+            try {
+                PacketEvents.getAPI().load();
+                packetEventsLoaded = true;
+                debug("PacketEvents loaded successfully");
+            } catch (Exception e) {
+                getLogger().warning("Failed to load PacketEvents: " + e.getMessage());
+                packetEventsLoaded = false;
+            }
+        }
 
         loadConfigValues();
         initializeManagers();
-
-        if (isPacketEventsAvailable() && !peInitialized) {
-            try {
-                PacketEvents.getAPI().init();
-                peInitialized = true;
-                debug("PacketEvents initialized successfully");
-            } catch (Exception e) {
-                peInitialized = false;
-                getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
-                disablePacketEventsFeatures();
-            }
-        } else if (!isPacketEventsAvailable()) {
-            peInitialized = false;
-            getLogger().warning("PacketEvents not found. Disabling PacketEvents-dependent features.");
-            disablePacketEventsFeatures();
-        }
-
         registerCommands();
         registerListeners();
         startCombatTimer();
         initializeAPI();
         sendStartupMessage();
 
-        new Metrics(this, 25701);
-    }
-
-    private void disablePacketEventsFeatures() {
-        WorldGuardUtil.disablePacketEventsIntegration();
-        EndCrystalListener.disablePacketEventsIntegration();
-        BedExplosionListener.disablePacketEventsIntegration();
-        PlayerMoveListener.disablePacketEventsIntegration();
-        ItemRestrictionListener.disablePacketEventsIntegration();
-        if (glowManager != null) {
-            glowManager.disablePacketEventsIntegration();
+        if (packetEventsLoaded) {
+            try {
+                PacketEvents.getAPI().init();
+                debug("PacketEvents initialized successfully");
+            } catch (Exception e) {
+                getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
+            }
         }
-        getLogger().warning("PacketEvents features disabled. Some functionality will be limited.");
+
+        new Metrics(this, 25701);
     }
 
     public void debug(String message) {
@@ -879,5 +947,9 @@ public class Combat extends JavaPlugin implements Listener {
 
     public boolean isDebugEnabled() {
         return debugEnabled;
+    }
+
+    public String getPrefix() {
+        return prefix;
     }
 }

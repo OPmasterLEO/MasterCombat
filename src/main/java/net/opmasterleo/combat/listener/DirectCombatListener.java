@@ -57,12 +57,6 @@ public class DirectCombatListener extends Combat.PacketListenerAdapter implement
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         Combat combat = Combat.getInstance();
-        double minDamage = combat.getConfig().getDouble("damage-threshold", 0.01);
-        if (event.getFinalDamage() <= minDamage) {
-            combat.debug("Skipped damage event: damage below threshold (" + event.getFinalDamage() + " <= " + minDamage + ")");
-            return;
-        }
-        
         if (!(event.getEntity() instanceof Player victim)) return;
         
         Player attacker = null;
@@ -92,7 +86,8 @@ public class DirectCombatListener extends Combat.PacketListenerAdapter implement
             return;
         }
         
-        combat.debug("Direct combat detected: " + attacker.getName() + " -> " + victim.getName());
+        combat.debug("Direct combat detected: " + attacker.getName() + " -> " + victim.getName() + 
+                    " (Final damage: " + event.getFinalDamage() + ", Original: " + event.getDamage() + ")");
         handleCombat(attacker, victim);
     }
  

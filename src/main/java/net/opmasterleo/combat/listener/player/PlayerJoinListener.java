@@ -18,11 +18,13 @@ public class PlayerJoinListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
+        if (!plugin.isEnabled()) return;
+        
         Player player = event.getPlayer();
         if (plugin.getGlowManager() != null) {
             plugin.getGlowManager().trackPlayer(player);
         }
-        
+
         if (notifyUpdates && player.isOp()) {
             Update.notifyOnPlayerJoin(player, plugin);
         }

@@ -1,68 +1,58 @@
 package net.opmasterleo.combat.listener.player;
 
+import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-public class PlayerQuitListener implements Listener {
-    private static final String LOGOUT_KEY = "Messages.LogoutInCombat";
-    private static final String COMBAT_LOGGED_KEY = "Messages.CombatLogged";
-    private static final String PREFIX_KEY = "Messages.Prefix";
-    private static final String PLAYER_PLACEHOLDER = "%player%";
+import java.util.UUID;
 
-    @EventHandler
+public class PlayerQuitListener implements Listener {
+
+    private final Combat plugin;
+
+    public PlayerQuitListener() {
+        this.plugin = Combat.getInstance();
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        Combat combat = Combat.getInstance();
-        
-        if (!combat.isInCombat(player)) return;
+        if (!plugin.isInCombat(player)) return;
 
-        Player opponent = combat.getCombatOpponent(player);
-        if (opponent != null) {
-            player.setKiller(opponent);
-        }
-
-        player.setHealth(0);
-        String logoutMsg = getCombatMessage(combat, LOGOUT_KEY);
-        
-        if (!logoutMsg.isEmpty()) {
-            String prefix = combat.getMessage(PREFIX_KEY);
-            if (combat.getConfig().getBoolean("General.CustomDeathMessage.enabled", false)) {
-                String customPrefix = combat.getConfig().getString("General.CustomDeathMessage.prefix", "");
-                prefix = ChatUtil.parse(customPrefix).toString() + prefix;
-            }
-            String message = (prefix + logoutMsg).replace(PLAYER_PLACEHOLDER, player.getName());
-            broadcastCombatMessage(combat, message);
-        }
-
-        combat.forceCombatCleanup(player.getUniqueId());
-        
-        if (opponent != null) {
-            String combatLoggedMsg = getCombatMessage(combat, COMBAT_LOGGED_KEY);
-            if (!combatLoggedMsg.isEmpty()) {
-                String prefix = combat.getMessage(PREFIX_KEY);
-                if (combat.getConfig().getBoolean("General.CustomDeathMessage.enabled", false)) {
-                    String customPrefix = combat.getConfig().getString("General.CustomDeathMessage.prefix", "");
-                    prefix = ChatUtil.parse(customPrefix).toString() + prefix;
-                }
-                String message = (prefix + combatLoggedMsg).replace(PLAYER_PLACEHOLDER, player.getName());
-                opponent.sendMessage(ChatUtil.parse(message));
+        UUID playerUUID = player.getUniqueId();
+        Combat.CombatRecord record = plugin.getCombatRecords().get(playerUUID);
+        Player opponent = null;
+        if (record != null && record.opponent != null) {
+            opponent = Bukkit.getPlayer(record.opponent);
+            if (opponent != null) {
+                player.setKiller(opponent);
             }
         }
-    }
 
-    private String getCombatMessage(Combat combat, String key) {
-        if (combat.getConfig().isConfigurationSection(key)) {
-            return combat.getConfig().getString(key + ".text", "");
+        try {
+            player.setHealth(0);
+        } catch (Exception ignored) {
         }
-        return combat.getConfig().getString(key, "");
-    }
 
-    private void broadcastCombatMessage(Combat combat, String message) {
-        net.kyori.adventure.text.Component component = ChatUtil.parse(message);
-        combat.getServer().getOnlinePlayers().forEach(p -> p.sendMessage(component));
+        if (opponent != null) {
+            String logoutMessage = plugin.getConfig().getString("Messages.CombatLogged.text", "");
+            if (logoutMessage != null && !logoutMessage.isEmpty()) {
+                logoutMessage = logoutMessage.replace("%player%", player.getName());
+                Component message = ChatUtil.parse(plugin.getPrefix() + logoutMessage);
+                opponent.sendMessage(message);
+            }
+        }
+
+        plugin.getCombatRecords().remove(playerUUID);
+        if (plugin.getGlowManager() != null) {
+            plugin.getGlowManager().untrackPlayer(player);
+        }
+        plugin.forceCombatCleanup(playerUUID);
     }
 }

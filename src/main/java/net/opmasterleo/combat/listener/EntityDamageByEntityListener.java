@@ -11,11 +11,16 @@ import net.opmasterleo.combat.manager.SuperVanishManager;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.*;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.Listener;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class EntityDamageByEntityListener implements PacketListener {
+public final class EntityDamageByEntityListener implements PacketListener, Listener {
     private static final long ATTACK_TIMEOUT = 5000;
     private static final long CLEANUP_DELAY = 100L;
     
@@ -23,6 +28,14 @@ public final class EntityDamageByEntityListener implements PacketListener {
     private final Map<UUID, Long> attackTimestamps = new ConcurrentHashMap<>();
     private final Combat combat = Combat.getInstance();
 
+    public EntityDamageByEntityListener() {
+        Combat combat = Combat.getInstance();
+        combat.getServer().getPluginManager().registerEvents(this, combat);
+        if (combat.isPacketEventsAvailable()) {
+            combat.safelyRegisterPacketListener(this);
+        }
+    }
+    
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
@@ -219,6 +232,41 @@ public final class EntityDamageByEntityListener implements PacketListener {
             combat.setCombat(victim, activator);
             combat.setCombat(activator, victim);
             setKillerIfLethal(victim, damage, activator);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityDamage(EntityDamageEvent event) {
+        Combat combat = Combat.getInstance();
+        if (combat.getRespawnAnchorListener() != null) {
+            combat.getRespawnAnchorListener().onEntityDamage(event);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        Combat combat = Combat.getInstance();
+        combat.debug("EntityDamageByEntityEvent triggered: " + event.getEntity().getType() + 
+                    " damaged by " + event.getDamager().getType() + 
+                    " for " + event.getDamage() + " damage");
+        
+        if (event.getEntity() instanceof Player victim) {
+            if (event.getDamager() instanceof TNTPrimed tnt) {
+                handleTNTDamage(victim, tnt, event.getFinalDamage());
+            } else if (event.getDamager() instanceof EnderCrystal crystal) {
+                handleCrystalDamage(victim, crystal, event.getFinalDamage());
+            } else if (event.getDamager() instanceof FishHook hook) {
+                handleFishingRodDamage(victim, hook, event.getFinalDamage());
+            } else if (event.getDamager() instanceof Tameable pet) {
+                handlePetDamage(victim, pet, event.getFinalDamage());
+            }
+            
+            if (combat.getRespawnAnchorListener() != null && 
+                (event.getCause() == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION || 
+                 event.getCause() == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION)) {
+                combat.debug("Delegating explosion damage to RespawnAnchorListener");
+                combat.getRespawnAnchorListener().onEntityDamage(event);
+            }
         }
     }
 }
