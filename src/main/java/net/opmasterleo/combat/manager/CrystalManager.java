@@ -1,79 +1,70 @@
 package net.opmasterleo.combat.manager;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
-import net.opmasterleo.combat.Combat;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public final class CrystalManager {
-    private static final long CRYSTAL_TTL = TimeUnit.SECONDS.toMillis(60);
-    private static final long CLEANUP_INTERVAL = TimeUnit.SECONDS.toMillis(30);
-    
-    private static class CrystalData {
-        final UUID placer;
-        final long expiry;
-        
-        CrystalData(UUID placer, long expiry) {
-            this.placer = placer;
-            this.expiry = expiry;
-        }
+public class CrystalManager {
+    private final ConcurrentHashMap<UUID, UUID> crystalPlacers = new ConcurrentHashMap<>();
+
+    public void initialize(Combat plugin) {
+        SchedulerUtil.runTaskTimerAsync(plugin, this::cleanupExpiredEntries, 20 * 60, 20 * 60);
     }
 
-    private final Map<Integer, CrystalData> crystalMap = new ConcurrentHashMap<>(512);
-    private volatile long nextCleanupTime = System.currentTimeMillis() + CLEANUP_INTERVAL;
-
-    public CrystalManager() {
-        startCleanupTask();
-    }
-    
-    private void startCleanupTask() {
-        net.opmasterleo.combat.util.SchedulerUtil.runTaskTimerAsync(
-            Combat.getInstance(),
-            this::cleanExpiredCrystals,
-            600L, 600L);
-    }
-
-    private void cleanExpiredCrystals() {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime < nextCleanupTime) return;
-        
-        long newNextCleanup = currentTime + CLEANUP_INTERVAL;
-        crystalMap.entrySet().removeIf(entry -> {
-            if (entry.getValue().expiry < currentTime) {
-                return true;
-            }
-            return false;
-        });
-        nextCleanupTime = newNextCleanup;
+    public void setPlacer(Entity crystal, Player placer) {
+        if (crystal == null || placer == null) return;
+        crystalPlacers.put(crystal.getUniqueId(), placer.getUniqueId());
     }
 
     public Player getPlacer(Entity crystal) {
         if (crystal == null) return null;
-        
-        if (!Combat.getInstance().getConfig().getBoolean("link-end-crystals", true)) {
-            return null;
-        }
-
-        CrystalData data = crystalMap.get(crystal.getEntityId());
-        return data != null ? Bukkit.getPlayer(data.placer) : null;
-    }
-
-    public void setPlacer(Entity crystal, Player player) {
-        if (crystal == null || player == null) return;
-        
-        int entityId = crystal.getEntityId();
-        long expiry = System.currentTimeMillis() + CRYSTAL_TTL;
-        crystalMap.put(entityId, new CrystalData(player.getUniqueId(), expiry));
+        UUID placerUuid = crystalPlacers.get(crystal.getUniqueId());
+        return placerUuid != null ? Bukkit.getPlayer(placerUuid) : null;
     }
 
     public void removeCrystal(Entity crystal) {
-        if (crystal != null) {
-            crystalMap.remove(crystal.getEntityId());
+        if (crystal == null) return;
+        crystalPlacers.remove(crystal.getUniqueId());
+    }
+    
+    private void cleanupExpiredEntries() {
+        if (crystalPlacers.isEmpty()) return;
+        
+        Set<UUID> toRemove = ConcurrentHashMap.newKeySet();
+        for (UUID crystalUuid : crystalPlacers.keySet()) {
+            Entity entity = null;
+            for (World world : Bukkit.getWorlds()) {
+                entity = getEntityByUUID(world, crystalUuid);
+                if (entity != null) break;
+            }
+
+            if (entity == null || !entity.isValid() || entity.isDead()) {
+                toRemove.add(crystalUuid);
+            }
         }
+        
+        for (UUID uuid : toRemove) {
+            crystalPlacers.remove(uuid);
+        }
+        
+        if (!toRemove.isEmpty() && Combat.getInstance().isDebugEnabled()) {
+            Combat.getInstance().debug("Cleaned up " + toRemove.size() + " expired crystal entries");
+        }
+    }
+
+    private Entity getEntityByUUID(World world, UUID uuid) {
+        for (Entity entity : world.getEntities()) {
+            if (entity.getUniqueId().equals(uuid)) {
+                return entity;
+            }
+        }
+        return null;
     }
 }

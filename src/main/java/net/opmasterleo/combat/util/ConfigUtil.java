@@ -6,6 +6,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.regex.Pattern;
 
@@ -26,7 +27,7 @@ public class ConfigUtil {
         
         List<String> output = new ArrayList<>();
         Map<String, String> userValues = parseValues(userLines);
-        Set<String> processedKeys = new HashSet<>();
+        Set<String> processedKeys = Collections.newSetFromMap(new ConcurrentHashMap<>());
         Deque<String> pathStack = new ArrayDeque<>();
         
         for (String defaultLine : defaultLines) {

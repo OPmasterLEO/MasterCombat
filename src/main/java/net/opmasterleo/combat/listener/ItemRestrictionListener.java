@@ -23,8 +23,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -38,7 +36,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     public static void disablePacketEventsIntegration() { packetEventsEnabled = false; }
 
     private final Combat plugin;
-    private final Set<Material> disabledItems = new HashSet<>();
+    private final Set<Material> disabledItems = ConcurrentHashMap.newKeySet();
     private boolean itemRestrictionsEnabled;
     private boolean enderpearlCooldownEnabled;
     private boolean enderpearlCombatOnly;
@@ -46,9 +44,9 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private boolean tridentCombatOnly;
     private final Map<UUID, Long> enderpearlCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> tridentCooldowns = new ConcurrentHashMap<>();
-    private final Map<String, Boolean> worldTridentBans = new HashMap<>();
-    private final Map<String, Boolean> worldEnderpearlCooldowns = new HashMap<>();
-    private final Map<String, Boolean> worldTridentCooldowns = new HashMap<>();
+    private final Map<String, Boolean> worldTridentBans = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> worldEnderpearlCooldowns = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> worldTridentCooldowns = new ConcurrentHashMap<>();
     private long enderpearlCooldownDuration;
     private long tridentCooldownDuration;
     private String enderpearlCooldownMessage;

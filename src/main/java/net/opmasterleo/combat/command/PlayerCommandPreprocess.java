@@ -2,6 +2,7 @@ package net.opmasterleo.combat.command;
 
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -21,7 +22,7 @@ public final class PlayerCommandPreprocess implements Listener {
     }
 
     public void reloadBlockedCommands() {
-        blockedCommands = new java.util.HashSet<>();
+        blockedCommands = new CopyOnWriteArraySet<>();
         for (String cmd : Combat.getInstance().getConfig().getStringList("Commands.Blocked")) {
             blockedCommands.add(cmd.toLowerCase(Locale.ROOT).trim());
         }

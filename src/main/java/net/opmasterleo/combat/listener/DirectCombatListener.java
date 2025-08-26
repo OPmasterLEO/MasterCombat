@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.listener;
 
+import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
@@ -17,7 +18,7 @@ import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.GameMode;
 
-public class DirectCombatListener extends Combat.PacketListenerAdapter implements Listener {
+public class DirectCombatListener implements PacketListener, Listener {
 
     public DirectCombatListener() {
         Combat combat = Combat.getInstance();

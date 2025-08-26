@@ -292,13 +292,37 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 stateType = StateTypes.RED_STAINED_GLASS;
             }
 
-            WrapperPlayServerBlockChange packet = new WrapperPlayServerBlockChange(
-                new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                stateType.hashCode()
-            );
+            Object pkt = null;
+            try {
+                pkt = Combat.createWrapperPlayServerBlockChange(
+                    new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+                    Integer.valueOf(stateType.hashCode())
+                );
+            } catch (Throwable ignored) {}
 
-            PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
-
+            if (pkt != null) {
+                try {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, pkt);
+                } catch (Throwable t) {
+                    try {
+                        com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange legacy =
+                            new com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange(
+                                new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+                                stateType.hashCode()
+                            );
+                        PacketEvents.getAPI().getPlayerManager().sendPacket(player, legacy);
+                    } catch (Throwable ignored) {}
+                }
+            } else {
+                try {
+                    com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange legacy =
+                        new com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange(
+                            new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+                            stateType.hashCode()
+                        );
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, legacy);
+                } catch (Throwable ignored) {}
+            }
         } catch (Exception e) {
             player.sendBlockChange(loc, material.createBlockData());
         }

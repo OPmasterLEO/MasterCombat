@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.api;
 
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
@@ -58,5 +59,61 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
                 }
             }
         }
+    }
+
+    @Override
+    public String getMasterCombatState(UUID uuid) {
+        if (uuid == null) return "Idle";
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null) return "Idle";
+        return plugin.isInCombat(player) ? "Fighting" : "Idle";
+    }
+
+    @Override
+    public boolean isPlayerGlowing(UUID uuid) {
+        if (uuid == null) return false;
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null) return false;
+
+        Object glowManager = plugin.getGlowManager();
+        if (glowManager == null) return false;
+        String[] candidateMethods = {
+            "isGlowing", "hasGlow", "isPlayerGlowing", "isGlowed", "isGlowingPlayer", "hasPlayer", "isTracking"
+        };
+
+        for (String mName : candidateMethods) {
+            try {
+                Method m = glowManager.getClass().getMethod(mName, Player.class);
+                Object res = m.invoke(glowManager, player);
+                if (res instanceof Boolean) return (Boolean) res;
+            } catch (NoSuchMethodException ignored) {}
+            catch (Throwable ignored) {}
+
+            try {
+                Method m2 = glowManager.getClass().getMethod(mName, UUID.class);
+                Object res2 = m2.invoke(glowManager, uuid);
+                if (res2 instanceof Boolean) return (Boolean) res2;
+            } catch (NoSuchMethodException ignored) {}
+            catch (Throwable ignored) {}
+        }
+
+        try {
+            Method m = glowManager.getClass().getMethod("isGlowing");
+            Object res = m.invoke(glowManager);
+            if (res instanceof Boolean) return (Boolean) res;
+        } catch (Throwable ignored) {}
+
+        return false;
+    }
+
+    @Override
+    public String getMasterCombatStateWithGlow(UUID uuid) {
+        String state = getMasterCombatState(uuid);
+        try {
+            if (isPlayerGlowing(uuid)) {
+                return state + " (Glowing)";
+            }
+        } catch (Throwable ignored) {}
+        return state;
     }
 }

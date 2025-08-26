@@ -1,15 +1,13 @@
 package net.opmasterleo.combat;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketListenerCommon;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.*;
@@ -71,7 +69,15 @@ public class Combat extends JavaPlugin implements Listener {
     private String combatFormat;
     private boolean packetEventsLoaded = false;
     private boolean pluginEnabled = true;
-    
+    private boolean folia = false;
+
+    private ThreadPoolExecutor combatWorkerPool;
+    private int maxWorkerPoolSize;
+    private final AtomicInteger activeTaskCount = new AtomicInteger(0);
+    private final Map<String, Long> pendingTasks = new ConcurrentHashMap<>();
+    private final Map<String, Long> taskMetrics = new ConcurrentHashMap<>();
+    private long lastMetricsLog = 0;
+
     public static class CombatRecord {
         public final long expiry;
         public final UUID opponent;
@@ -87,7 +93,8 @@ public class Combat extends JavaPlugin implements Listener {
         combatEnabled = getConfig().getBoolean("General.combat-enabled", true);
         glowingEnabled = getConfig().getBoolean("General.CombatTagGlowing", false);
         enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
-        enabledWorlds = new HashSet<>(getConfig().getStringList("EnabledWorlds.worlds"));
+        enabledWorlds = ConcurrentHashMap.newKeySet();
+        enabledWorlds.addAll(getConfig().getStringList("EnabledWorlds.worlds"));
         enderPearlEnabled = getConfig().getBoolean("EnderPearl.Enabled", false);
         enderPearlDistance = getConfig().getLong("EnderPearl.Distance", 0);
         debugEnabled = getConfig().getBoolean("debug", false);
@@ -133,6 +140,8 @@ public class Combat extends JavaPlugin implements Listener {
         }
         
         crystalManager = new CrystalManager();
+        crystalManager.initialize(this);
+        
         if (Bukkit.getPluginManager().getPlugin("WorldGuard") != null) {
             try {
                 worldGuardUtil = new WorldGuardUtil(this);
@@ -147,6 +156,7 @@ public class Combat extends JavaPlugin implements Listener {
         if (glowingEnabled && isPacketEventsAvailable()) {
             try {
                 glowManager = new GlowManager();
+                glowManager.initialize(this);
                 debug("Glowing effect system enabled");
             } catch (Exception e) {
                 glowingEnabled = false;
@@ -157,7 +167,7 @@ public class Combat extends JavaPlugin implements Listener {
             getLogger().warning("PacketEvents not found, glowing effect system disabled");
         }
     }
-    
+
     private void registerCommands() {
         CombatCommand combatCommand = new CombatCommand();
         Objects.requireNonNull(getCommand("combat")).setExecutor(combatCommand);
@@ -240,6 +250,7 @@ public class Combat extends JavaPlugin implements Listener {
 
         try {
             endCrystalListener = new EndCrystalListener();
+            endCrystalListener.initialize(this);
             Bukkit.getPluginManager().registerEvents(endCrystalListener, this);
             debug("Registered EndCrystalListener successfully.");
         } catch (Exception e) {
@@ -269,6 +280,7 @@ public class Combat extends JavaPlugin implements Listener {
         if (getConfig().getBoolean("link-bed-explosions", true)) {
             try {
                 bedExplosionListener = new BedExplosionListener();
+                bedExplosionListener.initialize(this);
                 Bukkit.getPluginManager().registerEvents(bedExplosionListener, this);
                 debug("Registered BedExplosionListener successfully.");
             } catch (Exception e) {
@@ -304,6 +316,35 @@ public class Combat extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         pluginEnabled = false;
+        if (combatWorkerPool != null) {
+            combatWorkerPool.shutdown();
+            
+            try {
+                for (int i = 0; i < 10; i++) {
+                    if (combatWorkerPool.awaitTermination(200, TimeUnit.MILLISECONDS)) {
+                        debug("Thread pool shut down successfully");
+                        break;
+                    }
+                    
+                    if (i % 2 == 0 && combatWorkerPool.getActiveCount() > 0) {
+                        debug("Waiting for " + combatWorkerPool.getActiveCount() + " tasks to complete...");
+                    }
+                }
+                
+                if (!combatWorkerPool.isTerminated()) {
+                    debug("Force shutting down thread pool with " + combatWorkerPool.getActiveCount() + " active tasks");
+                    combatWorkerPool.shutdownNow();
+                    combatWorkerPool.awaitTermination(500, TimeUnit.MILLISECONDS);
+                }
+            } catch (InterruptedException ignored) {
+                combatWorkerPool.shutdownNow();
+                Thread.currentThread().interrupt();
+            } finally {
+                combatWorkerPool = null;
+                pendingTasks.clear();
+                taskMetrics.clear();
+            }
+        }
 
         if (packetEventsLoaded) {
             try {
@@ -472,58 +513,176 @@ public class Combat extends JavaPlugin implements Listener {
         }
     }
 
-    private void startCombatTimer() {
-        final long timerInterval = isPacketEventsAvailable() ? 20L : 30L;
-        final int BATCH_SIZE = 50;
-        final AtomicInteger currentIndex = new AtomicInteger(0);
-        final List<UUID> playerUUIDs = new ArrayList<>();
-        final long[] lastBatchTime = {0};
-        
-        Runnable timerTask = () -> {
-            long currentTime = System.currentTimeMillis();
-            
-            if (System.currentTimeMillis() - lastBatchTime[0] > 5000 || playerUUIDs.isEmpty()) {
-                playerUUIDs.clear();
-                playerUUIDs.addAll(combatRecords.keySet());
-                currentIndex.set(0);
-                lastBatchTime[0] = System.currentTimeMillis();
-            }
-            
-            int startIdx = currentIndex.getAndAdd(BATCH_SIZE);
-            int endIdx = Math.min(startIdx + BATCH_SIZE, playerUUIDs.size());
-            
-            for (int i = startIdx; i < endIdx; i++) {
-                UUID uuid = playerUUIDs.get(i);
-                CombatRecord record = combatRecords.get(uuid);
-                if (record == null) continue;
-                
-                Player player = Bukkit.getPlayer(uuid);
-                if (player == null) {
-                    combatRecords.remove(uuid);
-                    lastActionBarUpdates.remove(uuid);
-                    continue;
-                }
-
-                if (currentTime >= record.expiry) {
-                    handleCombatEnd(player);
-                    lastActionBarUpdates.remove(uuid);
-                } else {
-                    Long lastUpdate = lastActionBarUpdates.get(uuid);
-                    if (lastUpdate == null || currentTime - lastUpdate >= 250) {
-                        updateActionBar(player, record.expiry, currentTime);
-                        lastActionBarUpdates.put(uuid, currentTime);
+    private void startThreadPoolMetricsTask() {
+        SchedulerUtil.runTaskTimerAsync(this, () -> {
+            long now = System.currentTimeMillis();
+            int activeCount = combatWorkerPool.getActiveCount();
+            int poolSize = combatWorkerPool.getPoolSize();
+            int queueSize = combatWorkerPool.getQueue().size();
+            int tasksCompleted = (int)combatWorkerPool.getCompletedTaskCount();
+            if (activeCount > 0 || poolSize > corePoolSize() || now - lastMetricsLog > 300000) {
+                if (debugEnabled) {
+                    debug(String.format("Thread pool stats - Active: %d, Size: %d/%d, Queue: %d, Completed: %d, Pending tasks: %d", 
+                        activeCount, poolSize, maxWorkerPoolSize, queueSize, tasksCompleted, pendingTasks.size()));
+                    
+                    if (!taskMetrics.isEmpty()) {
+                        StringBuilder metricsLog = new StringBuilder("Task execution times (ms): ");
+                        for (Map.Entry<String, Long> entry : taskMetrics.entrySet()) {
+                            metricsLog.append(entry.getKey()).append("=").append(entry.getValue()).append(", ");
+                        }
+                        debug(metricsLog.substring(0, Math.min(metricsLog.length(), 100)) + (metricsLog.length() > 100 ? "..." : ""));
                     }
                 }
+                lastMetricsLog = now;
+
+                pendingTasks.entrySet().removeIf(entry -> now - entry.getValue() > 10000);
+
+                if (taskMetrics.size() > 100) {
+                    taskMetrics.clear();
+                }
             }
-            
-            if (endIdx >= playerUUIDs.size()) {
-                playerUUIDs.clear();
-                currentIndex.set(0);
+        }, 60 * 20, 60 * 20);
+    }
+    
+    private int corePoolSize() {
+        return Math.max(1, maxWorkerPoolSize / 2);
+    }
+
+    private void startCombatTimer() {
+        final long timerInterval = isPacketEventsAvailable() ? 20L : 30L;
+        final boolean useWorkers = !folia;
+        final int BATCH_SIZE = 50;
+        final List<UUID> playerUUIDs = new ArrayList<>();
+
+        Runnable timerTask = () -> {
+            playerUUIDs.clear();
+            playerUUIDs.addAll(combatRecords.keySet());
+            if (playerUUIDs.isEmpty()) return;
+
+            int total = playerUUIDs.size();
+
+            final int dynamicBatchSize = Math.min(BATCH_SIZE, Math.max(10, total / Math.max(1, combatWorkerPool.getPoolSize())));
+
+            for (int start = 0; start < total; start += dynamicBatchSize) {
+                final int s = start;
+                final int e = Math.min(start + dynamicBatchSize, total);
+                
+                final String batchKey = "combat-batch-" + s + "-" + e;
+                
+                if (pendingTasks.containsKey(batchKey) && 
+                    System.currentTimeMillis() - pendingTasks.get(batchKey) < 500) {
+                    continue;
+                }
+                
+                pendingTasks.put(batchKey, System.currentTimeMillis());
+                
+                if (useWorkers && combatWorkerPool != null && !combatWorkerPool.isShutdown()) {
+                    combatWorkerPool.submit(() -> {
+                        long startTime = System.currentTimeMillis();
+                        activeTaskCount.incrementAndGet();
+                        
+                        try {
+                            final List<UUID> toEnd = new ArrayList<>();
+                            final List<UUID> toActionbar = new ArrayList<>();
+                            final Map<UUID, Long> actionbarExpiry = new HashMap<>();
+
+                            long currentTime = System.currentTimeMillis();
+
+                            for (int i = s; i < e; i++) {
+                                if (i >= playerUUIDs.size()) break;
+                                UUID uuid = playerUUIDs.get(i);
+                                CombatRecord record = combatRecords.get(uuid);
+                                if (record == null) continue;
+
+                                if (currentTime >= record.expiry) {
+                                    toEnd.add(uuid);
+                                } else {
+                                    Long lastUpdate = lastActionBarUpdates.get(uuid);
+                                    if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                        toActionbar.add(uuid);
+                                        actionbarExpiry.put(uuid, record.expiry);
+                                    }
+                                }
+                            }
+
+                            if (!toEnd.isEmpty() || !toActionbar.isEmpty()) {
+                                SchedulerUtil.runTask(Combat.this, () -> {
+                                    long syncNow = System.currentTimeMillis();
+                                    for (UUID uuid : toEnd) {
+                                        Player player = Bukkit.getPlayer(uuid);
+                                        if (player != null) {
+                                            handleCombatEnd(player);
+                                        }
+                                        combatRecords.remove(uuid);
+                                        lastActionBarUpdates.remove(uuid);
+                                    }
+                                    if (!toActionbar.isEmpty()) {
+                                        List<UUID> sortedActionbars = new ArrayList<>(toActionbar);
+                                        if (sortedActionbars.size() > 5) {
+                                            sortedActionbars.sort((a, b) -> {
+                                                Long expA = actionbarExpiry.get(a);
+                                                Long expB = actionbarExpiry.get(b);
+                                                if (expA == null) return 1;
+                                                if (expB == null) return -1;
+                                                return expA.compareTo(expB);
+                                            });
+                                        }
+                                        
+                                        for (UUID uuid : sortedActionbars) {
+                                            Player player = Bukkit.getPlayer(uuid);
+                                            if (player != null) {
+                                                Long expiry = actionbarExpiry.get(uuid);
+                                                if (expiry != null) {
+                                                    updateActionBar(player, expiry, syncNow);
+                                                    lastActionBarUpdates.put(uuid, syncNow);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        } finally {
+                            pendingTasks.remove(batchKey);
+                            activeTaskCount.decrementAndGet();
+                            long execTime = System.currentTimeMillis() - startTime;
+                            taskMetrics.put(batchKey + "-" + execTime, execTime);
+                        }
+                    });
+                } else {
+                    long currentTime = System.currentTimeMillis();
+                    for (int i = s; i < e; i++) {
+                        UUID uuid = playerUUIDs.get(i);
+                        CombatRecord record = combatRecords.get(uuid);
+                        if (record == null) continue;
+
+                        Player player = Bukkit.getPlayer(uuid);
+                        if (player == null) {
+                            combatRecords.remove(uuid);
+                            lastActionBarUpdates.remove(uuid);
+                            continue;
+                        }
+
+                        if (currentTime >= record.expiry) {
+                            handleCombatEnd(player);
+                            lastActionBarUpdates.remove(uuid);
+                        } else {
+                            Long lastUpdate = lastActionBarUpdates.get(uuid);
+                            if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                updateActionBar(player, record.expiry, currentTime);
+                                lastActionBarUpdates.put(uuid, currentTime);
+                            }
+                        }
+                    }
+                }
             }
         };
 
         try {
-            SchedulerUtil.runTaskTimerAsync(this, timerTask, timerInterval, timerInterval);
+            if (useWorkers) {
+                SchedulerUtil.runTaskTimerAsync(this, timerTask, timerInterval, timerInterval);
+            } else {
+                SchedulerUtil.runTaskTimer(this, timerTask, timerInterval, timerInterval);
+            }
         } catch (Exception e) {
             getLogger().warning("Failed to schedule combat timer: " + e.getMessage());
         }
@@ -867,12 +1026,60 @@ public class Combat extends JavaPlugin implements Listener {
         return entityManager;
     }
 
-    public static abstract class PacketListenerAdapter implements PacketListener {
-        @Override
-        public void onPacketReceive(PacketReceiveEvent event) {}
+    public static Object createWrapperPlayServerBlockChange(Object blockPosition, Object wrappedBlockStateOrGlobalId) {
+        try {
+            final ClassLoader cl = Combat.class.getClassLoader();
+            Class<?> packetCls = Class.forName("com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange", true, cl);
+            Class<?> vectorCls;
+            try {
+                vectorCls = Class.forName("com.github.retrooper.packetevents.util.Vector3i", true, cl);
+            } catch (ClassNotFoundException cnf) {
+                vectorCls = blockPosition != null ? blockPosition.getClass() : null;
+            }
 
-        @Override
-        public void onPacketSend(PacketSendEvent event) {}
+            try {
+                Class<?> wrappedStateCls = Class.forName("com.github.retrooper.packetevents.wrapper.block.WrappedBlockState", true, cl);
+                if (vectorCls != null && wrappedStateCls != null) {
+                    try {
+                        java.lang.reflect.Constructor<?> ctor = packetCls.getConstructor(vectorCls, wrappedStateCls);
+                        Object stateArg = wrappedBlockStateOrGlobalId;
+                        if (stateArg != null && !wrappedStateCls.isInstance(stateArg)) {
+                            try {
+                                java.lang.reflect.Method ofMethod = wrappedStateCls.getMethod("fromGlobalId", int.class);
+                                int gid = (wrappedBlockStateOrGlobalId instanceof Number) ? ((Number) wrappedBlockStateOrGlobalId).intValue() : -1;
+                                if (gid >= 0) stateArg = ofMethod.invoke(null, gid);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                        if (stateArg != null && wrappedStateCls.isInstance(stateArg)) {
+                            return ctor.newInstance(blockPosition, stateArg);
+                        }
+                    } catch (NoSuchMethodException ignored) {
+                    }
+                }
+            } catch (ClassNotFoundException ignored) {
+            }
+
+            try {
+                java.lang.reflect.Constructor<?> ctor2 = packetCls.getConstructor(vectorCls, int.class);
+                int gid = -1;
+                if (wrappedBlockStateOrGlobalId instanceof Number) {
+                    gid = ((Number) wrappedBlockStateOrGlobalId).intValue();
+                } else if (wrappedBlockStateOrGlobalId != null) {
+                    try {
+                        java.lang.reflect.Method m = wrappedBlockStateOrGlobalId.getClass().getMethod("getGlobalId");
+                        Object v = m.invoke(wrappedBlockStateOrGlobalId);
+                        if (v instanceof Number) gid = ((Number) v).intValue();
+                    } catch (Throwable ignored) {}
+                }
+                if (gid >= 0) {
+                    return ctor2.newInstance(blockPosition, gid);
+                }
+            } catch (NoSuchMethodException ignored) {
+            }
+        } catch (Throwable t) {
+        }
+        return null;
     }
 
     private void sendStartupMessage() {
@@ -907,6 +1114,41 @@ public class Combat extends JavaPlugin implements Listener {
         instance = this;
         saveDefaultConfig();
         ConfigUtil.updateConfig(this);
+
+        int cpus = Runtime.getRuntime().availableProcessors();
+        folia = SchedulerUtil.isFolia();
+        if (!folia) {
+            maxWorkerPoolSize = Math.max(2, cpus);
+        } else {
+            maxWorkerPoolSize = Math.max(1, Math.min(2, cpus - 1));
+        }
+        int corePoolSize = Math.max(1, maxWorkerPoolSize / 2);
+        
+        ThreadFactory threadFactory = new ThreadFactory() {
+            private final AtomicInteger threadCount = new AtomicInteger(1);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r, "MasterCombat-Worker-" + threadCount.getAndIncrement());
+                t.setDaemon(true);
+                if (threadCount.get() <= corePoolSize) {
+                    t.setPriority(Thread.NORM_PRIORITY);
+                } else {
+                    t.setPriority(Thread.NORM_PRIORITY - 1);
+                }
+                return t;
+            }
+        };
+        
+        combatWorkerPool = new ThreadPoolExecutor(
+            corePoolSize, maxWorkerPoolSize,
+            30, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(1000),
+            threadFactory,
+            new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        
+        combatWorkerPool.allowCoreThreadTimeOut(true);
+        startThreadPoolMetricsTask();
 
         if (isPacketEventsAvailable() && !PacketEvents.getAPI().isLoaded()) {
             try {
@@ -951,5 +1193,9 @@ public class Combat extends JavaPlugin implements Listener {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    public Executor getCombatWorkerPool() {
+        return combatWorkerPool;
     }
 }

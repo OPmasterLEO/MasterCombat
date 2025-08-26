@@ -380,7 +380,7 @@ public class NewbieProtectionListener implements Listener {
         titleStay = combat.getConfig().getInt("NewbieProtection.settings.TitleStay", 70);
         titleFadeOut = combat.getConfig().getInt("NewbieProtection.settings.TitleFadeOut", 20);
 
-        blockedItems = new HashSet<>();
+        blockedItems = Collections.newSetFromMap(new ConcurrentHashMap<>());
         for (String itemName : combat.getConfig().getStringList("NewbieProtection.settings.BlockedItems")) {
             try {
                 Material material = Material.valueOf(itemName.toUpperCase());

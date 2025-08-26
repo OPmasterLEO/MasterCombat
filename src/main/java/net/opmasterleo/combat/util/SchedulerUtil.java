@@ -2,16 +2,25 @@ package net.opmasterleo.combat.util;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class SchedulerUtil {
     private static final boolean IS_FOLIA = classExists("io.papermc.paper.threadedregions.RegionizedServer");
@@ -273,6 +282,124 @@ public final class SchedulerUtil {
     public static void removeTask(BukkitTask task) {
         if (task != null) {
             activeTasks.remove(task);
+        }
+    }
+
+    public static void runEntityTask(Plugin plugin, Entity entity, Runnable task) {
+        if (isFolia()) {
+            try {
+                Class<?> entitySchedulerClass = Class.forName("io.papermc.paper.threadedregions.scheduler.EntityScheduler");
+                Object entityScheduler = entity.getClass().getMethod("getScheduler").invoke(entity);
+                Method runMethod = entitySchedulerClass.getMethod("run", Plugin.class, Consumer.class);
+                
+                runMethod.invoke(entityScheduler, plugin, (Consumer<BukkitTask>) (bukkitTask) -> {
+                    try {
+                        task.run();
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Error in entity task: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
+                return;
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to schedule entity task with Folia: " + e.getMessage());
+            }
+        }
+        
+        runTask(plugin, task);
+    }
+
+    public static void runRegionTask(Plugin plugin, Location location, Runnable task) {
+        if (isFolia()) {
+            try {
+                Class<?> regionSchedulerClass = Class.forName("io.papermc.paper.threadedregions.scheduler.RegionScheduler");
+                Object regionScheduler = Bukkit.getServer().getClass().getMethod("getRegionScheduler").invoke(Bukkit.getServer());
+                Method runMethod = regionSchedulerClass.getMethod("run", Plugin.class, Location.class, Consumer.class);
+                
+                runMethod.invoke(regionScheduler, plugin, location, (Consumer<BukkitTask>) (bukkitTask) -> {
+                    try {
+                        task.run();
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Error in region task: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
+                return;
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to schedule region task with Folia: " + e.getMessage());
+            }
+        }
+        
+        runTask(plugin, task);
+    }
+
+    public static void runWorldTask(Plugin plugin, World world, Runnable task) {
+        if (isFolia()) {
+            try {
+                Class<?> globalRegionSchedulerClass = Class.forName("io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler");
+                Object globalRegionScheduler = Bukkit.getServer().getClass().getMethod("getGlobalRegionScheduler").invoke(Bukkit.getServer());
+                Method runMethod = globalRegionSchedulerClass.getMethod("run", Plugin.class, Consumer.class);
+                
+                runMethod.invoke(globalRegionScheduler, plugin, (Consumer<BukkitTask>) (bukkitTask) -> {
+                    try {
+                        task.run();
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Error in world task: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
+                return;
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to schedule world task with Folia: " + e.getMessage());
+            }
+        }
+        
+        runTask(plugin, task);
+    }
+    
+    public static <T> void supplyAsync(JavaPlugin plugin, Executor executor, 
+                                    Supplier<T> supplier, Consumer<T> consumer) {
+        if (isShuttingDown.get()) return;
+        
+        CompletableFuture.supplyAsync(supplier, executor)
+            .thenAccept(result -> runTask(plugin, () -> consumer.accept(result)));
+    }
+
+    public static <T> void batchProcessPlayers(JavaPlugin plugin, Executor executor,
+                                        Player[] players, 
+                                        Function<Player, T> processor,
+                                        Consumer<PlayerProcessResult<T>> applier) {
+        if (isShuttingDown.get() || players.length == 0) return;
+        
+        CompletableFuture.runAsync(() -> {
+            for (Player player : players) {
+                if (player == null || !player.isOnline()) continue;
+                
+                try {
+                    T result = processor.apply(player);
+                    runEntityTask(plugin, player, () -> applier.accept(new PlayerProcessResult<>(player, result)));
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Error processing player " + player.getName() + ": " + e.getMessage());
+                }
+            }
+        }, executor);
+    }
+
+    public static class PlayerProcessResult<T> {
+        private final Player player;
+        private final T result;
+        
+        public PlayerProcessResult(Player player, T result) {
+            this.player = player;
+            this.result = result;
+        }
+        
+        public Player getPlayer() {
+            return player;
+        }
+        
+        public T getResult() {
+            return result;
         }
     }
 }
