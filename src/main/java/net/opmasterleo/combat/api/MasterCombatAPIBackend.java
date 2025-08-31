@@ -85,23 +85,21 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
             try {
                 Method m = glowManager.getClass().getMethod(mName, Player.class);
                 Object res = m.invoke(glowManager, player);
-                if (res instanceof Boolean) return (Boolean) res;
-            } catch (NoSuchMethodException ignored) {}
-            catch (Throwable ignored) {}
+                if (res instanceof Boolean b) return b;
+            } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {}
 
             try {
                 Method m2 = glowManager.getClass().getMethod(mName, UUID.class);
                 Object res2 = m2.invoke(glowManager, uuid);
-                if (res2 instanceof Boolean) return (Boolean) res2;
-            } catch (NoSuchMethodException ignored) {}
-            catch (Throwable ignored) {}
+                if (res2 instanceof Boolean b2) return b2;
+            } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {}
         }
 
         try {
             Method m = glowManager.getClass().getMethod("isGlowing");
             Object res = m.invoke(glowManager);
-            if (res instanceof Boolean) return (Boolean) res;
-        } catch (Throwable ignored) {}
+            if (res instanceof Boolean b) return b;
+        } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {}
 
         return false;
     }
