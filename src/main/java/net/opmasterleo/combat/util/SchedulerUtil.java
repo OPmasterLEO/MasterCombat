@@ -54,7 +54,7 @@ public final class SchedulerUtil {
         try {
             Class.forName(className).getMethod(methodName);
             return true;
-        } catch (Exception e) {
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
             return false;
         }
     }
@@ -102,7 +102,7 @@ public final class SchedulerUtil {
             } catch (Exception e) {
                 Plugin plugin = getPlugin();
                 if (plugin != null) {
-                    plugin.getLogger().warning("Arclight task error: " + e.getMessage());
+                    plugin.getLogger().warning(() -> "Arclight task error: " + e.getMessage());
                 }
             }
         };
@@ -124,7 +124,7 @@ public final class SchedulerUtil {
             } catch (Exception e) {
                 Plugin plugin = getPlugin();
                 if (plugin != null) {
-                    plugin.getLogger().warning("Arclight async task error: " + e.getMessage());
+                    plugin.getLogger().warning(() -> "Arclight async task error: " + e.getMessage());
                 }
             }
         };
@@ -273,7 +273,7 @@ public final class SchedulerUtil {
                 try {
                     task.run();
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Batch task error: " + e.getMessage());
+                    plugin.getLogger().warning(() -> "Batch task error: " + e.getMessage());
                 }
             }));
         }
@@ -296,13 +296,12 @@ public final class SchedulerUtil {
                     try {
                         task.run();
                     } catch (Exception e) {
-                        plugin.getLogger().severe("Error in entity task: " + e.getMessage());
-                        e.printStackTrace();
+                        plugin.getLogger().severe(() -> "Error in entity task: " + e.getMessage());
                     }
                 });
                 return;
-            } catch (Exception e) {
-                plugin.getLogger().warning("Failed to schedule entity task with Folia: " + e.getMessage());
+            } catch (ReflectiveOperationException e) {
+                plugin.getLogger().warning(() -> "Failed to schedule entity task with Folia: " + e.getMessage());
             }
         }
         
@@ -320,13 +319,12 @@ public final class SchedulerUtil {
                     try {
                         task.run();
                     } catch (Exception e) {
-                        plugin.getLogger().severe("Error in region task: " + e.getMessage());
-                        e.printStackTrace();
+                        plugin.getLogger().severe(() -> "Error in region task: " + e.getMessage());
                     }
                 });
                 return;
-            } catch (Exception e) {
-                plugin.getLogger().warning("Failed to schedule region task with Folia: " + e.getMessage());
+            } catch (ReflectiveOperationException e) {
+                plugin.getLogger().warning(() -> "Failed to schedule region task with Folia: " + e.getMessage());
             }
         }
         
@@ -344,13 +342,12 @@ public final class SchedulerUtil {
                     try {
                         task.run();
                     } catch (Exception e) {
-                        plugin.getLogger().severe("Error in world task: " + e.getMessage());
-                        e.printStackTrace();
+                        plugin.getLogger().severe(() -> "Error in world task: " + e.getMessage());
                     }
                 });
                 return;
-            } catch (Exception e) {
-                plugin.getLogger().warning("Failed to schedule world task with Folia: " + e.getMessage());
+            } catch (ReflectiveOperationException e) {
+                plugin.getLogger().warning(() -> "Failed to schedule world task with Folia: " + e.getMessage());
             }
         }
         
@@ -379,7 +376,7 @@ public final class SchedulerUtil {
                     T result = processor.apply(player);
                     runEntityTask(plugin, player, () -> applier.accept(new PlayerProcessResult<>(player, result)));
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Error processing player " + player.getName() + ": " + e.getMessage());
+                    plugin.getLogger().warning(() -> "Error processing player " + player.getName() + ": " + e.getMessage());
                 }
             }
         }, executor);

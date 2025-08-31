@@ -1,12 +1,6 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.event.PacketListener;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
-import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.SchedulerUtil;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -16,14 +10,28 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
-import org.bukkit.GameMode;
+
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class DirectCombatListener implements PacketListener, Listener {
 
     public DirectCombatListener() {
-        Combat combat = Combat.getInstance();
-        if (combat != null && combat.isPacketEventsAvailable()) {
-            combat.safelyRegisterPacketListener(this);
+    }
+
+    public void initialize(Combat plugin) {
+        if (plugin == null) return;
+        try {
+            if (plugin.isPacketEventsAvailable()) {
+                plugin.safelyRegisterPacketListener(this);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -33,7 +41,10 @@ public class DirectCombatListener implements PacketListener, Listener {
         
         try {
             WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
-            if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) return;
+            switch (packet.getAction()) {
+                case ATTACK -> {}
+                default -> { return; }
+            }
             
             Player attacker = (Player) event.getPlayer();
             Combat combat = Combat.getInstance();
@@ -59,34 +70,36 @@ public class DirectCombatListener implements PacketListener, Listener {
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         Combat combat = Combat.getInstance();
         if (!(event.getEntity() instanceof Player victim)) return;
-        
+
         Player attacker = null;
         Entity damager = event.getDamager();
-        if (damager instanceof Player) {
-            attacker = (Player) damager;
-        }
-        
-        else if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player) {
-            attacker = (Player) projectile.getShooter();
-            String projectileType = damager.getType().name().toUpperCase();
-            if (combat.getIgnoredProjectiles().contains(projectileType)) {
-                combat.debug("Skipping combat - projectile type is ignored: " + projectileType);
-                return;
+        switch (damager) {
+            case Player attackerPlayer -> attacker = attackerPlayer;
+            case Projectile projectile -> {
+                if (projectile.getShooter() instanceof Player shooter) {
+                    attacker = shooter;
+                    String projectileType = damager.getType().name().toUpperCase();
+                    if (combat.getIgnoredProjectiles().contains(projectileType)) {
+                        combat.debug("Skipping combat - projectile type is ignored: " + projectileType);
+                        return;
+                    }
+                }
             }
+            default -> {}
         }
-        
+
         if (attacker == null) return;
         if (victim.getNoDamageTicks() > victim.getMaximumNoDamageTicks() / 2) {
             combat.debug("Skipping combat - victim has damage immunity: " + victim.getName() + 
                        " (Ticks: " + victim.getNoDamageTicks() + "/" + victim.getMaximumNoDamageTicks() + ")");
             return;
         }
-        
+
         if (!combat.isCombatEnabledInWorld(victim) || !combat.isCombatEnabledInWorld(attacker)) {
             combat.debug("Skipping combat - world disabled: " + victim.getWorld().getName());
             return;
         }
-        
+
         combat.debug("Direct combat detected: " + attacker.getName() + " -> " + victim.getName() + 
                     " (Final damage: " + event.getFinalDamage() + ", Original: " + event.getDamage() + ")");
         handleCombat(attacker, victim);

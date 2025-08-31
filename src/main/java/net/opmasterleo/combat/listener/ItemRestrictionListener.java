@@ -1,20 +1,17 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.event.PacketListenerAbstract;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
-import com.github.retrooper.packetevents.protocol.player.InteractionHand;
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.ChatUtil;
-import net.opmasterleo.combat.util.TimeUtil;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -23,12 +20,18 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
 
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import org.bukkit.event.Listener;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.protocol.player.InteractionHand;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.ChatUtil;
+import net.opmasterleo.combat.util.TimeUtil;
 
 public class ItemRestrictionListener extends PacketListenerAbstract implements Listener {
 
@@ -55,9 +58,17 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     public ItemRestrictionListener() {
         this.plugin = Combat.getInstance();
+    }
+
+    public void initialize(Combat plugin) {
+        if (plugin != null) {
+        }
         reloadConfig();
-        if (plugin != null && plugin.isPacketEventsAvailable()) {
-            PacketEvents.getAPI().getEventManager().registerListener(this);
+        try {
+            if (this.plugin != null && this.plugin.isPacketEventsAvailable()) {
+                PacketEvents.getAPI().getEventManager().registerListener(this);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -69,7 +80,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
                 Material material = Material.valueOf(item.toUpperCase());
                 disabledItems.add(material);
             } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Invalid material in disabled_items: " + item);
+                plugin.getLogger().warning(String.format("Invalid material in disabled_items: %s", item));
             }
         }
 
@@ -90,22 +101,25 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
                 "&cYou cannot use this item while in combat!";
 
         worldTridentBans.clear();
-        if (plugin.getConfig().isConfigurationSection("trident.banned_worlds")) {
-            for (String world : plugin.getConfig().getConfigurationSection("trident.banned_worlds").getKeys(false)) {
+        ConfigurationSection tridentBanned = plugin.getConfig().getConfigurationSection("trident.banned_worlds");
+        if (tridentBanned != null) {
+            for (String world : tridentBanned.getKeys(false)) {
                 worldTridentBans.put(world, plugin.getConfig().getBoolean("trident.banned_worlds." + world));
             }
         }
 
         worldEnderpearlCooldowns.clear();
-        if (plugin.getConfig().isConfigurationSection("enderpearl_cooldown.worlds")) {
-            for (String world : plugin.getConfig().getConfigurationSection("enderpearl_cooldown.worlds").getKeys(false)) {
+        ConfigurationSection enderWorlds = plugin.getConfig().getConfigurationSection("enderpearl_cooldown.worlds");
+        if (enderWorlds != null) {
+            for (String world : enderWorlds.getKeys(false)) {
                 worldEnderpearlCooldowns.put(world, plugin.getConfig().getBoolean("enderpearl_cooldown.worlds." + world));
             }
         }
 
         worldTridentCooldowns.clear();
-        if (plugin.getConfig().isConfigurationSection("trident_cooldown.worlds")) {
-            for (String world : plugin.getConfig().getConfigurationSection("trident_cooldown.worlds").getKeys(false)) {
+        ConfigurationSection tridentCooldownWorlds = plugin.getConfig().getConfigurationSection("trident_cooldown.worlds");
+        if (tridentCooldownWorlds != null) {
+            for (String world : tridentCooldownWorlds.getKeys(false)) {
                 worldTridentCooldowns.put(world, plugin.getConfig().getBoolean("trident_cooldown.worlds." + world));
             }
         }
@@ -117,7 +131,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         if (!itemRestrictionsEnabled && !enderpearlCooldownEnabled && !tridentCooldownEnabled) return;
 
         Player player = (Player) event.getPlayer();
-        if (player == null || !player.isOnline()) return;
+        if (!player.isOnline()) return;
         if (player.hasPermission("combat.bypass.safezone")) return;
         if (!itemRestrictionsEnabled && !plugin.isInCombat(player)) return;
         if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
@@ -133,7 +147,6 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         EquipmentSlot slot = wrapper.getHand() == InteractionHand.MAIN_HAND ?
                 EquipmentSlot.HAND : EquipmentSlot.OFF_HAND;
         ItemStack item = player.getInventory().getItem(slot);
-        if (item == null) return;
         if (disabledItems.contains(item.getType())) {
             event.setCancelled(true);
             player.sendActionBar(ChatUtil.parse(itemRestrictedMessage));
@@ -143,7 +156,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         if (item.getType() == Material.ENDER_PEARL) {
             if (isEnderpearlOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = enderpearlCooldowns.get(player.getUniqueId()) - System.currentTimeMillis();
+                long timeLeft = enderpearlCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(enderpearlCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyEnderpearlCooldown(player)) {
@@ -158,7 +171,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.get(player.getUniqueId()) - System.currentTimeMillis();
+                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
@@ -174,7 +187,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         }
 
         ItemStack item = player.getInventory().getItemInMainHand();
-        if (item == null || item.getType() != Material.TRIDENT) return;
+        if (item.getType() != Material.TRIDENT) return;
         if (worldTridentBans.getOrDefault(player.getWorld().getName(), false)) {
             event.setCancelled(true);
             player.sendActionBar(ChatUtil.parse("&cTridents are banned in this world!"));
@@ -183,7 +196,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
         if (isTridentOnCooldown(player)) {
             event.setCancelled(true);
-            long timeLeft = tridentCooldowns.get(player.getUniqueId()) - System.currentTimeMillis();
+            long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
             String formattedTime = TimeUtil.formatTime(timeLeft);
             player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
         } else if (shouldApplyTridentCooldown(player)) {
@@ -208,7 +221,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.get(player.getUniqueId()) - System.currentTimeMillis();
+                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
@@ -229,31 +242,23 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     private boolean isEnderpearlOnCooldown(Player player) {
         UUID playerId = player.getUniqueId();
-        if (!enderpearlCooldowns.containsKey(playerId)) {
-            return false;
-        }
-
-        long cooldownEnd = enderpearlCooldowns.get(playerId);
+        Long cooldownEnd = enderpearlCooldowns.get(playerId);
+        if (cooldownEnd == null) return false;
         if (System.currentTimeMillis() >= cooldownEnd) {
             enderpearlCooldowns.remove(playerId);
             return false;
         }
-
         return true;
     }
 
     private boolean isTridentOnCooldown(Player player) {
         UUID playerId = player.getUniqueId();
-        if (!tridentCooldowns.containsKey(playerId)) {
-            return false;
-        }
-
-        long cooldownEnd = tridentCooldowns.get(playerId);
+        Long cooldownEnd = tridentCooldowns.get(playerId);
+        if (cooldownEnd == null) return false;
         if (System.currentTimeMillis() >= cooldownEnd) {
             tridentCooldowns.remove(playerId);
             return false;
         }
-
         return true;
     }
 
@@ -263,18 +268,9 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         }
 
         String worldName = player.getWorld().getName();
-        if (worldEnderpearlCooldowns.containsKey(worldName)) {
-            boolean worldEnabled = worldEnderpearlCooldowns.get(worldName);
-            if (!worldEnabled) {
-                return false;
-            }
-        }
+        if (!worldEnderpearlCooldowns.getOrDefault(worldName, true)) return false;
 
-        if (enderpearlCombatOnly && !plugin.isInCombat(player)) {
-            return false;
-        }
-
-        return true;
+        return !(enderpearlCombatOnly && !plugin.isInCombat(player));
     }
 
     private boolean shouldApplyTridentCooldown(Player player) {
@@ -283,18 +279,9 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         }
 
         String worldName = player.getWorld().getName();
-        if (worldTridentCooldowns.containsKey(worldName)) {
-            boolean worldEnabled = worldTridentCooldowns.get(worldName);
-            if (!worldEnabled) {
-                return false;
-            }
-        }
+        if (!worldTridentCooldowns.getOrDefault(worldName, true)) return false;
 
-        if (tridentCombatOnly && !plugin.isInCombat(player)) {
-            return false;
-        }
-
-        return true;
+        return !(tridentCombatOnly && !plugin.isInCombat(player));
     }
 
     @EventHandler
@@ -314,7 +301,6 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             if (plugin.getConfig().getBoolean("trident.banned_worlds." + world.getName(), false)) {
                 event.setCancelled(true);
                 player.sendMessage(ChatUtil.parse("&cTridents are disabled in this world!"));
-                return;
             }
             if (plugin.isInCombat(player) && plugin.getConfig().getBoolean("trident.in_combat_only", true)) {
                 event.setCancelled(true);

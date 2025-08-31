@@ -1,18 +1,19 @@
 package net.opmasterleo.combat.manager;
 
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.ChatUtil;
-import net.opmasterleo.combat.util.SchedulerUtil;
-import net.kyori.adventure.text.Component;
+import java.lang.reflect.Method;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import java.lang.reflect.Method;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import net.kyori.adventure.text.Component;
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.ChatUtil;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class GlowManager {
     private final Set<UUID> glowingPlayers = ConcurrentHashMap.newKeySet();
@@ -51,7 +52,7 @@ public class GlowManager {
     }
 
     public void cleanup() {
-        Player[] players = Bukkit.getOnlinePlayers().toArray(new Player[0]);
+        Player[] players = Bukkit.getOnlinePlayers().toArray(Player[]::new);
         
         SchedulerUtil.batchProcessPlayers(
             plugin,
@@ -85,22 +86,27 @@ public class GlowManager {
                     }
                     try {
                         Component comp = ChatUtil.parse(ampColor);
-                        Method m = Team.class.getMethod("setPrefix", Component.class);
-                        m.invoke(team, comp);
-                    } catch (NoSuchMethodException nsme) {
                         try {
-                            String legacy = ampColor.replace('&', '\u00A7');
-                            Method m2 = Team.class.getMethod("setPrefix", String.class);
-                            m2.invoke(team, legacy);
-                        } catch (Throwable ignored) {}
-                    } catch (Throwable ignored) {}
+                            Method m = Team.class.getMethod("setPrefix", Component.class);
+                            m.invoke(team, comp);
+                        } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException reflEx) {
+                            try {
+                                String legacy = ampColor.replace('&', '\u00A7');
+                                Method m2 = Team.class.getMethod("setPrefix", String.class);
+                                m2.invoke(team, legacy);
+                            } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {
+                            }
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().warning(String.format("Failed to apply glowing effect to %s: %s", player.getName(), e.getMessage()));
+                    }
                     if (!team.hasEntry(player.getName())) {
                         team.addEntry(player.getName());
                     }
                 });
             }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to apply glowing effect to " + player.getName() + ": " + e.getMessage());
+            plugin.getLogger().warning(String.format("Failed to apply glowing effect to %s: %s", player.getName(), e.getMessage()));
         }
     }
 
@@ -126,7 +132,7 @@ public class GlowManager {
                 });
             }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to remove glowing effect from " + player.getName() + ": " + e.getMessage());
+            plugin.getLogger().warning(String.format("Failed to remove glowing effect from %s: %s", player.getName(), e.getMessage()));
         }
     }
 
@@ -136,21 +142,21 @@ public class GlowManager {
 
     private static String colorCodeFromName(String name) {
         if (name == null) return "&c"; // default red
-        switch (name.trim().toUpperCase()) {
-            case "BLACK": return "&0";
-            case "DARK_BLUE": case "DARKBLUE": case "BLUE": return "&1";
-            case "DARK_GREEN": case "DARKGREEN": case "GREEN": return "&2";
-            case "DARK_AQUA": case "DARKAQUA": case "AQUA": return "&3";
-            case "DARK_RED": case "DARKRED": case "RED": return "&4";
-            case "DARK_PURPLE": case "DARKPURPLE": case "PURPLE": return "&5";
-            case "GOLD": return "&6";
-            case "GRAY": return "&7";
-            case "DARK_GRAY": case "DARKGRAY": return "&8";
-            case "LIGHT_PURPLE": case "LIGHTPURPLE": case "PINK": return "&d";
-            case "YELLOW": return "&e";
-            case "WHITE": return "&f";
-            case "MAGIC": return "&k";
-            default: return "&c";
-        }
+        return switch (name.trim().toUpperCase()) {
+            case "BLACK" -> "&0";
+            case "DARK_BLUE", "DARKBLUE", "BLUE" -> "&1";
+            case "DARK_GREEN", "DARKGREEN", "GREEN" -> "&2";
+            case "DARK_AQUA", "DARKAQUA", "AQUA" -> "&3";
+            case "DARK_RED", "DARKRED", "RED" -> "&4";
+            case "DARK_PURPLE", "DARKPURPLE", "PURPLE" -> "&5";
+            case "GOLD" -> "&6";
+            case "GRAY" -> "&7";
+            case "DARK_GRAY", "DARKGRAY" -> "&8";
+            case "LIGHT_PURPLE", "LIGHTPURPLE", "PINK" -> "&d";
+            case "YELLOW" -> "&e";
+            case "WHITE" -> "&f";
+            case "MAGIC" -> "&k";
+            default -> "&c";
+        };
     }
 }

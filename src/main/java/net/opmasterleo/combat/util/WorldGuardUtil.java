@@ -1,28 +1,30 @@
 package net.opmasterleo.combat.util;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.util.Vector;
+
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType.Play.Client;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPosition;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPositionAndRotation;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange;
 import com.github.retrooper.packetevents.protocol.world.BlockFace;
 import com.github.retrooper.packetevents.protocol.world.states.type.StateType;
 import com.github.retrooper.packetevents.protocol.world.states.type.StateTypes;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.util.Vector3i;
-import net.opmasterleo.combat.Combat;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.util.Vector;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerTeleportEvent;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPosition;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPositionAndRotation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
@@ -30,6 +32,8 @@ import com.sk89q.worldguard.protection.flags.Flags;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
 import com.sk89q.worldguard.protection.regions.RegionQuery;
+
+import net.opmasterleo.combat.Combat;
 
 public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
@@ -86,32 +90,47 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize WorldGuard integration", e);
         }
+    }
 
+    public void initialize(Combat plugin) {
+        if (plugin == null) return;
         reloadConfig();
-        PacketEvents.getAPI().getEventManager().registerListener(this);
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        
+        try {
+            if (plugin.isPacketEventsAvailable() && PacketEvents.getAPI() != null) {
+                PacketEvents.getAPI().getEventManager().registerListener(this);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        } catch (Exception ignored) {}
     }
     
     public void reloadConfig() {
         barrierEnabled = plugin.getConfig().getBoolean("safezone_protection.enabled", true);
         String materialName = plugin.getConfig().getString("safezone_protection.barrier_material", "RED_STAINED_GLASS");
-        try {
-            barrierMaterial = Material.valueOf(materialName.toUpperCase());
-        } catch (IllegalArgumentException e) {
+        if (materialName == null || materialName.isBlank()) {
             barrierMaterial = Material.RED_STAINED_GLASS;
-            plugin.getLogger().warning("Invalid barrier material: " + materialName + ". Using RED_STAINED_GLASS instead.");
+        } else {
+            try {
+                barrierMaterial = Material.valueOf(materialName.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                barrierMaterial = Material.RED_STAINED_GLASS;
+                plugin.getLogger().warning(String.format("Invalid barrier material: %s. Using RED_STAINED_GLASS instead.", materialName));
+            }
         }
-        
+ 
         detectionRadius = plugin.getConfig().getInt("safezone_protection.barrier_detection_radius", 5);
         barrierHeight = plugin.getConfig().getInt("safezone_protection.barrier_height", 3);
         pushBackForce = plugin.getConfig().getDouble("safezone_protection.push_back_force", 0.6);
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long currentTime = System.currentTimeMillis();
             lastBarrierWarning.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
-            lastBarrierLocations.entrySet().removeIf(entry -> 
-                plugin.getServer().getPlayer(entry.getKey()) == null || 
-                !plugin.isInCombat(plugin.getServer().getPlayer(entry.getKey()))
-            );
+            lastBarrierLocations.entrySet().removeIf(entry -> {
+                Player p = plugin.getServer().getPlayer(entry.getKey());
+                return p == null || !plugin.isInCombat(p);
+            });
         }, 100L, 100L);
     }
     
@@ -129,7 +148,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
             if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
                 Player player = (Player) event.getPlayer();
-                if (player == null || !player.isOnline()) return;
+                if (!player.isOnline()) return;
                 if (player.hasPermission("combat.bypass.safezone")) return;
 
                 Vector3d newPos;
@@ -174,7 +193,6 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
         Location from = event.getFrom();
         Location to = event.getTo();
-        if (from == null || to == null) return;
 
         boolean fromInSafeZone = isPvpDenied(from);
         boolean toInSafeZone = isPvpDenied(to);
@@ -230,6 +248,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
 
     private long locationToChunkKey(Location loc) {
+        if (loc == null || loc.getWorld() == null) return 0L;
         final int GRID_SIZE_BITS = 4;
         int chunkX = loc.getBlockX() >> GRID_SIZE_BITS;
         int chunkZ = loc.getBlockZ() >> GRID_SIZE_BITS;
@@ -268,22 +287,22 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private void checkBorder(Player player, Location start, BlockFace direction) {
         Location adjacent = start.clone().add(direction.getModX(), 0, direction.getModZ());
         if (isPvpDenied(start) != isPvpDenied(adjacent)) {
-            createBarrierLine(player, start, direction);
+            createBarrierLine(player, start);
         }
     }
     
-    private void createBarrierLine(Player player, Location start, BlockFace direction) {
-        for (int y = 0; y < barrierHeight; y++) {
-            Location blockLoc = start.clone().add(0, y, 0);
-            sendBlockChange(player, blockLoc, barrierMaterial);
-            
-            SchedulerUtil.runTaskLater(plugin, () -> {
-                if (player.isOnline()) {
-                    resetBlockChange(player, blockLoc);
-                }
-            }, 100L);
-        }
-    }
+    private void createBarrierLine(Player player, Location start) {
+         for (int y = 0; y < barrierHeight; y++) {
+             Location blockLoc = start.clone().add(0, y, 0);
+             sendBlockChange(player, blockLoc, barrierMaterial);
+             
+             SchedulerUtil.runTaskLater(plugin, () -> {
+                 if (player.isOnline()) {
+                     resetBlockChange(player, blockLoc);
+                 }
+             }, 100L);
+         }
+     }
     
     private void sendBlockChange(Player player, Location loc, Material material) {
         try {
@@ -296,7 +315,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             try {
                 pkt = Combat.createWrapperPlayServerBlockChange(
                     new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                    Integer.valueOf(stateType.hashCode())
+                    stateType.hashCode()
                 );
             } catch (Throwable ignored) {}
 

@@ -3,6 +3,7 @@ package net.opmasterleo.combat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -171,7 +172,7 @@ public class Combat extends JavaPlugin implements Listener {
                 worldGuardUtil = new WorldGuardUtil(this);
                 debug("WorldGuard integration enabled");
             } catch (Exception e) {
-                getLogger().warning("Failed to initialize WorldGuard integration: " + e.getMessage());
+                getLogger().warning(() -> String.format("Failed to initialize WorldGuard integration: %s", e.getMessage()));
             }
         } else {
             debug("WorldGuard not found, PvP region protection disabled");
@@ -184,11 +185,20 @@ public class Combat extends JavaPlugin implements Listener {
                 debug("Glowing effect system enabled");
             } catch (Exception e) {
                 glowingEnabled = false;
-                getLogger().warning("Failed to initialize glowing system: " + e.getMessage());
+                getLogger().warning(() -> "Failed to initialize glowing system: " + e.getMessage());
             }
         } else if (glowingEnabled) {
             glowingEnabled = false;
             getLogger().warning("PacketEvents not found, glowing effect system disabled");
+        }
+
+        if (worldGuardUtil != null) {
+            try {
+                worldGuardUtil.initialize(this);
+                debug("WorldGuard integration initialized");
+            } catch (Exception e) {
+                debug("Failed to initialize WorldGuard integration: " + e.getMessage());
+            }
         }
     }
 
@@ -198,8 +208,12 @@ public class Combat extends JavaPlugin implements Listener {
         Objects.requireNonNull(getCommand("combat")).setTabCompleter(combatCommand);
         Objects.requireNonNull(getCommand("protection")).setExecutor(combatCommand);
         Objects.requireNonNull(getCommand("protection")).setTabCompleter(combatCommand);
+        String disableCmdRaw = getConfig().getString("NewbieProtection.settings.disableCommand");
+        String disableCmd = (disableCmdRaw == null || disableCmdRaw.isEmpty())
+            ? "removeprotect"
+            : disableCmdRaw;
+        disableCmd = disableCmd.toLowerCase(Locale.ROOT);
 
-        String disableCmd = getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
         if (getCommand(disableCmd) != null) {
             getCommand(disableCmd).setExecutor(combatCommand);
             getCommand(disableCmd).setTabCompleter(combatCommand);
@@ -344,21 +358,12 @@ public class Combat extends JavaPlugin implements Listener {
             combatWorkerPool.shutdown();
             
             try {
-                for (int i = 0; i < 10; i++) {
-                    if (combatWorkerPool.awaitTermination(200, TimeUnit.MILLISECONDS)) {
-                        debug("Thread pool shut down successfully");
-                        break;
-                    }
-                    
-                    if (i % 2 == 0 && combatWorkerPool.getActiveCount() > 0) {
-                        debug("Waiting for " + combatWorkerPool.getActiveCount() + " tasks to complete...");
-                    }
-                }
-                
-                if (!combatWorkerPool.isTerminated()) {
-                    debug("Force shutting down thread pool with " + combatWorkerPool.getActiveCount() + " active tasks");
+                if (!combatWorkerPool.awaitTermination(2000, TimeUnit.MILLISECONDS)) {
+                    debug(String.format("Force shutting down thread pool with %d active tasks", combatWorkerPool.getActiveCount()));
                     combatWorkerPool.shutdownNow();
                     combatWorkerPool.awaitTermination(500, TimeUnit.MILLISECONDS);
+                } else {
+                    debug("Thread pool shut down successfully");
                 }
             } catch (InterruptedException ignored) {
                 combatWorkerPool.shutdownNow();
@@ -375,7 +380,7 @@ public class Combat extends JavaPlugin implements Listener {
                 PacketEvents.getAPI().getEventManager().unregisterAllListeners();
                 debug("Packet listeners unregistered successfully.");
             } catch (Exception e) {
-                debug("Error unregistering packet listeners: " + e.getMessage());
+                debug(String.format("Error unregistering packet listeners: %s", e.getMessage()));
             }
         }
 
@@ -386,7 +391,7 @@ public class Combat extends JavaPlugin implements Listener {
                 PacketEvents.getAPI().terminate();
                 debug("PacketEvents terminated successfully.");
             } catch (Exception e) {
-                debug("Error during PacketEvents termination: " + e.getMessage());
+                debug(String.format("Error during PacketEvents termination: %s", e.getMessage()));
             }
         }
 
@@ -397,7 +402,7 @@ public class Combat extends JavaPlugin implements Listener {
             try {
                 glowManager.cleanup();
             } catch (Exception e) {
-                debug("Error cleaning up GlowManager: " + e.getMessage());
+                debug(String.format("Error cleaning up GlowManager: %s", e.getMessage()));
             }
         }
 
@@ -408,7 +413,7 @@ public class Combat extends JavaPlugin implements Listener {
         try {
             SchedulerUtil.cancelAllTasks(this);
         } catch (Exception e) {
-            debug("Error canceling tasks: " + e.getMessage());
+            debug(String.format("Error canceling tasks: %s", e.getMessage()));
         }
 
         combatRecords.clear();
@@ -708,7 +713,7 @@ public class Combat extends JavaPlugin implements Listener {
                 SchedulerUtil.runTaskTimer(this, timerTask, timerInterval, timerInterval);
             }
         } catch (Exception e) {
-            getLogger().warning("Failed to schedule combat timer: " + e.getMessage());
+            getLogger().warning(() -> "Failed to schedule combat timer: " + e.getMessage());
         }
     }
 
@@ -897,11 +902,6 @@ public class Combat extends JavaPlugin implements Listener {
             }
         }
 
-        if (superVanishManager != null && 
-            (superVanishManager.isVanished(attacker) || superVanishManager.isVanished(victim))) {
-            return false;
-        }
-
         return true;
     }
 
@@ -1036,7 +1036,7 @@ public class Combat extends JavaPlugin implements Listener {
                 debug("Successfully initialized PacketEvents settings");
             }
         } catch (Exception e) {
-            getLogger().warning("Failed to initialize PacketEvents settings: " + e.getMessage());
+            getLogger().warning(() -> String.format("Failed to initialize PacketEvents settings: %s", e.getMessage()));
             if (glowingEnabled) {
                 glowingEnabled = false;
                 getLogger().warning("Disabled glowing system due to PacketEvents initialization failure");
@@ -1053,7 +1053,12 @@ public class Combat extends JavaPlugin implements Listener {
     public static Object createWrapperPlayServerBlockChange(Object blockPosition, Object wrappedBlockStateOrGlobalId) {
         try {
             final ClassLoader cl = Combat.class.getClassLoader();
-            Class<?> packetCls = Class.forName("com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange", true, cl);
+            Class<?> packetCls;
+            try {
+                packetCls = Class.forName("com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange", true, cl);
+            } catch (ClassNotFoundException e) {
+                return null;
+            }
             Class<?> vectorCls;
             try {
                 vectorCls = Class.forName("com.github.retrooper.packetevents.util.Vector3i", true, cl);
@@ -1070,13 +1075,23 @@ public class Combat extends JavaPlugin implements Listener {
                         if (stateArg != null && !wrappedStateCls.isInstance(stateArg)) {
                             try {
                                 java.lang.reflect.Method ofMethod = wrappedStateCls.getMethod("fromGlobalId", int.class);
-                                int gid = (wrappedBlockStateOrGlobalId instanceof Number) ? ((Number) wrappedBlockStateOrGlobalId).intValue() : -1;
-                                if (gid >= 0) stateArg = ofMethod.invoke(null, gid);
-                            } catch (Throwable ignored) {
-                            }
+                                if (wrappedBlockStateOrGlobalId instanceof Number number) {
+                                    int gid = number.intValue();
+                                    if (gid >= 0) {
+                                        try {
+                                            stateArg = ofMethod.invoke(null, gid);
+                                        } catch (java.lang.reflect.InvocationTargetException e) {
+                                        }
+                                    }
+                                }
+                            } catch (NoSuchMethodException | IllegalAccessException ignored) {}
                         }
                         if (stateArg != null && wrappedStateCls.isInstance(stateArg)) {
-                            return ctor.newInstance(blockPosition, stateArg);
+                            try {
+                                return ctor.newInstance(blockPosition, stateArg);
+                            } catch (InstantiationException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
+                                return null;
+                            }
                         }
                     } catch (NoSuchMethodException ignored) {
                     }
@@ -1087,21 +1102,28 @@ public class Combat extends JavaPlugin implements Listener {
             try {
                 java.lang.reflect.Constructor<?> ctor2 = packetCls.getConstructor(vectorCls, int.class);
                 int gid = -1;
-                if (wrappedBlockStateOrGlobalId instanceof Number) {
-                    gid = ((Number) wrappedBlockStateOrGlobalId).intValue();
+                if (wrappedBlockStateOrGlobalId instanceof Number number) {
+                    gid = number.intValue();
                 } else if (wrappedBlockStateOrGlobalId != null) {
                     try {
                         java.lang.reflect.Method m = wrappedBlockStateOrGlobalId.getClass().getMethod("getGlobalId");
-                        Object v = m.invoke(wrappedBlockStateOrGlobalId);
-                        if (v instanceof Number) gid = ((Number) v).intValue();
-                    } catch (Throwable ignored) {}
+                        try {
+                            Object v = m.invoke(wrappedBlockStateOrGlobalId);
+                            if (v instanceof Number vNumber) gid = vNumber.intValue();
+                        } catch (java.lang.reflect.InvocationTargetException e) {
+                        }
+                    } catch (NoSuchMethodException | IllegalAccessException ignored) {}
                 }
                 if (gid >= 0) {
-                    return ctor2.newInstance(blockPosition, gid);
+                    try {
+                        return ctor2.newInstance(blockPosition, gid);
+                    } catch (InstantiationException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
+                        return null;
+                    }
                 }
             } catch (NoSuchMethodException ignored) {
             }
-        } catch (Throwable t) {
+        } catch (IllegalStateException | SecurityException ignored) {
         }
         return null;
     }
@@ -1114,10 +1136,10 @@ public class Combat extends JavaPlugin implements Listener {
         String serverJarName = Bukkit.getServer().getName();
 
         boolean worldGuardDetected = Bukkit.getPluginManager().getPlugin("WorldGuard") != null;
-        boolean packetEventsLoaded = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
+        boolean isPacketEventsPresent = Bukkit.getPluginManager().getPlugin("PacketEvents") != null;
 
         Bukkit.getConsoleSender().sendMessage(ChatUtil.parse("&cINFO &8» &aWorldGuard " + (worldGuardDetected ? "loaded!" : "not loaded!")));
-        Bukkit.getConsoleSender().sendMessage(ChatUtil.parse("&cINFO &8» &aPacketEvents " + (packetEventsLoaded ? "loaded!" : "not loaded!")));
+        Bukkit.getConsoleSender().sendMessage(ChatUtil.parse("&cINFO &8» &aPacketEvents " + (isPacketEventsPresent ? "loaded!" : "not loaded!")));
 
         String displayText = pluginName.contains(version) ? pluginName : pluginName + " - v" + version;
         String[] asciiLines = {
@@ -1147,6 +1169,8 @@ public class Combat extends JavaPlugin implements Listener {
         instance = this;
         saveDefaultConfig();
         ConfigUtil.updateConfig(this);
+        int pluginId = 25701;
+        Metrics metrics = new Metrics(this, pluginId);
 
         int cpus = Runtime.getRuntime().availableProcessors();
         folia = SchedulerUtil.isFolia();
@@ -1183,14 +1207,22 @@ public class Combat extends JavaPlugin implements Listener {
         combatWorkerPool.allowCoreThreadTimeOut(true);
         startThreadPoolMetricsTask();
 
-        if (isPacketEventsAvailable() && !PacketEvents.getAPI().isLoaded()) {
-            try {
-                PacketEvents.getAPI().load();
-                packetEventsLoaded = true;
-                debug("PacketEvents loaded successfully");
-            } catch (Exception e) {
-                getLogger().warning("Failed to load PacketEvents: " + e.getMessage());
-                packetEventsLoaded = false;
+        try {
+            if (isPacketEventsAvailable() && !PacketEvents.getAPI().isLoaded()) {
+                try {
+                    PacketEvents.getAPI().load();
+                    packetEventsLoaded = true;
+                    debug("PacketEvents loaded successfully");
+                } catch (Exception e) {
+                    getLogger().warning(() -> String.format("Failed to load PacketEvents: %s", e.getMessage()));
+                    packetEventsLoaded = false;
+                }
+            }
+        } catch (Exception e) {
+            getLogger().warning(() -> String.format("Failed to initialize PacketEvents settings: %s", e.getMessage()));
+            if (glowingEnabled) {
+                glowingEnabled = false;
+                getLogger().warning("Disabled glowing system due to PacketEvents initialization failure");
             }
         }
 
@@ -1202,21 +1234,19 @@ public class Combat extends JavaPlugin implements Listener {
         initializeAPI();
         sendStartupMessage();
 
-        if (packetEventsLoaded) {
-            try {
+        try {
+            if (packetEventsLoaded) {
                 PacketEvents.getAPI().init();
                 debug("PacketEvents initialized successfully");
-            } catch (Exception e) {
-                getLogger().warning("Failed to initialize PacketEvents: " + e.getMessage());
             }
+        } catch (Exception e) {
+            getLogger().warning(() -> String.format("Failed to initialize PacketEvents: %s", e.getMessage()));
         }
-
-        new Metrics(this, 25701);
     }
 
     public void debug(String message) {
         if (debugEnabled) {
-            getLogger().info("[DEBUG] " + message);
+            getLogger().info(() -> "[DEBUG] " + message);
         }
     }
 

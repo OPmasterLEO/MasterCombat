@@ -1,29 +1,30 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.event.PacketListener;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
-import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.SchedulerUtil;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.metadata.FixedMetadataValue;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class EndCrystalListener implements PacketListener, Listener {
 
@@ -38,13 +39,16 @@ public class EndCrystalListener implements PacketListener, Listener {
     private static final int MAX_PENDING_TASKS = 10;
 
     public EndCrystalListener() {
-        Combat combat = Combat.getInstance();
-        if (combat != null && combat.isPacketEventsAvailable()) {
-            combat.safelyRegisterPacketListener(this);
-        }
     }
 
     public void initialize(Combat plugin) {
+        if (plugin == null) return;
+        try {
+            if (plugin.isPacketEventsAvailable()) {
+                plugin.safelyRegisterPacketListener(this);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -86,11 +90,6 @@ public class EndCrystalListener implements PacketListener, Listener {
                 } catch (Throwable ignored) {}
             });
         } catch (Throwable ignored) {}
-    }
-
-    @Override
-    public void onPacketSend(PacketSendEvent event) {
-        if (!packetEventsEnabled) return;
     }
 
     @EventHandler(priority = EventPriority.NORMAL)

@@ -1,16 +1,8 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.event.PacketListener;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
-import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
-import com.github.retrooper.packetevents.protocol.player.InteractionHand;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
-import com.github.retrooper.packetevents.util.Vector3d;
-
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.SchedulerUtil;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -18,9 +10,17 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.InteractionHand;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class BedExplosionListener implements PacketListener, Listener {
 
@@ -35,13 +35,16 @@ public class BedExplosionListener implements PacketListener, Listener {
     private static final long INTERACTION_TIMEOUT = 5000L;
 
     public BedExplosionListener() {
-        Combat combat = Combat.getInstance();
-        if (combat != null && combat.isPacketEventsAvailable()) {
-            combat.safelyRegisterPacketListener(this);
-        }
     }
 
     public void initialize(Combat plugin) {
+        if (plugin == null) return;
+        try {
+            if (plugin.isPacketEventsAvailable()) {
+                plugin.safelyRegisterPacketListener(this);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
