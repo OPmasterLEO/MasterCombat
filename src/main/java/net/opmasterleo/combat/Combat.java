@@ -1,16 +1,24 @@
 package net.opmasterleo.combat;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.event.PacketListener;
-import com.github.retrooper.packetevents.event.PacketListenerCommon;
-import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bstats.bukkit.Metrics;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,16 +27,32 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import net.opmasterleo.combat.api.MasterCombatAPIBackend;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 import net.opmasterleo.combat.api.events.MasterCombatLoadEvent;
 import net.opmasterleo.combat.command.CombatCommand;
 import net.opmasterleo.combat.command.PlayerCommandPreprocess;
-import net.opmasterleo.combat.listener.*;
-import net.opmasterleo.combat.listener.player.*;
-import net.opmasterleo.combat.manager.*;
-import net.opmasterleo.combat.listener.NewbieProtectionListener;
+import net.opmasterleo.combat.listener.BedExplosionListener;
+import net.opmasterleo.combat.listener.CustomDeathMessageListener;
+import net.opmasterleo.combat.listener.DirectCombatListener;
+import net.opmasterleo.combat.listener.EndCrystalListener;
 import net.opmasterleo.combat.listener.ItemRestrictionListener;
+import net.opmasterleo.combat.listener.NewbieProtectionListener;
+import net.opmasterleo.combat.listener.RespawnAnchorListener;
+import net.opmasterleo.combat.listener.SelfCombatListener;
+import net.opmasterleo.combat.listener.player.PlayerDeathListener;
+import net.opmasterleo.combat.listener.player.PlayerQuitListener;
+import net.opmasterleo.combat.listener.player.PlayerTeleportListener;
+import net.opmasterleo.combat.manager.CrystalManager;
+import net.opmasterleo.combat.manager.EntityManager;
+import net.opmasterleo.combat.manager.GlowManager;
+import net.opmasterleo.combat.manager.SuperVanishManager;
+import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.util.ChatUtil;
 import net.opmasterleo.combat.util.ConfigUtil;
 import net.opmasterleo.combat.util.SchedulerUtil;
@@ -1107,6 +1131,15 @@ public class Combat extends JavaPlugin implements Listener {
         for (String line : asciiLines) {
             Bukkit.getConsoleSender().sendMessage(ChatUtil.parse(line));
         }
+        try {
+            String threadingMsg;
+            if (maxWorkerPoolSize > 1) {
+                threadingMsg = "&aUsing multi-threaded system - using " + maxWorkerPoolSize + " worker threads";
+            } else {
+                threadingMsg = "&eUsing single-threaded system - using " + maxWorkerPoolSize + " worker thread";
+            }
+            Bukkit.getConsoleSender().sendMessage(ChatUtil.parse(threadingMsg));
+        } catch (Throwable ignored) {}
     }
 
     @Override
