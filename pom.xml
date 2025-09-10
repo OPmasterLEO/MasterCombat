@@ -6,14 +6,13 @@
 
     <groupId>net.opmasterleo.combat</groupId>
     <artifactId>MasterCombat</artifactId>
-    <version>5.2.1</version>
+    <version>5.2.2</version>
     <packaging>jar</packaging>
     <description>A super combat plugin that have identical system like DonutSMP and more.</description>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <lombok.version>1.18.38</lombok.version>
         <worldguard.version>7.1.0-SNAPSHOT</worldguard.version>
     </properties>
 
@@ -40,6 +39,7 @@
                             <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
+                    <minimizeJar>true</minimizeJar>
                 </configuration>
             </plugin>
             <plugin>
@@ -104,10 +104,6 @@
             <url>https://repo.extendedclip.com/releases/</url>
         </repository>
         <repository>
-            <id>guardsquare</id>
-            <url>https://maven.guardsquare.com</url>
-        </repository>
-        <repository>
             <id>codemc-releases</id>
             <url>https://repo.codemc.io/repository/maven-releases/</url>
         </repository>
@@ -155,7 +151,6 @@
         <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
-            <version>3.0.2</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -176,10 +171,11 @@
             <version>2.9.5</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Added MiniMessage API support -->
         <dependency>
-            <groupId>org.zeroturnaround</groupId>
-            <artifactId>zt-zip</artifactId>
-            <version>1.17</version>
+            <groupId>net.kyori</groupId>
+            <artifactId>adventure-text-minimessage</artifactId>
+            <version>4.24.0</version>
         </dependency>
     </dependencies>
 </project>
