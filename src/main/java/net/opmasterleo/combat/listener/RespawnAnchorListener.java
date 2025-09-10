@@ -28,7 +28,7 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.scheduler.BukkitRunnable;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 import java.util.Map;
 import java.util.UUID;
@@ -56,8 +56,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         this.plugin = plugin;
         plugin.debug("RespawnAnchorListener initialized");
         try {
-            // Defer registration to the next tick so 'this' is not leaked during construction.
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            SchedulerUtil.runTask(plugin, () -> {
                 try {
                     if (plugin.isPacketEventsAvailable()) {
                         plugin.safelyRegisterPacketListener(this);
@@ -72,7 +71,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         } catch (IllegalArgumentException e) {
             plugin.debug("Error scheduling RespawnAnchorListener packet listener registration: " + e.getMessage());
         }
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupExpiredData, 1200L, 1200L);
+        SchedulerUtil.runTaskTimerAsync(plugin, this::cleanupExpiredData, 1200L, 1200L);
     }
 
     @Override
@@ -84,7 +83,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 WrapperPlayClientUseItem use = new WrapperPlayClientUseItem(event);
                 if (use.getHand() != InteractionHand.MAIN_HAND) return;
                 Player player = (Player) event.getPlayer();
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
                     Block target = player.getTargetBlockExact(5);
                     if (target == null || target.getType() != Material.RESPAWN_ANCHOR) return;
@@ -95,7 +94,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 WrapperPlayClientPlayerBlockPlacement placement = new WrapperPlayClientPlayerBlockPlacement(event);
                 Player player = (Player) event.getPlayer();
                 Vector3i pos = placement.getBlockPosition();
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
                     Block block = new Location(player.getWorld(), pos.getX(), pos.getY(), pos.getZ()).getBlock();
                     if (block.getType() != Material.RESPAWN_ANCHOR) return;
@@ -127,9 +126,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     if (activator != null) {
                         explosionCache.put(explosionLoc, new ExplosionData(activator));
                         plugin.debug("PacketEvents: tracked anchor explosion at " + explosionLoc + " by " + activator);
-                        new BukkitRunnable() {
-                            @Override public void run() { explosionCache.remove(explosionLoc); }
-                        }.runTaskLater(plugin, 4L);
+                        SchedulerUtil.runTaskLater(plugin, () -> explosionCache.remove(explosionLoc), 4L);
                     }
                 });
             }
@@ -275,9 +272,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     plugin.debug("Tracked explosion at " + event.getLocation() +
                         " by activator " + activatorId);
 
-                    Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
-                        explosionCache.remove(event.getLocation());
-                    }, 100L);
+                    SchedulerUtil.runTaskLaterAsync(plugin, () -> explosionCache.remove(event.getLocation()), 100L);
 
                     break;
                 }
@@ -310,7 +305,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         if (!isEnabled() || location == null || player == null) return;
         explosionCache.put(location, new ExplosionData(player.getUniqueId()));
         plugin.debug("Registered potential explosion at " + location + " by " + player.getName());
-        Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> explosionCache.remove(location), 100L);
+        SchedulerUtil.runTaskLaterAsync(plugin, () -> explosionCache.remove(location), 100L);
     }
 
     private boolean shouldBypass(Player player) {
