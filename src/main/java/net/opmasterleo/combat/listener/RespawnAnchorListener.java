@@ -118,7 +118,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 Vector3d pos = explosion.getPosition();
                 Location explosionLoc = new Location(sample.getWorld(), pos.getX(), pos.getY(), pos.getZ());
 
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
                     Block nearest = findNearestAnchorBlock(explosionLoc, 3.0);
                     if (nearest == null) return;
@@ -154,11 +154,9 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         return nearest;
     }
 
-    // Bukkit fallback: only used when PacketEvents not available (kept for compatibility)
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (plugin.isPacketEventsAvailable()) return; // packet path preferred
-        if (!isEnabled()) return;
+        if (!isEnabled() || plugin.isPacketEventsAvailable()) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getHand() != EquipmentSlot.HAND) return;
 
