@@ -212,47 +212,36 @@ public class NewbieProtectionListener implements Listener {
         Component formatted = ChatUtil.parse(message);
 
         switch (messageType.toLowerCase()) {
-            case "actionbar":
-                player.sendActionBar(formatted);
-                break;
-            case "title":
-                player.showTitle(Title.title(
-                    formatted,
-                    Component.empty(),
-                    Title.Times.times(
-                        Duration.ofMillis(titleFadeIn * 50L),
-                        Duration.ofMillis(titleStay * 50L),
-                        Duration.ofMillis(titleFadeOut * 50L)
-                    )
-                ));
-                break;
-            case "subtitle":
-                player.showTitle(Title.title(
-                    Component.empty(),
-                    formatted,
-                    Title.Times.times(
-                        Duration.ofMillis(titleFadeIn * 50L),
-                        Duration.ofMillis(titleStay * 50L),
-                        Duration.ofMillis(titleFadeOut * 50L)
-                    )
-                ));
-                break;
-            case "both":
-                player.showTitle(Title.title(
-                    formatted,
-                    formatted,
-                    Title.Times.times(
-                        Duration.ofMillis(titleFadeIn * 50L),
-                        Duration.ofMillis(titleStay * 50L),
-                        Duration.ofMillis(titleFadeOut * 50L)
-                    )
-                ));
-                break;
-            case "none":
-                break;
-            default:
-                player.sendMessage(formatted);
-                break;
+            case "actionbar" -> player.sendActionBar(formatted);
+            case "title" -> player.showTitle(Title.title(
+                formatted,
+                Component.empty(),
+                Title.Times.times(
+                    Duration.ofMillis(titleFadeIn * 50L),
+                    Duration.ofMillis(titleStay * 50L),
+                    Duration.ofMillis(titleFadeOut * 50L)
+                )
+            ));
+            case "subtitle" -> player.showTitle(Title.title(
+                Component.empty(),
+                formatted,
+                Title.Times.times(
+                    Duration.ofMillis(titleFadeIn * 50L),
+                    Duration.ofMillis(titleStay * 50L),
+                    Duration.ofMillis(titleFadeOut * 50L)
+                )
+            ));
+            case "both" -> player.showTitle(Title.title(
+                formatted,
+                formatted,
+                Title.Times.times(
+                    Duration.ofMillis(titleFadeIn * 50L),
+                    Duration.ofMillis(titleStay * 50L),
+                    Duration.ofMillis(titleFadeOut * 50L)
+                )
+            ));
+            case "none" -> { /* Do nothing */ }
+            default -> player.sendMessage(formatted);
         }
     }
 
@@ -280,8 +269,7 @@ public class NewbieProtectionListener implements Listener {
         if (!(event.getEntity() instanceof Player victim)) return;
 
         if (mobsProtect && isActuallyProtected(victim)) {
-            if (event instanceof EntityDamageByEntityEvent) {
-                EntityDamageByEntityEvent damageEvent = (EntityDamageByEntityEvent) event;
+            if (event instanceof EntityDamageByEntityEvent damageEvent) {
                 Entity damager = damageEvent.getDamager();
 
                 if (damager instanceof Monster || damager instanceof Animals) {
@@ -291,13 +279,12 @@ public class NewbieProtectionListener implements Listener {
             }
         }
 
-        if (!(event instanceof EntityDamageByEntityEvent)) return;
+        if (!(event instanceof EntityDamageByEntityEvent damageEvent)) return;
 
-        EntityDamageByEntityEvent damageEvent = (EntityDamageByEntityEvent) event;
         Player attacker = null;
 
-        if (damageEvent.getDamager() instanceof Player) {
-            attacker = (Player) damageEvent.getDamager();
+        if (damageEvent.getDamager() instanceof Player playerDamager) {
+            attacker = playerDamager;
         } else if (damageEvent.getDamager() instanceof EnderCrystal) {
             attacker = Combat.getInstance().getCrystalManager().getPlacer(damageEvent.getDamager());
         }
@@ -346,7 +333,7 @@ public class NewbieProtectionListener implements Listener {
         }
     }
 
-    public void reloadConfig() {
+    public final void reloadConfig() {
         Combat combat = Combat.getInstance();
         enabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
         protectionDuration = TimeUnit.SECONDS.toMillis(
@@ -386,7 +373,7 @@ public class NewbieProtectionListener implements Listener {
                 Material material = Material.valueOf(itemName.toUpperCase());
                 blockedItems.add(material);
             } catch (IllegalArgumentException e) {
-                combat.getLogger().warning("Invalid material in BlockedItems: " + itemName);
+                combat.getLogger().warning(() -> "Invalid material in BlockedItems: " + itemName);
             }
         }
     }
@@ -408,7 +395,7 @@ public class NewbieProtectionListener implements Listener {
 
         if (isActuallyProtected(player)) {
             Block targetBlock = player.getTargetBlock(null, 5);
-            if (targetBlock != null && targetBlock.getType() == Material.RESPAWN_ANCHOR) {
+            if (targetBlock.getType() == Material.RESPAWN_ANCHOR) {
                 UUID anchorId = UUID.nameUUIDFromBytes(targetBlock.getLocation().toString().getBytes());
                 trackAnchorActivator(anchorId, player);
             }
@@ -441,7 +428,6 @@ public class NewbieProtectionListener implements Listener {
             if (event.getCause() == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION ||
                 event.getCause() == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
                 event.setCancelled(true);
-                return;
             }
         }
     }
