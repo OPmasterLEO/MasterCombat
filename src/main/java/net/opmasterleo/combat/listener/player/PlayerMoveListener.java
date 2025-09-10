@@ -96,6 +96,7 @@ public final class PlayerMoveListener implements PacketListener {
 
     @Override
     public void onPacketSend(PacketSendEvent event) {
-        if (!packetEventsEnabled) return;
+        if (!packetEventsEnabled) {
+        }
     }
 }
