@@ -9,30 +9,40 @@ import java.lang.reflect.Method;
 
 public class SuperVanishManager {
 
-    private Plugin superVanish;
+    private Plugin vanishPlugin;
     private static boolean vanishApiAvailable = false;
     private static Method isInvisibleMethod;
 
     public SuperVanishManager() {
         try {
-            this.superVanish = Bukkit.getPluginManager().getPlugin("SuperVanish");
-            if (this.superVanish != null && this.superVanish.isEnabled()) {
-                try {
-                    Class<?> vanishAPI = Class.forName("de.myzelyam.api.vanish.VanishAPI");
-                    isInvisibleMethod = vanishAPI.getMethod("isInvisible", Player.class);
-                    vanishApiAvailable = true;
-                } catch (ClassNotFoundException | NoSuchMethodException e) {
-                    vanishApiAvailable = false;
-                }
+            // Add support for PremiumVanish as well
+            Plugin superVanish = Bukkit.getPluginManager().getPlugin("SuperVanish");
+            Plugin premiumVanish = Bukkit.getPluginManager().getPlugin("PremiumVanish");
+            if (superVanish != null && superVanish.isEnabled()) {
+                this.vanishPlugin = superVanish;
+            } else if (premiumVanish != null && premiumVanish.isEnabled()) {
+                this.vanishPlugin = premiumVanish;
+            } else {
+                this.vanishPlugin = null;
+                vanishApiAvailable = false;
+                return;
+            }
+            
+            try {
+                Class<?> vanishAPI = Class.forName("de.myzelyam.api.vanish.VanishAPI");
+                isInvisibleMethod = vanishAPI.getMethod("isInvisible", Player.class);
+                vanishApiAvailable = true;
+            } catch (ClassNotFoundException | NoSuchMethodException e) {
+                vanishApiAvailable = false;
             }
         } catch (Exception e) {
-            this.superVanish = null;
+            this.vanishPlugin = null;
             vanishApiAvailable = false;
         }
     }
 
     public boolean isVanished(Player player) {
-        if (!vanishApiAvailable || superVanish == null || !superVanish.isEnabled() || player == null) {
+        if (!vanishApiAvailable || vanishPlugin == null || !vanishPlugin.isEnabled() || player == null) {
             return false;
         }
         
@@ -43,7 +53,7 @@ public class SuperVanishManager {
         }
     }
 
-    public boolean isSuperVanishLoaded() {
-        return superVanish != null && superVanish.isEnabled();
+    public boolean isVanishLoaded() {
+        return vanishPlugin != null && vanishPlugin.isEnabled();
     }
 }
