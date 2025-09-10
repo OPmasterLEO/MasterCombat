@@ -24,14 +24,18 @@ public class TimeUtil {
             String unit = matcher.group(2);
             
             switch (unit) {
-                case "s":
+                case "s" -> {
                     return TimeUnit.SECONDS.toMillis(value);
-                case "m":
+                }
+                case "m" -> {
                     return TimeUnit.MINUTES.toMillis(value);
-                case "h":
+                }
+                case "h" -> {
                     return TimeUnit.HOURS.toMillis(value);
-                case "d":
+                }
+                case "d" -> {
                     return TimeUnit.DAYS.toMillis(value);
+                }
             }
         }
         
