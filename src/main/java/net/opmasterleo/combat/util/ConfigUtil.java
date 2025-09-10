@@ -20,9 +20,9 @@ public class ConfigUtil {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
         if (!configFile.exists()) return;
         
-        List<String> defaultLines = readLinesFromResource(plugin.getResource("config.yml"), plugin);
+        List<String> defaultLines = readLinesFromResource(plugin.getResource("config.yml"));
         if (defaultLines == null || defaultLines.isEmpty()) return;
-        List<String> userLines = readLinesFromFile(configFile, plugin);
+        List<String> userLines = readLinesFromFile(configFile);
         if (userLines.isEmpty()) return;
         
         List<String> output = new ArrayList<>();
@@ -121,7 +121,7 @@ public class ConfigUtil {
         return values;
     }
 
-    private static List<String> readLinesFromResource(InputStream is, JavaPlugin plugin) {
+    private static List<String> readLinesFromResource(InputStream is) {
         if (is == null) return null;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             List<String> lines = new ArrayList<>();
@@ -133,7 +133,7 @@ public class ConfigUtil {
         }
     }
 
-    private static List<String> readLinesFromFile(File file, JavaPlugin plugin) {
+    private static List<String> readLinesFromFile(File file) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
             List<String> lines = new ArrayList<>();
             String line;
