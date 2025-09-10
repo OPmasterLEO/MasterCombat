@@ -56,16 +56,22 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         this.plugin = plugin;
         plugin.debug("RespawnAnchorListener initialized");
         try {
-            if (plugin.isPacketEventsAvailable()) {
-                plugin.safelyRegisterPacketListener(this);
-                plugin.debug("RespawnAnchorListener registered with PacketEvents");
-            } else {
-                plugin.debug("PacketEvents not available for RespawnAnchorListener; using Bukkit fallbacks");
-            }
-        } catch (Exception e) {
-            plugin.debug("Error registering RespawnAnchorListener packet listener: " + e.getMessage());
+            // Defer registration to the next tick so 'this' is not leaked during construction.
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                try {
+                    if (plugin.isPacketEventsAvailable()) {
+                        plugin.safelyRegisterPacketListener(this);
+                        plugin.debug("RespawnAnchorListener registered with PacketEvents");
+                    } else {
+                        plugin.debug("PacketEvents not available for RespawnAnchorListener; using Bukkit fallbacks");
+                    }
+                } catch (Exception e) {
+                    plugin.debug("Error registering RespawnAnchorListener packet listener: " + e.getMessage());
+                }
+            });
+        } catch (IllegalArgumentException e) {
+            plugin.debug("Error scheduling RespawnAnchorListener packet listener registration: " + e.getMessage());
         }
-
         Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupExpiredData, 1200L, 1200L);
     }
 
@@ -97,7 +103,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     plugin.debug("PacketEvents: tracked anchor placed by " + player.getName() + " at " + block.getLocation());
                 });
             }
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             if (plugin.isEnabled()) plugin.debug("Error in RespawnAnchorListener.onPacketReceive: " + e.getMessage());
         }
     }
@@ -127,7 +133,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     }
                 });
             }
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             if (plugin.isEnabled()) plugin.debug("Error in RespawnAnchorListener.onPacketSend: " + e.getMessage());
         }
     }
