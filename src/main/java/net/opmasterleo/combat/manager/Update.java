@@ -3,6 +3,7 @@ package net.opmasterleo.combat.manager;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -17,8 +18,11 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
+
 import net.opmasterleo.combat.util.SchedulerUtil;
+
 import org.bukkit.configuration.file.YamlConfiguration;
+
 import net.opmasterleo.combat.Combat;
 
 public class Update {
@@ -244,7 +248,7 @@ public class Update {
                 downloadUrl = parseDownloadUrl(response.toString());
                 updateFound = (latestVersion != null);
             }
-        } catch (Exception ignored) {
+        } catch (IOException ignored) {
         } finally {
             activeConnections.forEach(conn -> {
                 try { conn.disconnect(); } catch (Exception ignored) {}
@@ -283,9 +287,9 @@ public class Update {
             } else {
                 sendMessage(sender, "§cDownload failed: Empty file created");
             }
-        } catch (Exception e) {
+        } catch (IOException | IllegalArgumentException ignored) {
             if (!isShuttingDown) {
-                sendMessage(sender, "§cDownload error: " + e.getMessage());
+                sendMessage(sender, "§cDownload error: " + ignored.getMessage());
             }
         } finally {
             activeConnections.forEach(conn -> {
