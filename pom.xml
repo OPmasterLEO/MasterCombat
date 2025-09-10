@@ -13,6 +13,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <lombok.version>1.18.40</lombok.version>
         <worldguard.version>7.1.0-SNAPSHOT</worldguard.version>
     </properties>
 
@@ -151,6 +152,7 @@
         <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
+            <version>3.1.0</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
