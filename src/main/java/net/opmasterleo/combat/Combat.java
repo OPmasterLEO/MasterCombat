@@ -1169,7 +1169,9 @@ public class Combat extends JavaPlugin implements Listener {
         instance = this;
         saveDefaultConfig();
         ConfigUtil.updateConfig(this);
+        
         int pluginId = 25701;
+        @SuppressWarnings("unused")
         Metrics metrics = new Metrics(this, pluginId);
 
         int cpus = Runtime.getRuntime().availableProcessors();
