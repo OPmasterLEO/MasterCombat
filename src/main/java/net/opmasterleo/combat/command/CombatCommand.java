@@ -1,7 +1,9 @@
 package net.opmasterleo.combat.command;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.bukkit.command.Command;
@@ -14,8 +16,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
 import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.listener.NewbieProtectionListener;
+import net.opmasterleo.combat.manager.Update;
 import net.opmasterleo.combat.util.ChatUtil;
 
 public class CombatCommand implements CommandExecutor, TabCompleter {
@@ -45,9 +47,17 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         Combat combat = Combat.getInstance();
+        if (combat == null || combat.getConfig() == null || combat.getPluginMeta() == null) {
+            if (sender != null) {
+                sender.sendMessage(ChatUtil.parse("&cError: Plugin not properly initialized."));
+            }
+            return true;
+        }
+        
         boolean newbieProtectionEnabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
         NewbieProtectionListener protectionListener = combat.getNewbieProtectionListener();
-        String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
+        String disableCommand = Optional.ofNullable(combat.getConfig().getString("NewbieProtection.settings.disableCommand"))
+            .orElse("removeprotect").toLowerCase();
         String pluginName = combat.getPluginMeta().getDisplayName();
         String pluginVersion = combat.getPluginMeta().getVersion();
         String pluginDescription = combat.getPluginMeta().getDescription();
@@ -61,8 +71,10 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         }
 
         if (cmdLabel.equals("protection")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
+            if (sender == null || !(sender instanceof Player player)) {
+                if (sender != null) {
+                    sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
+                }
                 return true;
             }
             
@@ -75,8 +87,10 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
         }
 
         if (cmdLabel.equals(disableCommand)) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
+            if (sender == null || !(sender instanceof Player player)) {
+                if (sender != null) {
+                    sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
+                }
                 return true;
             }
             if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
@@ -105,22 +119,27 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
             }
             
             switch (args[0].toLowerCase()) {
-                case "reload":
+                case "reload" -> {
+                    if (sender == null) return true;
                     long startTime = System.nanoTime();
                     combat.reloadCombatConfig();
                     long endTime = System.nanoTime();
                     long durationMs = TimeUnit.NANOSECONDS.toMillis(endTime - startTime);
                     sender.sendMessage(ChatUtil.parse("&aConfig reloaded in " + durationMs + "ms!"));
-                    break;
+                }
                     
-                case "toggle":
+                case "toggle" -> {
+                    if (sender == null) return true;
                     Combat combatInstance = Combat.getInstance();
-                    combatInstance.setCombatEnabled(!combatInstance.isCombatEnabled());
-                    sender.sendMessage(ChatUtil.parse("&eCombat has been &" + (combatInstance.isCombatEnabled() ? "aenabled" : "cdisabled") + "&e."));
-                    break;
+                    if (combatInstance != null) {
+                        combatInstance.setCombatEnabled(!combatInstance.isCombatEnabled());
+                        sender.sendMessage(ChatUtil.parse("&eCombat has been &" + 
+                            (combatInstance.isCombatEnabled() ? "aenabled" : "cdisabled") + "&e."));
+                    }
+                }
 
-                case "removeprotect":
-                case "protection":
+                case "removeprotect", "protection" -> {
+                    if (sender == null) return true;
                     if (!(sender instanceof Player player)) {
                         sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                         return true;
@@ -131,12 +150,14 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                             player.sendMessage(ChatUtil.parse("&cYou are not protected."));
                             return true;
                         }
-                        player.sendMessage(ChatUtil.parse("&eAre you sure you want to remove your protection? &cRun '/"+ disableCommand +" confirm' to confirm."));
+                        player.sendMessage(ChatUtil.parse("&eAre you sure you want to remove your protection? &cRun '/"+ 
+                            disableCommand +" confirm' to confirm."));
                         return true;
                     }
-                    break;
+                }
                 
-                case "confirm":
+                case "confirm" -> {
+                    if (sender == null) return true;
                     if (!(sender instanceof Player player)) {
                         sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
                         return true;
@@ -147,28 +168,35 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
                         return true;
                     }
                     protectionListener.removeProtection(player);
-                    break;
+                }
                 
-                case "update":
+                case "update" -> {
+                    if (sender == null) return true;
                     if (updateCheckInProgress) {
                         sender.sendMessage(ChatUtil.parse("&eUpdate check is already in progress. Please wait..."));
-                        break;
+                        return true;
                     }
                     updateCheckInProgress = true;
                     Combat plugin = Combat.getInstance();
-                    Update.checkForUpdates(plugin, sender);
-                    plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                        updateCheckInProgress = false;
-                        if (!Update.isUpdateFound()) {
-                            Update.setUpdateFound(true);
-                        } else {
-                            Update.downloadAndReplaceJar(plugin, sender);
-                            Update.setUpdateFound(false);
-                        }
-                    }, 40L);
-                    break;
-                default:
-                    sender.sendMessage(ChatUtil.parse("&cUnknown command. Type &e/combat help &cfor usage."));
+                    if (plugin != null) {
+                        Update.checkForUpdates(plugin, sender);
+                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                            updateCheckInProgress = false;
+                            if (!Update.isUpdateFound()) {
+                                Update.setUpdateFound(true);
+                            } else {
+                                Update.downloadAndReplaceJar(plugin, sender);
+                                Update.setUpdateFound(false);
+                            }
+                        }, 40L);
+                    }
+                }
+                
+                default -> {
+                    if (sender != null) {
+                        sender.sendMessage(ChatUtil.parse("&cUnknown command. Type &e/combat help &cfor usage."));
+                    }
+                }
             }
             return true;
         }
@@ -194,8 +222,16 @@ public class CombatCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command cmd, String label, String[] args) {
         List<String> completions = new ArrayList<>();
         Combat combat = Combat.getInstance();
+        if (combat == null || combat.getConfig() == null) {
+            if (sender != null) {
+                sender.sendMessage(ChatUtil.parse("&cError: Plugin not properly initialized."));
+            }
+            return Collections.emptyList();
+        }
+        
         boolean newbieProtectionEnabled = combat.getConfig().getBoolean("NewbieProtection.enabled", true);
-        String disableCommand = combat.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect").toLowerCase();
+        String configValue = combat.getConfig().getString("NewbieProtection.settings.disableCommand");
+        String disableCommand = (configValue != null ? configValue : "removeprotect").toLowerCase();
 
         if (args.length == 1) {
             if ("reload".startsWith(args[0].toLowerCase())) {

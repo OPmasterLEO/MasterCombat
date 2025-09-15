@@ -1,70 +1,118 @@
 package net.opmasterleo.combat.manager;
 
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.SchedulerUtil;
-import org.bukkit.Bukkit;
-import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
-
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
+import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class CrystalManager {
-    private final ConcurrentHashMap<UUID, UUID> crystalPlacers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, CrystalData> crystalData = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Set<UUID>> playerCrystals = new ConcurrentHashMap<>();
+    private static final long CLEANUP_INTERVAL = TimeUnit.MINUTES.toMillis(1);
+    private static final long CRYSTAL_EXPIRY = TimeUnit.MINUTES.toMillis(5);
+    private long lastCleanup = System.currentTimeMillis();
+    private final Combat plugin;
+
+    private static class CrystalData {
+        final UUID placerUUID;
+        final long timestamp;
+        final String worldName;
+
+        CrystalData(UUID placerUUID, String worldName) {
+            this.placerUUID = placerUUID;
+            this.timestamp = System.currentTimeMillis();
+            this.worldName = worldName;
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CRYSTAL_EXPIRY;
+        }
+    }
+
+    public CrystalManager() {
+        this.plugin = Combat.getInstance();
+    }
 
     public void initialize(Combat plugin) {
-        SchedulerUtil.runTaskTimerAsync(plugin, this::cleanupExpiredEntries, 20 * 60, 20 * 60);
+        SchedulerUtil.runTaskTimerAsync(plugin, () -> {
+            try {
+                cleanupExpiredEntries();
+            } catch (Exception e) {
+                plugin.debug("Error during crystal cleanup: " + e.getMessage());
+            }
+        }, 1200, 1200);
     }
 
     public void setPlacer(Entity crystal, Player placer) {
-        if (crystal == null || placer == null) return;
-        crystalPlacers.put(crystal.getUniqueId(), placer.getUniqueId());
+        if (crystal == null || placer == null || !(crystal instanceof EnderCrystal)) return;
+        
+        UUID crystalId = crystal.getUniqueId();
+        UUID placerId = placer.getUniqueId();
+        
+    crystalData.computeIfAbsent(crystalId, k -> new CrystalData(placerId, crystal.getWorld().getName()));
+    playerCrystals.computeIfAbsent(placerId, k -> ConcurrentHashMap.newKeySet()).add(crystalId);
+
+        if (System.currentTimeMillis() - lastCleanup > CLEANUP_INTERVAL) {
+            plugin.getCombatWorkerPool().execute(this::cleanupExpiredEntries);
+        }
     }
 
     public Player getPlacer(Entity crystal) {
         if (crystal == null) return null;
-        UUID placerUuid = crystalPlacers.get(crystal.getUniqueId());
-        return placerUuid != null ? Bukkit.getPlayer(placerUuid) : null;
+        
+        CrystalData data = crystalData.get(crystal.getUniqueId());
+        if (data == null) return null;
+        
+        if (data.isExpired()) {
+            removeCrystal(crystal);
+            return null;
+        }
+        
+        return Bukkit.getPlayer(data.placerUUID);
     }
 
     public void removeCrystal(Entity crystal) {
         if (crystal == null) return;
-        crystalPlacers.remove(crystal.getUniqueId());
+        
+        UUID crystalId = crystal.getUniqueId();
+        CrystalData data = crystalData.remove(crystalId);
+        
+        if (data != null) {
+            Set<UUID> playerSet = playerCrystals.get(data.placerUUID);
+            if (playerSet != null) {
+                playerSet.remove(crystalId);
+                if (playerSet.isEmpty()) {
+                    playerCrystals.remove(data.placerUUID);
+                }
+            }
+        }
     }
     
     private void cleanupExpiredEntries() {
-        if (crystalPlacers.isEmpty()) return;
+        if (crystalData.isEmpty()) return;
+        lastCleanup = System.currentTimeMillis();
         
-        Set<UUID> toRemove = ConcurrentHashMap.newKeySet();
-        for (UUID crystalUuid : crystalPlacers.keySet()) {
-            Entity entity = null;
-            for (World world : Bukkit.getWorlds()) {
-                entity = getEntityByUUID(world, crystalUuid);
-                if (entity != null) break;
-            }
-
-            if (entity == null || !entity.isValid() || entity.isDead()) {
-                toRemove.add(crystalUuid);
-            }
+        crystalData.keySet().removeIf(crystalId -> {
+            CrystalData data = crystalData.get(crystalId);
+            if (data == null || data.isExpired()) return true;
+            World world = Bukkit.getWorld(data.worldName);
+            if (world == null) return true;
+            Entity entity = world.getEntity(crystalId);
+            return entity == null || !entity.isValid() || entity.isDead();
+        });
+        playerCrystals.forEach((placerId, playerSet) -> playerSet.removeIf(crystalId -> !crystalData.containsKey(crystalId)));
+        playerCrystals.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        if (plugin.isDebugEnabled()) {
+            plugin.debug("Cleaned up expired crystal entries");
         }
-        
-        for (UUID uuid : toRemove) {
-            crystalPlacers.remove(uuid);
-        }
-        
-        if (!toRemove.isEmpty() && Combat.getInstance().isDebugEnabled()) {
-            Combat.getInstance().debug("Cleaned up " + toRemove.size() + " expired crystal entries");
-        }
-    }
-
-    private Entity getEntityByUUID(World world, UUID uuid) {
-        for (Entity entity : world.getEntities()) {
-            if (entity.getUniqueId().equals(uuid)) {
-                return entity;
-            }
-        }
-        return null;
     }
 }

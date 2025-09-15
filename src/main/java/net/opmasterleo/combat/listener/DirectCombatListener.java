@@ -1,5 +1,9 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -35,26 +39,55 @@ public class DirectCombatListener implements PacketListener, Listener {
         }
     }
 
+    private static final long PACKET_THROTTLE_MS = 50;
+    private final Map<UUID, Long> lastPacketTime = new ConcurrentHashMap<>();
+
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) return;
         
         try {
-            WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
-            switch (packet.getAction()) {
-                case ATTACK -> {}
-                default -> { return; }
-            }
-            
             Player attacker = (Player) event.getPlayer();
+            if (attacker == null) return;
+            long currentTime = System.currentTimeMillis();
+            Long lastTime = lastPacketTime.get(attacker.getUniqueId());
+            if (lastTime != null && currentTime - lastTime < PACKET_THROTTLE_MS) {
+                event.setCancelled(true);
+                return;
+            }
+            lastPacketTime.put(attacker.getUniqueId(), currentTime);
+
+            WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
+            if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
+                return;
+            }
+
             Combat combat = Combat.getInstance();
-            Entity target = combat.getEntityManager().getEntity(packet.getEntityId());
-            
-            if (!(target instanceof Player victim)) return;
-            if (attacker.isDead() || victim.isDead()) return;
-            
-            SchedulerUtil.runTask(combat, () -> {
-                handleCombat(attacker, victim);
+            int entityId = packet.getEntityId();
+            if (!combat.isCombatEnabled() || attacker.isDead()) {
+                return;
+            }
+
+            Entity target = combat.getEntityManager().getEntity(entityId);
+            if (!(target instanceof Player victim) || victim.isDead()) {
+                return;
+            }
+
+            if (attacker.getGameMode() == GameMode.CREATIVE || 
+                attacker.getGameMode() == GameMode.SPECTATOR || 
+                victim.getGameMode() == GameMode.CREATIVE || 
+                victim.getGameMode() == GameMode.SPECTATOR) {
+                return;
+            }
+
+            combat.getCombatWorkerPool().execute(() -> {
+                try {
+                    if (combat.canDamage(attacker, victim)) {
+                        SchedulerUtil.runTask(combat, () -> handleCombat(attacker, victim));
+                    }
+                } catch (Exception e) {
+                    combat.debug("Error in async combat processing: " + e.getMessage());
+                }
             });
         } catch (Exception e) {
             Combat.getInstance().debug("Error processing packet combat: " + e.getMessage());
