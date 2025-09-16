@@ -76,9 +76,9 @@ jobs:
           COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
 
           if [ -z "$COMMITS" ]; then
-            NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\nNo changes made."
+            NOTES="No changes made."
           else
-            NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\n"
+            NOTES=""
             while IFS="|" read -r MSG HASH; do
               SHORT_HASH=${HASH:0:7}
               LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
