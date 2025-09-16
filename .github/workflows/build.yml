@@ -2,7 +2,7 @@ name: Build MasterCombat
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -38,21 +38,17 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Cleanup old JARs
-        run: |
-          rm -f ./MasterCombat-v*-build-*.jar
-
-      - name: Rename JAR with build number
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar
-          echo "jar_file=MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar" >> $GITHUB_OUTPUT
+      - name: Delete old release (MasterCombat-latest)
+        uses: peter-evans/delete-release@v2
+        with:
+          tag: MasterCombat-latest
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
-          path: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
+          path: target/MasterCombat-v${{ steps.version.outputs.version }}.jar
 
       - name: Generate release notes for latest
         id: release_notes
@@ -61,7 +57,8 @@ jobs:
           git fetch --tags
 
           if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
-            COMMITS=$(git log MasterCombat-latest..HEAD --pretty=format:"%s|%H")
+            LAST_COMMIT=$(git rev-list -n 1 MasterCombat-latest)
+            COMMITS=$(git log $LAST_COMMIT..HEAD --pretty=format:"%s|%H")
           else
             COMMITS=$(git log -n 20 --pretty=format:"%s|%H")
           fi
@@ -83,7 +80,7 @@ jobs:
             fi
           done <<< "$COMMITS"
 
-          NOTES="MasterCombat v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}\n\n"
+          NOTES="MasterCombat v${{ steps.version.outputs.version }}\n\n"
           [ -n "$FEATURES" ] && NOTES+="🎯 New Features:\n$FEATURES\n"
           [ -n "$FIXES" ] && NOTES+="🐞 Fixes:\n$FIXES\n"
           [ -n "$UPDATES" ] && NOTES+="⚙️ Updates:\n$UPDATES\n"
@@ -96,7 +93,7 @@ jobs:
         with:
           name: "MasterCombat latest"
           tag_name: "MasterCombat-latest"
-          files: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
+          files: target/MasterCombat-v${{ steps.version.outputs.version }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
