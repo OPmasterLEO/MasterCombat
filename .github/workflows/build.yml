@@ -72,8 +72,12 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          # Only include commits touching src/ or pom.xml
-          COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
+          # Only include commits touching src/ or pom.xml since last release
+          if git rev-parse "MasterCombat-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            COMMITS=$(git log MasterCombat-v${{ steps.version.outputs.version }}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
+          else
+            COMMITS=$(git log -n 20 --pretty=format:"%s|%H" -- src/ pom.xml)
+          fi
 
           FEATURES=""
           FIXES=""
