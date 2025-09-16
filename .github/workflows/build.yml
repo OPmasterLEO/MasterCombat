@@ -39,7 +39,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Delete old release (MasterCombat-latest)
-        uses: peter-evans/delete-release@v2
+        uses: peter-evans/delete-release@v2.3.0
         with:
           tag: MasterCombat-latest
           github_token: ${{ secrets.GITHUB_TOKEN }}
