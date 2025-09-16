@@ -23,7 +23,7 @@ It features advanced combat tagging, PvP protection for new players, action bar 
 - **Update System**: Checks for updates and can auto-download new versions.
 
 Any issues or suggestions should be reported in the [Issues tab](https://github.com/OPmasterLEO/MasterCombat/issues).  
-You are free to DM me on Discord (`leqop`)!
+You are free to DM me on Discord (`opmasterleo`)!
 
 ## Installation
 
@@ -60,11 +60,16 @@ You are free to DM me on Discord (`leqop`)!
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.x.x   | :soon:             |
-| 4.x.x   | :white_check_mark: |
-| < 3.x.x | :x:                |
+### Server Compatibility
+
+This plugin is tested and compatible with the following Minecraft server versions and platforms:
+- bukkit (With Multi-worker thread support.)
+- Folia (Multi-threaded support.)
+- ArcLight
+
+Notes:
+- Folia support is included for asynchronous scheduling and region-aware tasks.
+- For the latest compatibility details, check the GitHub Releases page.
 
 ## Security Policy
 
