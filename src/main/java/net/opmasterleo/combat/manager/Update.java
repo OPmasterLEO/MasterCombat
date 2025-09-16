@@ -221,6 +221,8 @@ public class Update {
 
     private static void performUpdateCheck(Plugin plugin) {
         if (isShuttingDown) return;
+        String pluginNameForDebug = (plugin != null) ? plugin.getName() : "MasterCombat";
+        if (!pluginNameForDebug.isEmpty() && isShuttingDown) return;
         
         try {
             URL url = URI.create(GITHUB_API_URL).toURL();
