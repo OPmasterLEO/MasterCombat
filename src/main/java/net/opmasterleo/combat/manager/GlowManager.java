@@ -1,6 +1,5 @@
 package net.opmasterleo.combat.manager;
 
-import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,6 +8,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
+
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
@@ -25,6 +29,7 @@ public class GlowManager {
 
     public void setGlowing(Player player, boolean glowing) {
         if (player == null) return;
+        
         SchedulerUtil.runEntityTask(plugin, player, () -> {
             if (glowing) {
                 glowingPlayers.add(player.getUniqueId());
@@ -73,33 +78,27 @@ public class GlowManager {
         if (player == null) return;
         
         try {
-            player.setGlowing(true);
+            setGlowingWithPacketEvents(player, true);
+            
             if (plugin.getConfig().getBoolean("General.ColoredGlowing", false)) {
                 final String teamName = "combat_" + player.getName().substring(0, Math.min(player.getName().length(), 10));
                 final String cfgColor = plugin.getConfig().getString("General.GlowingColor", "RED");
                 final String ampColor = colorCodeFromName(cfgColor);
+                
                 SchedulerUtil.runTask(plugin, () -> {
                     Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
                     Team team = board.getTeam(teamName);
                     if (team == null) {
                         team = board.registerNewTeam(teamName);
                     }
+                    
                     try {
                         Component comp = ChatUtil.parse(ampColor);
-                        try {
-                            Method m = Team.class.getMethod("setPrefix", Component.class);
-                            m.invoke(team, comp);
-                        } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException reflEx) {
-                            try {
-                                String legacy = ampColor.replace('&', '\u00A7');
-                                Method m2 = Team.class.getMethod("setPrefix", String.class);
-                                m2.invoke(team, legacy);
-                            } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {
-                            }
-                        }
+                        team.prefix(comp);
                     } catch (Exception e) {
                         plugin.getLogger().warning(String.format("Failed to apply glowing effect to %s: %s", player.getName(), e.getMessage()));
                     }
+                    
                     if (!team.hasEntry(player.getName())) {
                         team.addEntry(player.getName());
                     }
@@ -114,7 +113,7 @@ public class GlowManager {
         if (player == null) return;
         
         try {
-            player.setGlowing(false);
+            setGlowingWithPacketEvents(player, false);
             
             if (plugin.getConfig().getBoolean("General.ColoredGlowing", false)) {
                 final String teamName = "combat_" + player.getName().substring(0, Math.min(player.getName().length(), 10));
@@ -135,13 +134,43 @@ public class GlowManager {
             plugin.getLogger().warning(String.format("Failed to remove glowing effect from %s: %s", player.getName(), e.getMessage()));
         }
     }
+    
+    private void setGlowingWithPacketEvents(Player player, boolean glowing) {
+        try {
+            int entityId = player.getEntityId();
+            byte entityMask = 0;
+            if (glowing) {
+                entityMask |= 0x40;
+            }
+            EntityData<Byte> entityData = new EntityData<>(0, EntityDataTypes.BYTE, entityMask);
+            WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
+                entityId, 
+                java.util.Collections.singletonList(entityData)
+            );
+
+            for (Player target : Bukkit.getOnlinePlayers()) {
+                try {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(target, metadataPacket);
+                } catch (Exception ignored) {
+                }
+            }
+            
+        } catch (Exception e) {
+            plugin.getLogger().warning(() -> String.format("Failed to set glowing via PacketEvents for %s: %s", player.getName(), e.getMessage()));
+            try {
+                player.setGlowing(glowing);
+            } catch (Exception ex) {
+                plugin.getLogger().warning(() -> String.format("Fallback Bukkit glowing also failed for %s: %s", player.getName(), ex.getMessage()));
+            }
+        }
+    }
 
     public boolean isGlowing(Player player) {
         return player != null && glowingPlayers.contains(player.getUniqueId());
     }
 
     private static String colorCodeFromName(String name) {
-        if (name == null) return "&c"; // default red
+        if (name == null) return "&c";
         return switch (name.trim().toUpperCase()) {
             case "BLACK" -> "&0";
             case "DARK_BLUE", "DARKBLUE", "BLUE" -> "&1";
