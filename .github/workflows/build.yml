@@ -40,10 +40,10 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Rename JAR with build number
+      - name: Rename JAR to match build number
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-${VERSION}-${{ env.BUILD_NUMBER }}.jar
+          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-${{ env.BUILD_NUMBER }}.jar
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
