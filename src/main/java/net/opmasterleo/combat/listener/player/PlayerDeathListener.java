@@ -10,6 +10,7 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.Location;
 import org.bukkit.World;
 import java.util.UUID;
+import java.util.Objects;
 
 public class PlayerDeathListener implements Listener {
 
@@ -21,11 +22,15 @@ public class PlayerDeathListener implements Listener {
         Combat combat = Combat.getInstance();
         Player combatOpponent = combat.getCombatOpponent(victim);
         Player killer = victim.getKiller();
-        if (killer == null && combatOpponent != null &&
-            event.deathMessage() != null &&
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(event.deathMessage()).contains(INTENTIONAL_GAME_DESIGN_KEYWORD)) {
-            victim.setKiller(combatOpponent);
+        if (killer == null && combatOpponent != null) {
+            net.kyori.adventure.text.Component deathComp = event.deathMessage();
+            if (deathComp != null) {
+        String deathText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            .serialize(Objects.requireNonNull(deathComp));
+                if (deathText.contains(INTENTIONAL_GAME_DESIGN_KEYWORD)) {
+                    victim.setKiller(combatOpponent);
+                }
+            }
         }
 
         UUID victimUUID = victim.getUniqueId();

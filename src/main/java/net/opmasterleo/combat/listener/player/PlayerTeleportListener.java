@@ -12,7 +12,6 @@ public final class PlayerTeleportListener implements Listener {
     @EventHandler
     public void handle(PlayerTeleportEvent event) {
         Player player = event.getPlayer();
-        if (player == null) return;
         Combat combat = Combat.getInstance();
 
         final boolean disableElytra = combat.isDisableElytra();
@@ -32,7 +31,6 @@ public final class PlayerTeleportListener implements Listener {
         if (enderPearlEnabled && inCombat && event.getCause() == PlayerTeleportEvent.TeleportCause.ENDER_PEARL) {
             Location from = event.getFrom();
             Location to = event.getTo();
-            if (from == null || to == null) return;
 
             double dx = from.getX() - to.getX();
             double dz = from.getZ() - to.getZ();
