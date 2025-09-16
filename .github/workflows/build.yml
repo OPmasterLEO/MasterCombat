@@ -3,8 +3,6 @@ name: Build MasterCombat
 on:
   push:
     branches: [ "main" ]
-    tags:
-      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -42,36 +40,43 @@ jobs:
 
       - name: Rename JAR with build number
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "Version: $VERSION"
-          ls target/
+          VERSION=${{ steps.version.outputs.version }}
           mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-${{ env.BUILD_NUMBER }}.jar
-          
+          echo "jar_file=MasterCombat-v${VERSION}-${{ env.BUILD_NUMBER }}.jar" >> $GITHUB_OUTPUT
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
-          path: ./MasterCombat-*.jar
+          path: ./MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar
 
       - name: Calculate SHA-256
         id: hash
         run: |
-          FILE=$(ls MasterCombat-*.jar | head -n 1)
+          FILE=$(ls MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar)
           HASH=$(sha256sum "$FILE" | awk '{ print $1 }')
           echo "sha256=$HASH" >> $GITHUB_OUTPUT
-          echo "file=$FILE" >> $GITHUB_OUTPUT
 
-      - name: Release Plugin
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Generate release notes for latest
+        id: release_notes
+        run: |
+          # Use the last commit for first build if tag doesn't exist
+          git fetch --tags
+          if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
+            NOTES=$(git log MasterCombat-latest..HEAD --pretty=format:"- %s (%an #%h)")
+          else
+            NOTES=$(git log -n 20 --pretty=format:"- %s (%an #%h)")
+          fi
+          echo "$NOTES" > release_notes.md
+          cat release_notes.md
+
+      - name: Release/Update MasterCombat-latest
         uses: softprops/action-gh-release@v2
         with:
-          name: "MasterCombat ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          files: "${{ steps.hash.outputs.file }}"
-          generate_release_notes: true
-          body: |
-            Build number: ${{ env.BUILD_NUMBER }}
-            SHA-256: `${{ steps.hash.outputs.sha256 }}`
+          name: "MasterCombat latest"
+          tag_name: "MasterCombat-latest"
+          files: ./MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar
+          body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           prerelease: false
