@@ -1,15 +1,17 @@
-name: Build MasterCombat
+name: Build MasterCombat Auto Release
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
+    paths:
+      - "src/**"   # Trigger only on changes in src/
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      BUILD_NUMBER: ${{ github.run_number }}
+      RELEASE_TAG: MasterCombat-latest
 
     steps:
       - name: Checkout repository
@@ -38,65 +40,62 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Cleanup old JARs
+      - name: Determine release version
+        id: release_version
         run: |
-          rm -f ./MasterCombat-v*-build-*.jar
+          LATEST_TAG=${RELEASE_TAG}
+          git fetch --tags
 
-      - name: Rename JAR with build number
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar
-          echo "jar_file=MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar" >> $GITHUB_OUTPUT
+          ARTIFACT_VERSION=${{ steps.version.outputs.version }}
 
-      - name: Upload Artifact
+          # Check last release artifact version
+          if gh release view $LATEST_TAG --repo $GITHUB_REPOSITORY >/dev/null 2>&1; then
+            LAST_VERSION=$(gh release view $LATEST_TAG --repo $GITHUB_REPOSITORY --json assets -q ".assets[0].name" | grep -oP '\d+\.\d+\.\d+')
+          else
+            LAST_VERSION=""
+          fi
+
+          # If last artifact version equals pom.xml, increment patch
+          if [ "$LAST_VERSION" = "$ARTIFACT_VERSION" ]; then
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$ARTIFACT_VERSION"
+            PATCH=$((PATCH + 1))
+            ARTIFACT_VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+
+          echo "release_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $ARTIFACT_VERSION"
+
+      - name: Upload artifact to latest release
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
-          path: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
+          path: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
 
-      - name: Generate release notes for latest
+      - name: Generate release notes
         id: release_notes
         run: |
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
-            COMMITS=$(git log MasterCombat-latest..HEAD --pretty=format:"%s|%H")
-          else
-            COMMITS=$(git log -n 20 --pretty=format:"%s|%H")
-          fi
+          # Commits since last release
+          COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H")
 
-          FEATURES=""
-          FIXES=""
-          UPDATES=""
-
+          NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\n"
           while IFS="|" read -r MSG HASH; do
             SHORT_HASH=${HASH:0:7}
             LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
-
-            if echo "$MSG" | grep -Eiq "fix"; then
-              FIXES+="$LINK $MSG\n"
-            elif echo "$MSG" | grep -Eiq "add|new"; then
-              FEATURES+="$LINK $MSG\n"
-            else
-              UPDATES+="$LINK $MSG\n"
-            fi
+            NOTES+="$LINK $MSG\n"
           done <<< "$COMMITS"
-
-          NOTES="MasterCombat v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}\n\n"
-          [ -n "$FEATURES" ] && NOTES+="🎯 New Features:\n$FEATURES\n"
-          [ -n "$FIXES" ] && NOTES+="🐞 Fixes:\n$FIXES\n"
-          [ -n "$UPDATES" ] && NOTES+="⚙️ Updates:\n$UPDATES\n"
 
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
-      - name: Release/Update MasterCombat-latest
+      - name: Update latest release
         uses: softprops/action-gh-release@v2
         with:
           name: "MasterCombat latest"
           tag_name: "MasterCombat-latest"
-          files: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
+          files: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
