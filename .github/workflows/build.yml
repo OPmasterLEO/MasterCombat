@@ -38,6 +38,10 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Cleanup old JARs
+        run: |
+          rm -f ./MasterCombat-v*-build-*.jar
+
       - name: Rename JAR with build number
         run: |
           VERSION=${{ steps.version.outputs.version }}
@@ -56,7 +60,6 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          # Get commits since last MasterCombat-latest tag or last 20 commits
           if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
             COMMITS=$(git log MasterCombat-latest..HEAD --pretty=format:"%s|%H")
           else
@@ -67,7 +70,6 @@ jobs:
           FIXES=""
           UPDATES=""
 
-          # Process each commit
           while IFS="|" read -r MSG HASH; do
             SHORT_HASH=${HASH:0:7}
             LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
