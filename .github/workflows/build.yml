@@ -41,33 +41,68 @@ jobs:
       - name: Rename JAR with build number
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-${{ env.BUILD_NUMBER }}.jar
-          echo "jar_file=MasterCombat-v${VERSION}-${{ env.BUILD_NUMBER }}.jar" >> $GITHUB_OUTPUT
+          mv target/MasterCombat-v${VERSION}.jar ./MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar
+          echo "jar_file=MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
-          path: ./MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar
+          path: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
 
       - name: Calculate SHA-256
         id: hash
         run: |
-          FILE=$(ls MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar)
+          FILE=MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
           HASH=$(sha256sum "$FILE" | awk '{ print $1 }')
           echo "sha256=$HASH" >> $GITHUB_OUTPUT
 
       - name: Generate release notes for latest
         id: release_notes
         run: |
-          # Use the last commit for first build if tag doesn't exist
+          REPO="${GITHUB_REPOSITORY}"  # e.g., OPmasterLEO/MasterCombat
           git fetch --tags
+
           if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
-            NOTES=$(git log MasterCombat-latest..HEAD --pretty=format:"- %s (%an #%h)")
+            COMMITS=$(git log MasterCombat-latest..HEAD --pretty=format:"%s|%an|%H")
           else
-            NOTES=$(git log -n 20 --pretty=format:"- %s (%an #%h)")
+            COMMITS=$(git log -n 20 --pretty=format:"%s|%an|%H")
           fi
-          echo "$NOTES" > release_notes.md
+
+          FEATURES=""
+          FIXES=""
+          UPDATES=""
+
+          while IFS="|" read -r MSG AUTHOR HASH; do
+            SHORT_HASH=${HASH:0:7}
+            LINK="[${SHORT_HASH}](https://github.com/${REPO}/commit/${HASH})"
+
+            # Simple keyword categorization (can expand)
+            if [[ "$MSG" =~ [Ff]ix ]]; then
+              FIXES+="- $MSG ($AUTHOR $LINK)\n"
+            elif [[ "$MSG" =~ [Aa]dd|[Nn]ew ]]; then
+              FEATURES+="- $MSG ($AUTHOR $LINK)\n"
+            else
+              UPDATES+="- $MSG ($AUTHOR $LINK)\n"
+            fi
+          done <<< "$COMMITS"
+
+          NOTES="MasterCombat v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}\n\n"
+
+          if [[ -n "$FEATURES" ]]; then
+            NOTES+="🎯 New Features:\n$FEATURES\n"
+          fi
+          if [[ -n "$FIXES" ]]; then
+            NOTES+="🐞 Fixes:\n$FIXES\n"
+          fi
+          if [[ -n "$UPDATES" ]]; then
+            NOTES+="⚙️ Updates:\n$UPDATES\n"
+          fi
+
+          NOTES+="Build number: ${{ env.BUILD_NUMBER }}\n"
+          NOTES+="SHA-256: \`${{ steps.hash.outputs.sha256 }}\`\n"
+
+          echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
       - name: Release/Update MasterCombat-latest
@@ -75,7 +110,7 @@ jobs:
         with:
           name: "MasterCombat latest"
           tag_name: "MasterCombat-latest"
-          files: ./MasterCombat-v${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar
+          files: ./MasterCombat-v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
