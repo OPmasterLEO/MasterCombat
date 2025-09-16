@@ -1,4 +1,4 @@
-name: Build MasterCombat
+name: Build MasterCombat Auto Release
 
 on:
   push:
@@ -8,8 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
       - name: Checkout repository
@@ -38,57 +36,73 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Determine next version
+        id: next_version
+        run: |
+          git fetch --tags
+          # Find the latest MasterCombat artifact tag
+          LATEST_TAG=$(git tag -l "MasterCombat-v*" --sort=-creatordate | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            NEXT_VERSION=${{ steps.version.outputs.version }}
+          else
+            # Extract numeric parts and increment last component
+            BASE=${LATEST_TAG%-*}  # e.g., MasterCombat-v5.2
+            LAST_NUM=${LATEST_TAG##*.}  # e.g., 3
+            NEXT_NUM=$((LAST_NUM + 1))
+            NEXT_VERSION="${BASE}.${NEXT_NUM}"
+          fi
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: $NEXT_VERSION"
+
+      - name: Rename JAR with next version
+        run: |
+          NEXT_VER=${{ steps.next_version.outputs.next_version }}
+          mv target/MasterCombat-v${{ steps.version.outputs.version }}.jar target/MasterCombat-v${NEXT_VER}.jar
+          echo "artifact_file=target/MasterCombat-v${NEXT_VER}.jar" >> $GITHUB_OUTPUT
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
-          path: target/MasterCombat-v${{ steps.version.outputs.version }}.jar
+          path: target/MasterCombat-v${{ steps.next_version.outputs.next_version }}.jar
 
-      - name: Generate release notes for latest
+      - name: Generate release notes
         id: release_notes
         run: |
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
-            LAST_COMMIT=$(git rev-list -n 1 MasterCombat-latest)
-            COMMITS=$(git log $LAST_COMMIT..HEAD --pretty=format:"%s|%H")
+          # Commits since last version
+          LATEST_TAG=$(git tag -l "MasterCombat-v*" --sort=-creatordate | head -n 1)
+          if [ -n "$LATEST_TAG" ]; then
+            COMMITS=$(git log $LATEST_TAG..HEAD --pretty=format:"%s|%H")
           else
             COMMITS=$(git log -n 20 --pretty=format:"%s|%H")
           fi
 
-          FEATURES=""
-          FIXES=""
-          UPDATES=""
-
+          NOTES="MasterCombat v${{ steps.next_version.outputs.next_version }}\n\n"
           while IFS="|" read -r MSG HASH; do
             SHORT_HASH=${HASH:0:7}
             LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
-
-            if echo "$MSG" | grep -Eiq "fix"; then
-              FIXES+="$LINK $MSG\n"
-            elif echo "$MSG" | grep -Eiq "add|new"; then
-              FEATURES+="$LINK $MSG\n"
-            else
-              UPDATES+="$LINK $MSG\n"
-            fi
+            NOTES+="$LINK $MSG\n"
           done <<< "$COMMITS"
-
-          NOTES="MasterCombat v${{ steps.version.outputs.version }}\n\n"
-          [ -n "$FEATURES" ] && NOTES+="🎯 New Features:\n$FEATURES\n"
-          [ -n "$FIXES" ] && NOTES+="🐞 Fixes:\n$FIXES\n"
-          [ -n "$UPDATES" ] && NOTES+="⚙️ Updates:\n$UPDATES\n"
 
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
-      - name: Release/Update MasterCombat-latest
+      - name: Release new version
         uses: softprops/action-gh-release@v2
         with:
-          name: "MasterCombat latest"
-          tag_name: "MasterCombat-latest"
-          files: target/MasterCombat-v${{ steps.version.outputs.version }}.jar
+          name: "MasterCombat v${{ steps.next_version.outputs.next_version }}"
+          tag_name: "MasterCombat-v${{ steps.next_version.outputs.next_version }}"
+          files: target/MasterCombat-v${{ steps.next_version.outputs.next_version }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           prerelease: false
+
+      - name: Push new tag
+        run: |
+          NEXT_TAG="MasterCombat-v${{ steps.next_version.outputs.next_version }}"
+          git tag $NEXT_TAG
+          git push origin $NEXT_TAG
