@@ -60,35 +60,35 @@ jobs:
       - name: Generate release notes for latest
         id: release_notes
         run: |
-          REPO="${GITHUB_REPOSITORY}"  # e.g., OPmasterLEO/MasterCombat
+          REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
-
+      
           if git rev-parse MasterCombat-latest >/dev/null 2>&1; then
             COMMITS=$(git log MasterCombat-latest..HEAD --pretty=format:"%s|%an|%H")
           else
             COMMITS=$(git log -n 20 --pretty=format:"%s|%an|%H")
           fi
-
+      
           FEATURES=""
           FIXES=""
           UPDATES=""
-
+      
           while IFS="|" read -r MSG AUTHOR HASH; do
             SHORT_HASH=${HASH:0:7}
-            LINK="[${SHORT_HASH}](https://github.com/${REPO}/commit/${HASH})"
-
-            # Simple keyword categorization (can expand)
+            LINK="[`${SHORT_HASH}`](https://github.com/${REPO}/commit/${HASH})"
+      
+            # Categorize
             if [[ "$MSG" =~ [Ff]ix ]]; then
-              FIXES+="- $MSG ($AUTHOR $LINK)\n"
+              FIXES+="$LINK $MSG ($AUTHOR)\n"
             elif [[ "$MSG" =~ [Aa]dd|[Nn]ew ]]; then
-              FEATURES+="- $MSG ($AUTHOR $LINK)\n"
+              FEATURES+="$LINK $MSG ($AUTHOR)\n"
             else
-              UPDATES+="- $MSG ($AUTHOR $LINK)\n"
+              UPDATES+="$LINK $MSG ($AUTHOR)\n"
             fi
           done <<< "$COMMITS"
-
+      
           NOTES="MasterCombat v${{ steps.version.outputs.version }}-build-${{ env.BUILD_NUMBER }}\n\n"
-
+      
           if [[ -n "$FEATURES" ]]; then
             NOTES+="🎯 New Features:\n$FEATURES\n"
           fi
@@ -98,10 +98,10 @@ jobs:
           if [[ -n "$UPDATES" ]]; then
             NOTES+="⚙️ Updates:\n$UPDATES\n"
           fi
-
+      
           NOTES+="Build number: ${{ env.BUILD_NUMBER }}\n"
           NOTES+="SHA-256: \`${{ steps.hash.outputs.sha256 }}\`\n"
-
+      
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
