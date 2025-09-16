@@ -1,0 +1,74 @@
+name: Build MasterCombat
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "no-reply@github.com"
+          git config --global user.name "OPmasterLEO"
+
+      - name: Build with Maven
+        run: mvn -B clean package -DskipTests
+
+      - name: Get plugin version from pom.xml
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Rename JAR with build number
+        run: |
+          mv target/*.jar ./MasterCombat-${{ steps.version.outputs.version }}-${{ env.BUILD_NUMBER }}.jar
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MasterCombat
+          path: ./MasterCombat-*.jar
+
+      - name: Calculate SHA-256
+        id: hash
+        run: |
+          FILE=$(ls MasterCombat-*.jar | head -n 1)
+          HASH=$(sha256sum "$FILE" | awk '{ print $1 }')
+          echo "sha256=$HASH" >> $GITHUB_OUTPUT
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Release Plugin
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "MasterCombat ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          files: "${{ steps.hash.outputs.file }}"
+          generate_release_notes: true
+          body: |
+            Build number: ${{ env.BUILD_NUMBER }}
+            SHA-256: `${{ steps.hash.outputs.sha256 }}`
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
