@@ -11,8 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: MasterCombat-latest
 
     steps:
       - name: Checkout repository
@@ -46,10 +44,11 @@ jobs:
         run: |
           ARTIFACT_VERSION=${{ steps.version.outputs.version }}
           git fetch --tags
-          
-          # Get last artifact version from latest release
-          if gh release view ${RELEASE_TAG} --repo $GITHUB_REPOSITORY >/dev/null 2>&1; then
-            LAST_VERSION=$(gh release view ${RELEASE_TAG} --repo $GITHUB_REPOSITORY --json assets -q ".assets[0].name" | grep -oP '\d+\.\d+\.\d+')
+
+          # Check last release artifact version
+          LATEST_RELEASE=$(gh release list --repo $GITHUB_REPOSITORY --limit 1 | awk '{print $1}')
+          if [ "$LATEST_RELEASE" != "" ]; then
+            LAST_VERSION=$(echo "$LATEST_RELEASE" | grep -oP '\d+\.\d+\.\d+')
           else
             LAST_VERSION=""
           fi
@@ -61,8 +60,11 @@ jobs:
             ARTIFACT_VERSION="$MAJOR.$MINOR.$PATCH"
           fi
 
+          RELEASE_TAG="MasterCombat-v$ARTIFACT_VERSION"
           echo "release_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "Release version: $ARTIFACT_VERSION"
+          echo "Release tag: $RELEASE_TAG"
 
       - name: Generate release notes
         id: release_notes
@@ -83,17 +85,17 @@ jobs:
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
-      - name: Upload artifact to latest release
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterCombat
           path: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
 
-      - name: Update latest release
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
-          name: "MasterCombat latest"
-          tag_name: "${RELEASE_TAG}"
+          name: "MasterCombat-v${{ steps.release_version.outputs.release_version }}"
+          tag_name: "${{ steps.release_version.outputs.release_tag }}"
           files: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
