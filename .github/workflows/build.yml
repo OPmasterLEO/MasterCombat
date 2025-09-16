@@ -72,18 +72,40 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          # Only include commits that touch src/ or pom.xml since last release
+          # Only include commits touching src/ or pom.xml
           COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
+
+          FEATURES=""
+          FIXES=""
+          IMPROVEMENTS=""
+          OTHER=""
 
           if [ -z "$COMMITS" ]; then
             NOTES="No changes made."
           else
-            NOTES=""
             while IFS="|" read -r MSG HASH; do
               SHORT_HASH=${HASH:0:7}
               LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
-              NOTES+="$LINK $MSG\n"
+
+              MSG_LOWER=$(echo "$MSG" | tr '[:upper:]' '[:lower:]')
+
+              if echo "$MSG_LOWER" | grep -qE '\b(add|added|new|implement|create)\b'; then
+                FEATURES+="$LINK $MSG\n"
+              elif echo "$MSG_LOWER" | grep -qE '\b(fix|fixed|bug|patch|repair)\b'; then
+                FIXES+="$LINK $MSG\n"
+              elif echo "$MSG_LOWER" | grep -qE '\b(improve|optimized|optimize|refactor|enhance)\b'; then
+                IMPROVEMENTS+="$LINK $MSG\n"
+              else
+                OTHER+="$LINK $MSG\n"
+              fi
             done <<< "$COMMITS"
+
+            NOTES=""
+
+            [ -n "$FEATURES" ] && NOTES+="🎯 New Features:\n$FEATURES\n"
+            [ -n "$FIXES" ] && NOTES+="🐞 Fixes:\n$FIXES\n"
+            [ -n "$IMPROVEMENTS" ] && NOTES+="⚡ Improvements/Optimizations:\n$IMPROVEMENTS\n"
+            [ -n "$OTHER" ] && NOTES+="📝 Other:\n$OTHER\n"
           fi
 
           echo -e "$NOTES" > release_notes.md
