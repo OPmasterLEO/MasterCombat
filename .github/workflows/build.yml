@@ -75,9 +75,9 @@ jobs:
       
           while IFS="|" read -r MSG AUTHOR HASH; do
             SHORT_HASH=${HASH:0:7}
+            # Use single quotes and variable expansion to avoid Bash interpreting backticks
             LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
       
-            # Categorize
             if [[ "$MSG" =~ [Ff]ix ]]; then
               FIXES+="$LINK $MSG ($AUTHOR)\n"
             elif [[ "$MSG" =~ [Aa]dd|[Nn]ew ]]; then
