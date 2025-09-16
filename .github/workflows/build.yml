@@ -75,12 +75,16 @@ jobs:
           # Only include commits that touch src/ or pom.xml since last release
           COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
 
-          NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\n"
-          while IFS="|" read -r MSG HASH; do
-            SHORT_HASH=${HASH:0:7}
-            LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
-            NOTES+="$LINK $MSG\n"
-          done <<< "$COMMITS"
+          if [ -z "$COMMITS" ]; then
+            NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\nNo changes made."
+          else
+            NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\n"
+            while IFS="|" read -r MSG HASH; do
+              SHORT_HASH=${HASH:0:7}
+              LINK='[`'"$SHORT_HASH"'`](https://github.com/'"$REPO"'/commit/'"$HASH"')'
+              NOTES+="$LINK $MSG\n"
+            done <<< "$COMMITS"
+          fi
 
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
