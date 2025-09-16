@@ -4,7 +4,8 @@ on:
   push:
     branches: [ "master" ]
     paths:
-      - "src/**"   # Trigger only on changes in src/
+      - "src/**"
+      - "pom.xml"
   workflow_dispatch:
 
 jobs:
@@ -43,19 +44,17 @@ jobs:
       - name: Determine release version
         id: release_version
         run: |
-          LATEST_TAG=${RELEASE_TAG}
-          git fetch --tags
-
           ARTIFACT_VERSION=${{ steps.version.outputs.version }}
-
-          # Check last release artifact version
-          if gh release view $LATEST_TAG --repo $GITHUB_REPOSITORY >/dev/null 2>&1; then
-            LAST_VERSION=$(gh release view $LATEST_TAG --repo $GITHUB_REPOSITORY --json assets -q ".assets[0].name" | grep -oP '\d+\.\d+\.\d+')
+          git fetch --tags
+          
+          # Get last artifact version from latest release
+          if gh release view ${RELEASE_TAG} --repo $GITHUB_REPOSITORY >/dev/null 2>&1; then
+            LAST_VERSION=$(gh release view ${RELEASE_TAG} --repo $GITHUB_REPOSITORY --json assets -q ".assets[0].name" | grep -oP '\d+\.\d+\.\d+')
           else
             LAST_VERSION=""
           fi
 
-          # If last artifact version equals pom.xml, increment patch
+          # Increment patch if same as pom.xml
           if [ "$LAST_VERSION" = "$ARTIFACT_VERSION" ]; then
             IFS='.' read -r MAJOR MINOR PATCH <<< "$ARTIFACT_VERSION"
             PATCH=$((PATCH + 1))
@@ -65,20 +64,14 @@ jobs:
           echo "release_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $ARTIFACT_VERSION"
 
-      - name: Upload artifact to latest release
-        uses: actions/upload-artifact@v4
-        with:
-          name: MasterCombat
-          path: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
-
       - name: Generate release notes
         id: release_notes
         run: |
           REPO="${GITHUB_REPOSITORY}"
           git fetch --tags
 
-          # Commits since last release
-          COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H")
+          # Only include commits that touch src/ or pom.xml since last release
+          COMMITS=$(git log ${RELEASE_TAG}..HEAD --pretty=format:"%s|%H" -- src/ pom.xml)
 
           NOTES="MasterCombat v${{ steps.release_version.outputs.release_version }}\n\n"
           while IFS="|" read -r MSG HASH; do
@@ -90,11 +83,17 @@ jobs:
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
+      - name: Upload artifact to latest release
+        uses: actions/upload-artifact@v4
+        with:
+          name: MasterCombat
+          path: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
+
       - name: Update latest release
         uses: softprops/action-gh-release@v2
         with:
           name: "MasterCombat latest"
-          tag_name: "MasterCombat-latest"
+          tag_name: "${RELEASE_TAG}"
           files: target/MasterCombat-v${{ steps.release_version.outputs.release_version }}.jar
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
