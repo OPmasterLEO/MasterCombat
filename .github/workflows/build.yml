@@ -86,7 +86,7 @@ jobs:
       - name: Generate release notes
         id: release_notes
         run: |
-          REPO="${GITHUB_REPOSITORY}"
+          REPO="${{ github.repository }}"
           git fetch --tags
           
           # Determine which commits to include
