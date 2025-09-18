@@ -112,7 +112,7 @@ jobs:
             # Process each commit
             while IFS="|" read -r MSG AUTHOR HASH DATE; do
               SHORT_HASH=${HASH:0:7}
-              LINK="[\\`${SHORT_HASH}\\`](https://github.com/${REPO}/commit/${HASH})"
+              LINK="[\`${SHORT_HASH}\`](https://github.com/${REPO}/commit/${HASH})"
               
               # Clean up the message (remove PR references, etc.)
               CLEAN_MSG=$(echo "$MSG" | sed -E 's/\(#.*\)//g' | xargs)
