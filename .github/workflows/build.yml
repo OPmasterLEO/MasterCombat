@@ -189,7 +189,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "MasterCombat v${{ steps.version.outputs.version }} ${{ steps.version_check.outputs.release_type == 'pre-release' && format('(Build {0})', env.BUILD_NUMBER) || '' }}"
-          tag_name: "MasterCombat-v${{ steps.version.outputs.version }}${{ steps.version_check.outputs.release_type == 'pre-release' && format('-build-{0}', env.BUILD_NUMBER) || '' }}"
+          tag_name: "${{ steps.version.outputs.version }}${{ steps.version_check.outputs.release_type == 'pre-release' && format('-build-{0}', env.BUILD_NUMBER) || '' }}"
           files: ./${{ steps.prepare_artifact.outputs.jar_name }}
           body_path: ./release_notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
