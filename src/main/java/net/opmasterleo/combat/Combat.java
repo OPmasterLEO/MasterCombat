@@ -22,10 +22,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.github.retrooper.packetevents.PacketEvents;
@@ -1228,6 +1232,43 @@ public class Combat extends JavaPlugin implements Listener {
             }
         }
 
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServerInitEvent");
+            try {
+                final Class<?> regionInitClass = Class.forName("io.papermc.paper.threadedregions.RegionizedServerInitEvent");
+                final Listener listenerHolder = new Listener() {};
+                final EventExecutor executor = (listener, event) -> {
+                    if (event != null && event.getClass() == regionInitClass) {
+                        try {
+                            if (postInitDone.compareAndSet(false, true)) {
+                                postInit();
+                            }
+                        } finally {
+                            try {
+                                HandlerList.unregisterAll(listenerHolder);
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                };
+
+                registerRegionInitListener(regionInitClass, listenerHolder, executor);
+                debug("Paper RegionizedServerInitEvent detected - deferring plugin initialization until regionized server init.");
+                SchedulerUtil.runTaskLater(this, () -> {
+                    if (postInitDone.compareAndSet(false, true)) {
+                        debug("RegionizedServerInitEvent not received in time - running deferred initialization fallback.");
+                        try { HandlerList.unregisterAll(listenerHolder); } catch (Throwable ignored) {}
+                        postInit();
+                    }
+                }, 20L * 5);
+            } catch (ClassNotFoundException cnf) {
+                if (postInitDone.compareAndSet(false, true)) postInit();
+            }
+        } catch (ClassNotFoundException ex) {
+            if (postInitDone.compareAndSet(false, true)) postInit();
+        }
+    }
+
+    private void postInit() {
         loadConfigValues();
         initializeManagers();
         registerCommands();
@@ -1262,5 +1303,12 @@ public class Combat extends JavaPlugin implements Listener {
 
     public Executor getCombatWorkerPool() {
         return combatWorkerPool;
+    }
+
+    private final java.util.concurrent.atomic.AtomicBoolean postInitDone = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    @SuppressWarnings("unchecked")
+    private void registerRegionInitListener(Class<?> regionInitClass, Listener listenerHolder, EventExecutor executor) {
+        Bukkit.getPluginManager().registerEvent((Class<? extends Event>) regionInitClass, listenerHolder, EventPriority.NORMAL, executor, this);
     }
 }
