@@ -7,74 +7,128 @@
 
 <hr>
 
-## About
+## 🎮 About
 
-MasterCombat is a modern Minecraft combat plugin inspired by DonutSMP and Master SMP (mastersmc.net), developed by OPmasterLEO.  
+MasterCombat is a modern Minecraft combat plugin inspired by DonutSMP and made for MasterSMP (mastersmp.net), developed by OPmasterLEO.  
 It features advanced combat tagging, PvP protection for new players, action bar timers, WorldGuard region support, and more.
 
-- **Combat Tagging**: Players are tagged when they deal or receive real damage (not just hits).
-- **PvP Protection**: Newbie protection system prevents new players from being attacked for a configurable time.
-- **Action Bar Timer**: Shows remaining combat time in the action bar.
-- **WorldGuard Support**: Honors PvP-denied regions.
-- **Folia Support**: Fully compatible with Folia's async scheduling.
-- **End Crystal, TNT, Respawn Anchor, Bed, Pet, Projectile, and Fishing Rod linking**: Tags correct attacker for explosions and indirect damage.
-- **Glowing Indicator**: Optional glowing effect for tagged players.
-- **Command Blocking**: Prevents usage of specified commands while in combat.
-- **Update System**: Checks for updates and can auto-download new versions.
+### ⚔️ Core Features
+
+| Feature | Description |
+|---------|-------------|
+| 🏷️ **Combat Tagging** | Smart tagging system based on real damage, not just hits |
+| 🛡️ **PvP Protection** | Configurable newbie protection system |
+| ⏱️ **Action Bar Timer** | Visual combat duration display |
+| 🌍 **WorldGuard Support** | Respects PvP-denied regions |
+| ⚡ **Folia Support** | Full async scheduling compatibility |
+| 💥 **Advanced Damage Linking** | Accurate attacker tracking for:<br>• End Crystal<br>• TNT<br>• Respawn Anchor<br>• Bed<br>• Pet<br>• Projectile<br>• Fishing Rod |
+| ✨ **Glowing Indicator** | Visual effect for tagged players |
+| 🚫 **Command Blocking** | Customizable command restrictions |
+| 🔄 **Update System** | Automatic updates with download support
 
 Any issues or suggestions should be reported in the [Issues tab](https://github.com/OPmasterLEO/MasterCombat/issues).  
 You are free to DM me on Discord (`opmasterleo`)!
 
-## Installation
+## 📥 Installation
 
-1. Download the latest jar from [GitHub Releases](https://github.com/OPmasterLEO/MasterCombat/releases/latest)
-2. Place `MasterCombat-v<version>.jar` in your server's `plugins` folder
-3. Restart your server (do not use `/reload`)
+> 🚀 Quick Start Guide
 
-## Updating
+1. 📦 Download latest jar from [GitHub Releases](https://github.com/OPmasterLEO/MasterCombat/releases/latest)
+2. 📁 Place `MasterCombat-v<version>.jar` in your server's `plugins` folder
+3. 🔄 Restart your server ⚠️ Do not use `/reload`
 
-1. Run `/combat update` in-game or from console to check for updates
-2. If an update is found, run `/combat update` again to auto-download the new jar to the `update` folder
-3. Restart your server to apply the update
-4. (Optional) Delete your old `config.yml` to regenerate defaults
+## 🔄 Updating
 
-## Configuration
+| Step | Action |
+|------|--------|
+| 1️⃣ | Run `/combat update` to check for updates |
+| 2️⃣ | If available, run command again to download |
+| 3️⃣ | Restart server to apply update |
+| 4️⃣ | *(Optional)* Delete old `config.yml` for defaults |
 
-- All settings are in `plugins/MasterCombat/config.yml`
-- Customize combat duration, protection time, blocked commands, glowing, and more
-- Supports PlaceholderAPI for messages
+> 💡 Updates can be checked from both in-game and console
 
-## Commands
+## ⚙️ Configuration
 
-- `/combat reload` — Reloads the plugin configuration
-- `/combat toggle` — Enables/disables combat tagging
-- `/combat update` — Checks for and downloads plugin updates
-- `/combat api` — Shows API status
-- `/combat protection` — Shows your PvP protection time left
-- `NewbieProtection.settings.disableCommand` — Disables your newbie PvP protection (default: `/removeprotect`)
+```yaml
+📁 Location: plugins/MasterCombat/config.yml
 
-## Permissions
+🔧 Customizable Features:
+├── ⏱️ Combat duration
+├── 🛡️ Protection time
+├── 🚫 Blocked commands
+├── ✨ Glowing effects
+└── 📝 Messages (PlaceholderAPI support)
+```
 
-- `combat.admin` — Access to admin commands
-- `combat.protection` — Access to protection commands
+## 🎮 Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/combat reload` | 🔄 Reload configuration | `combat.admin` |
+| `/combat toggle` | 🔀 Toggle combat tagging | `combat.admin` |
+| `/combat update` | 📥 Check/download updates | `combat.admin` |
+| `/combat api` | 📊 View API status | `combat.admin` |
+| `/combat protection` | 🛡️ Check protection time | `combat.protection` |
+| `/removeprotect` | 🚫 Disable newbie protection | `combat.protection` |
+
+> 💡 Command names are configurable in settings
+
+## 🔑 Permissions
+
+| Permission | Description | Default |
+|------------|-------------|---------|
+| `combat.admin` | 👑 Administrative access | `op` |
+| `combat.protection` | 🛡️ Protection commands | `true` |
+
+> 💡 Permissions can be managed with any permission plugin
 
 ## Supported Versions
 
-### Server Compatibility
+### 🔧 Server Compatibility
 
-This plugin is tested and compatible with the following Minecraft server versions and platforms:
-- bukkit (With Multi-worker thread support.)
-- Folia (Multi-threaded support.)
-- ArcLight
+This plugin features advanced multi-threading support across all major Minecraft server platforms:
 
-Notes:
-- Folia support is included for asynchronous scheduling and region-aware tasks.
-- For the latest compatibility details, check the GitHub Releases page.
+#### Modern Platforms
+| Platform | Version | Key Features |
+|----------|---------|--------------|
+| **Paper** | 1.16.5+ | ✨ Native async scheduler<br>⚡ Multi-threaded worker pool |
+| **Folia** | Latest | 🌍 Region-aware scheduling<br>⚡ Native async support |
+| **Canvas** | Latest | 🌍 Region-aware tasks<br>⚡ Async capabilities |
 
-## Security Policy
+#### Legacy Support
+| Platform | Version | Key Features |
+|----------|---------|--------------|
+| **Legacy Paper** | Pre-1.16.5 | 🔄 Custom thread pool<br>⚙️ Legacy task compatibility |
+| **Modern Spigot** | 1.14+ | ⚡ Async scheduling<br>🔄 Multi-thread support |
+| **Legacy Spigot** | Pre-1.14 | 🔄 Custom thread pool<br>⚙️ Backward compatibility |
 
-If you discover a vulnerability, please report it via GitHub Issues or DM on Discord.  
-You will receive updates on your report and fixes will be prioritized for supported versions.
+#### Special Platform Support
+| Platform | Features |
+|----------|-----------|
+| **ArcLight** | 🔒 ClassLoader-aware execution<br>⚡ Specialized task handling |
+
+#### 💫 Advanced Threading Features
+- **Adaptive Threading**: Auto-scales worker pool (2-16 threads) based on CPU cores
+- **Smart Scheduling**: Automatic platform detection for optimal task distribution
+- **Region Awareness**: Enhanced performance with Folia/Canvas region support
+- **Legacy Support**: Seamless operation on older server versions
+- **Custom Pooling**: Dedicated thread management for legacy platforms
+
+> 📝 For detailed compatibility information and latest updates, check our [GitHub Releases](https://github.com/OPmasterLEO/MasterCombat/releases) page.
+
+## 🔒 Security Policy
+
+### Reporting a Vulnerability
+
+| Method | Contact |
+|--------|---------|
+| 🐛 **GitHub Issues** | [Create Issue](https://github.com/OPmasterLEO/MasterCombat/issues) |
+| 💬 **Discord** | DM `opmasterleo` |
+
+> ⚡ Quick Response Guarantee: All security reports receive priority attention
+> 
+> 🛡️ Supported Versions: Security fixes are backported to maintained releases
 
 <hr>
 
