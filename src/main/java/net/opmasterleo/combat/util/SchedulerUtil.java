@@ -1,5 +1,18 @@
 package net.opmasterleo.combat.util;
 
+import java.lang.reflect.Method;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -9,32 +22,66 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.lang.reflect.Method;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
 public final class SchedulerUtil {
     private static final boolean IS_FOLIA = classExists("io.papermc.paper.threadedregions.RegionizedServer");
     private static final boolean IS_CANVAS = classExists("io.papermc.canvas.scheduler.CanvasScheduler");
     private static final boolean IS_ARCLIGHT = classExists("io.izzel.arclight.common.mod.ArclightMod");
     private static final boolean IS_PAPER = classExists("com.destroystokyo.paper.PaperConfig");
-    private static final boolean PAPER_ENTITY_SCHEDULER = IS_PAPER && methodExists("org.bukkit.entity.Entity", "getScheduler");
+    private static final boolean IS_LEGACY_PAPER = !IS_PAPER && classExists("org.github.paperspigot.PaperSpigotConfig");
+    private static final boolean IS_LEGACY_SPIGOT = !IS_PAPER && !IS_LEGACY_PAPER && classExists("org.spigotmc.SpigotConfig");
+    private static final boolean IS_MODERN_SPIGOT = !IS_PAPER && !IS_LEGACY_PAPER && IS_LEGACY_SPIGOT && classExists("org.spigotmc.AsyncCatcher");
+    private static final boolean SUPPORTS_ASYNC = IS_PAPER || IS_MODERN_SPIGOT || IS_LEGACY_PAPER;
+    private static final boolean PAPER_ENTITY_SCHEDULER = (IS_PAPER || IS_LEGACY_PAPER) && methodExists("org.bukkit.entity.Entity", "getScheduler");
     
     private static final AtomicBoolean isShuttingDown = new AtomicBoolean(false);
+    private static final int AVAILABLE_PROCESSORS = Runtime.getRuntime().availableProcessors();
+    private static final int MAX_WORKER_THREADS = Math.max(2, Math.min(AVAILABLE_PROCESSORS * 2, 16));
     private static final Set<BukkitTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final long CLEANUP_INTERVAL = 6000L;
+    private static final ThreadPoolManager THREAD_POOL = new ThreadPoolManager();
     
     static {
         scheduleCleanupTask();
+    }
+    
+    private static class ThreadPoolManager {
+        private final java.util.concurrent.ThreadPoolExecutor asyncPool;
+        private final java.util.concurrent.atomic.AtomicInteger threadNumber = new java.util.concurrent.atomic.AtomicInteger(1);
+        
+        ThreadPoolManager() {
+            this.asyncPool = new java.util.concurrent.ThreadPoolExecutor(
+                Math.max(2, MAX_WORKER_THREADS / 2),
+                MAX_WORKER_THREADS,
+                30L, TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(1000),
+                r -> {
+                    Thread thread = new Thread(r, "MasterCombat-Worker-" + threadNumber.getAndIncrement());
+                    thread.setDaemon(true);
+                    thread.setPriority(Thread.NORM_PRIORITY - 1);
+                    return thread;
+                },
+                new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy()
+            );
+            this.asyncPool.allowCoreThreadTimeOut(true);
+        }
+        
+        void execute(Runnable task) {
+            if (!isShuttingDown.get()) {
+                asyncPool.execute(task);
+            }
+        }
+        
+        void shutdown() {
+            asyncPool.shutdown();
+            try {
+                if (!asyncPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                    asyncPool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                asyncPool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     public static boolean isFolia() {
@@ -73,6 +120,9 @@ public final class SchedulerUtil {
 
     public static void setShuttingDown(boolean shuttingDown) {
         isShuttingDown.set(shuttingDown);
+        if (shuttingDown) {
+            THREAD_POOL.shutdown();
+        }
     }
 
     public static void cancelAllTasks(Plugin plugin) {
@@ -153,6 +203,9 @@ public final class SchedulerUtil {
         if (IS_FOLIA || IS_CANVAS) {
             Bukkit.getAsyncScheduler().runNow(plugin, t -> task.run());
             return null;
+        } else if (!SUPPORTS_ASYNC) {
+            THREAD_POOL.execute(task);
+            return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, wrapArclightAsyncTask(task));
             trackTask(bukkitTask);
@@ -186,6 +239,20 @@ public final class SchedulerUtil {
         
         if (IS_FOLIA || IS_CANVAS) {
             Bukkit.getAsyncScheduler().runDelayed(plugin, t -> task.run(), delay * 50, TimeUnit.MILLISECONDS);
+            return null;
+        } else if (!SUPPORTS_ASYNC) {
+            java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "MasterCombat-Delayed-" + System.nanoTime());
+                t.setDaemon(true);
+                return t;
+            });
+            scheduler.schedule(() -> {
+                try {
+                    THREAD_POOL.execute(task);
+                } finally {
+                    scheduler.shutdown();
+                }
+            }, delay * 50, TimeUnit.MILLISECONDS);
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, wrapArclightAsyncTask(task), delay);
@@ -221,6 +288,24 @@ public final class SchedulerUtil {
         if (IS_FOLIA || IS_CANVAS) {
             Bukkit.getAsyncScheduler().runAtFixedRate(plugin, 
                 t -> task.run(), delay * 50, period * 50, TimeUnit.MILLISECONDS);
+            return null;
+        } else if (!SUPPORTS_ASYNC) {
+            java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "MasterCombat-Timer-" + System.nanoTime());
+                t.setDaemon(true);
+                return t;
+            });
+            scheduler.scheduleAtFixedRate(() -> {
+                if (!isShuttingDown.get()) {
+                    try {
+                        THREAD_POOL.execute(task);
+                    } catch (Exception e) {
+                        scheduler.shutdown();
+                    }
+                } else {
+                    scheduler.shutdown();
+                }
+            }, delay * 50, period * 50, TimeUnit.MILLISECONDS);
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, wrapArclightAsyncTask(task), delay, period);
