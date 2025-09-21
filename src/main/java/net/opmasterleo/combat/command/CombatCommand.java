@@ -115,62 +115,65 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
                 return true;
             }
             String cmd0 = args[0].toLowerCase();
-            switch (cmd0) {
-                case "reload":
-                    if (sender == null) return true;
+            return switch (cmd0) {
+                case "reload" -> {
+                    if (sender == null) yield true;
                     long startTime = System.nanoTime();
                     combat.reloadCombatConfig();
                     long endTime = System.nanoTime();
                     long durationMs = TimeUnit.NANOSECONDS.toMillis(endTime - startTime);
                     sender.sendMessage(ChatUtil.parse("&aConfig reloaded in " + durationMs + "ms!"));
-                    break;
-                    
-                case "toggle":
-                    if (sender == null) return true;
+                    yield true;
+                }
+                
+                case "toggle" -> {
+                    if (sender == null) yield true;
                     Combat combatInstance = Combat.getInstance();
                     if (combatInstance != null) {
                         combatInstance.setCombatEnabled(!combatInstance.isCombatEnabled());
                         sender.sendMessage(ChatUtil.parse("&eCombat has been &" +
                             (combatInstance.isCombatEnabled() ? "aenabled" : "cdisabled") + "&e."));
                     }
-                    break;
-                    
-                case "removeprotect":
-                case "protection":
-                    if (sender == null) return true;
+                    yield true;
+                }
+                
+                case "removeprotect", "protection" -> {
+                    if (sender == null) yield true;
                     if (!(sender instanceof Player player)) {
                         sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
-                        return true;
+                        yield true;
                     }
                     if (args[0].equalsIgnoreCase(disableCommand)) {
                         if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
                             player.sendMessage(ChatUtil.parse("&cYou are not protected."));
-                            return true;
+                            yield true;
                         }
                         player.sendMessage(ChatUtil.parse("&eAre you sure you want to remove your protection? &cRun '/" +
                             disableCommand + " confirm' to confirm."));
-                        return true;
+                        yield true;
                     }
-                    break;
-                    
-                case "confirm":
-                    if (sender == null) return true;
+                    yield true;
+                }
+                
+                case "confirm" -> {
+                    if (sender == null) yield true;
                     if (!(sender instanceof Player player)) {
                         sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
-                        return true;
+                        yield true;
                     }
                     if (protectionListener == null || !protectionListener.isActuallyProtected(player)) {
                         player.sendMessage(ChatUtil.parse("&cYou don't have active protection."));
-                        return true;
+                        yield true;
                     }
                     protectionListener.removeProtection(player);
-                    break;
-                    
-                case "update":
-                    if (sender == null) return true;
+                    yield true;
+                }
+                
+                case "update" -> {
+                    if (sender == null) yield true;
                     if (updateCheckInProgress) {
                         sender.sendMessage(ChatUtil.parse("&eUpdate check is already in progress. Please wait..."));
-                        return true;
+                        yield true;
                     }
                     updateCheckInProgress = true;
                     Combat plugin = Combat.getInstance();
@@ -186,15 +189,16 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
                             }
                         }, 40L);
                     }
-                    break;
-                    
-                default:
+                    yield true;
+                }
+                
+                default -> {
                     if (sender != null) {
                         sender.sendMessage(ChatUtil.parse("&cUnknown command. Type &e/combat help &cfor usage."));
                     }
-                    break;
-            }
-            return true;
+                    yield true;
+                }
+            };
         }
         return true;
     }
