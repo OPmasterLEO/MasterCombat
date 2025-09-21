@@ -178,9 +178,6 @@ public class Example {
     }
 }
 ```
-
-## Supported Versions
-
 ### 🔧 Server Compatibility
 
 This plugin features advanced multi-threading support across all major Minecraft server platforms:
