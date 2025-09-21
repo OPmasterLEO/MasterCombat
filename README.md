@@ -90,6 +90,70 @@ You are free to DM me on Discord (`opmasterleo`)!
 
 > 💡 Permissions can be managed with any permission plugin
 
+## 📚 API Usage
+
+### Maven Configuration
+
+Add the JitPack repository to your `pom.xml`:
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+Add the dependency:
+```xml
+<dependency>
+    <groupId>com.github.OPmasterLEO</groupId>
+    <artifactId>MasterCombat</artifactId>
+    <version>VERSION</version>  <!-- Replace with latest version from JitPack badge -->
+</dependency>
+```
+
+### Gradle Configuration
+
+Add the JitPack repository:
+```groovy
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+```
+
+Add the dependency:
+```groovy
+dependencies {
+    implementation 'com.github.OPmasterLEO:MasterCombat:VERSION'  // Replace VERSION
+}
+```
+
+> 💡 Check the JitPack badge at the top for the latest version number
+
+### Example Usage
+
+```java
+import net.opmasterleo.combat.api.MasterCombatAPI;
+import net.opmasterleo.combat.api.MasterCombatAPIProvider;
+
+public class Example {
+    public void example() {
+        // Get API instance
+        MasterCombatAPI api = MasterCombatAPIProvider.get();
+        
+        // Tag a player
+        api.tagPlayer(player.getUniqueId());
+        
+        // Check combat state
+        String state = api.getMasterCombatState(player.getUniqueId());
+        
+        // Check if player is glowing
+        boolean glowing = api.isPlayerGlowing(player.getUniqueId());
+    }
+}
+```
+
 ## Supported Versions
 
 ### 🔧 Server Compatibility
