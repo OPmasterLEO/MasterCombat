@@ -4,7 +4,8 @@
 ![license](https://img.shields.io/github/license/OPmasterLEO/MasterCombat?style=for-the-badge)
 ![stars](https://img.shields.io/github/stars/OPmasterLEO/MasterCombat?style=for-the-badge)
 ![forks](https://img.shields.io/github/forks/OPmasterLEO/MasterCombat?style=for-the-badge)
-[![jitpack](https://jitpack.io/v/OPmasterLEO/MasterCombat.svg)](https://jitpack.io/#OPmasterLEO/MasterCombat)
+[![](https://jitpack.io/v/OPmasterLEO/MasterCombat.svg)](https://jitpack.io/#OPmasterLEO/MasterCombat)
+[![](https://jitci.com/gh/OPmasterLEO/MasterCombat/svg)](https://jitci.com/gh/OPmasterLEO/MasterCombat)
 
 <hr>
 
