@@ -1,0 +1,65 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thanks for reporting a bug! Please provide the following details to help us resolve the issue.**
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin Version
+      description: Which version of MasterCombat are you using?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: server_version
+    attributes:
+      label: Server Version
+      description: Which Minecraft server version are you running?
+      placeholder: e.g., 1.19.4
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Provide a step-by-step guide to reproduce the issue.
+      placeholder: e.g., "1. Do this\n2. Do that"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: e.g., "The combat tag should reset after 30 seconds."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: e.g., "The combat tag persists indefinitely."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste any relevant server logs or error messages.
+      placeholder: e.g., "No errors in the console."
+    validations:
+      required: false

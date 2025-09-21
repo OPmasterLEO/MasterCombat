@@ -1,0 +1,65 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you for suggesting a feature! Please provide the following details to help us understand your request.**
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin Version
+      description: Which version of MasterCombat are you using?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: server_version
+    attributes:
+      label: Server Version
+      description: Which Minecraft server version are you running?
+      placeholder: e.g., 1.19.4
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature_description
+    attributes:
+      label: Feature Description
+      description: Describe the feature you would like to see.
+      placeholder: e.g., "Add a cooldown timer for combat tagging."
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Explain how this feature would be used and why it's beneficial.
+      placeholder: e.g., "To prevent players from exploiting combat tagging."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered other solutions or workarounds?
+      placeholder: e.g., "Using a different plugin with similar features."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Any other information or context you'd like to provide.
+      placeholder: e.g., "This feature would align with features in other combat plugins."
+    validations:
+      required: false
