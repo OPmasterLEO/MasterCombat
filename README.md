@@ -1,11 +1,16 @@
 # MasterCombat
 
-[![download](https://img.shields.io/github/downloads/OPmasterLEO/MasterCombat/total?style=for-the-badge)](https://github.com/OPmasterLEO/MasterCombat/releases)
-![license](https://img.shields.io/github/license/OPmasterLEO/MasterCombat?style=for-the-badge)
-![stars](https://img.shields.io/github/stars/OPmasterLEO/MasterCombat?style=for-the-badge)
-![forks](https://img.shields.io/github/forks/OPmasterLEO/MasterCombat?style=for-the-badge)
-[![](https://jitpack.io/v/OPmasterLEO/MasterCombat.svg)](https://jitpack.io/#OPmasterLEO/MasterCombat)
-[![](https://jitci.com/gh/OPmasterLEO/MasterCombat/svg)](https://jitci.com/gh/OPmasterLEO/MasterCombat)
+<div align="center">
+
+[![Downloads](https://img.shields.io/github/downloads/OPmasterLEO/MasterCombat/total?style=for-the-badge&logo=github&logoColor=white&labelColor=2B2D30&color=24A57C)](https://github.com/OPmasterLEO/MasterCombat/releases)
+[![License](https://img.shields.io/github/license/OPmasterLEO/MasterCombat?style=for-the-badge&logo=apache&logoColor=white&labelColor=2B2D30&color=D22128)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/OPmasterLEO/MasterCombat?style=for-the-badge&logo=github&logoColor=white&labelColor=2B2D30&color=yellow)](https://github.com/OPmasterLEO/MasterCombat/stargazers)
+[![Forks](https://img.shields.io/github/forks/OPmasterLEO/MasterCombat?style=for-the-badge&logo=github&logoColor=white&labelColor=2B2D30&color=blue)](https://github.com/OPmasterLEO/MasterCombat/network/members)
+
+[![JitPack](https://img.shields.io/jitpack/v/github/OPmasterLEO/MasterCombat?style=for-the-badge&logo=jitpack&logoColor=white&labelColor=2B2D30&color=239E62)](https://jitpack.io/#OPmasterLEO/MasterCombat)
+[![JitCI](https://img.shields.io/badge/JitCI-passing-brightgreen?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJ3aGl0ZSIgZD0iTTEwIDEuMjRMMiA5LjI0bDEwLTQgMTAgNGwtOC04em00IDIwLjU4YzIuMjQtLjQ0IDQuMjMtMS42MiA1LjY2LTMuMzRsLTEuNjYtMS42NlY3LjI0bC00IDEuNnY4LjhsLS45LjljLS40NC40NC0uOTYuOC0xLjU0IDEuMDYgMS4zOCAyLjI0IDIuNDQgMy4yMiAyLjQ0IDMuMjJ6Ii8+PC9zdmc+&labelColor=2B2D30&color=4CAF50)](https://jitci.com/gh/OPmasterLEO/MasterCombat)
+
+</div>
 
 <hr>
 
