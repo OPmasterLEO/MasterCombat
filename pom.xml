@@ -11,7 +11,8 @@
     <description>A super combat plugin that have identical system like DonutSMP and more.</description>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <lombok.version>1.18.42</lombok.version>
         <worldguard.version>7.1.0-SNAPSHOT</worldguard.version>
@@ -40,7 +41,6 @@
                             <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
-                    <minimizeJar>true</minimizeJar>
                 </configuration>
             </plugin>
             <plugin>
