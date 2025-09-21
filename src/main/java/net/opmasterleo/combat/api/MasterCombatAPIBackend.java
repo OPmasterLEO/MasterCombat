@@ -114,4 +114,41 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
         } catch (Throwable ignored) {}
         return state;
     }
+
+    @Override
+    public int getRemainingCombatTime(UUID uuid) {
+        if (uuid == null) return 0;
+        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        if (record == null) return 0;
+        long remainingTime = (record.expiry - System.currentTimeMillis()) / 1000L;
+        return Math.max(0, (int)remainingTime);
+    }
+
+    @Override
+    public long getTotalCombatTime(UUID uuid) {
+        if (uuid == null) return 0;
+        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        if (record == null) return 0;
+        return (System.currentTimeMillis() - record.expiry + 
+                plugin.getConfig().getLong("General.duration", 0) * 1000L) / 1000L;
+    }
+
+    @Override
+    public UUID getCombatOpponent(UUID uuid) {
+        if (uuid == null) return null;
+        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        return record != null ? record.opponent : null;
+    }
+
+    @Override
+    public boolean isCombatSystemEnabled() {
+        return plugin.isCombatEnabled();
+    }
+
+    @Override
+    public int getActiveCombatCount() {
+        return (int)plugin.getCombatRecords().values().stream()
+            .filter(record -> record.expiry > System.currentTimeMillis())
+            .count();
+    }
 }
