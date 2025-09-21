@@ -1067,7 +1067,7 @@ public class Combat extends JavaPlugin implements Listener {
             try {
                 vectorCls = Class.forName("com.github.retrooper.packetevents.util.Vector3i", true, cl);
             } catch (ClassNotFoundException cnf) {
-                vectorCls = blockPosition != null ? blockPosition.getClass() : null;
+                vectorCls = (blockPosition != null) ? blockPosition.getClass() : null;
             }
 
             try {

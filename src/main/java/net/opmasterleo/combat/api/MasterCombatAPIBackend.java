@@ -84,13 +84,13 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
         for (String mName : candidateMethods) {
             try {
                 Method m = glowManager.getClass().getMethod(mName, Player.class);
-                Object res = m.invoke(glowManager, player);
+                Object res = m.invoke(glowManager, (Player)player);
                 if (res instanceof Boolean b) return b;
             } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {}
 
             try {
                 Method m2 = glowManager.getClass().getMethod(mName, UUID.class);
-                Object res2 = m2.invoke(glowManager, uuid);
+                Object res2 = m2.invoke(glowManager, (UUID)uuid);
                 if (res2 instanceof Boolean b2) return b2;
             } catch (NoSuchMethodException | IllegalAccessException | IllegalArgumentException | java.lang.reflect.InvocationTargetException ignored) {}
         }
