@@ -103,14 +103,14 @@ jobs:
             # For new releases, show all commits since last release
             LATEST_TAG="${{ steps.latest_release.outputs.latest_tag }}"
             COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_TAG..HEAD" -- src/ pom.xml)
-          elif [ "${{ steps.version_check.outputs.release_type }}" = "update" ]; then
-            # For updates, show only new commits since last pre-release/build
-            # Get the most recent pre-release tag
-            LATEST_PRERELEASE_TAG=$(git describe --tags --match "MasterCombat-*build*" --abbrev=0 2>/dev/null || echo "${{ steps.latest_release.outputs.latest_tag }}")
-            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_PRERELEASE_TAG..HEAD" -- src/ pom.xml)
           else
-            # For pre-releases, show only new commits since last pre-release
-            LATEST_PRERELEASE_TAG=$(git describe --tags --match "MasterCombat-*build*" --abbrev=0 2>/dev/null || echo "${{ steps.latest_release.outputs.latest_tag }}")
+            # For pre-releases/updates, show only new commits since last pre-release
+            # Get the most recent pre-release tag (any tag with "build" in it)
+            LATEST_PRERELEASE_TAG=$(git tag --list "*build*" --sort=-version:refname | head -n 1)
+            if [ -z "$LATEST_PRERELEASE_TAG" ]; then
+              # If no pre-release tags found, fall back to last release
+              LATEST_PRERELEASE_TAG="${{ steps.latest_release.outputs.latest_tag }}"
+            fi
             COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_PRERELEASE_TAG..HEAD" -- src/ pom.xml)
           fi
           
@@ -156,8 +156,6 @@ jobs:
             
             if [ "${{ steps.version_check.outputs.release_type }}" = "release" ]; then
               NOTES+="### What's Changed\n\n"
-            elif [ "${{ steps.version_check.outputs.release_type }}" = "update" ]; then
-              NOTES+="### Updated Release\n\n"
             else
               NOTES+="### Development Build (${{ env.BUILD_NUMBER }})\n\n"
             fi
