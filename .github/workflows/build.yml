@@ -1,3 +1,5 @@
+name: Build MasterCombat Auto Release
+
 on:
   push:
     branches: [ "master" ]
@@ -38,6 +40,12 @@ jobs:
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Check if it's a SNAPSHOT version
+          if [[ "$VERSION" == *"SNAPSHOT"* ]]; then
+            echo "is_snapshot=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_snapshot=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Get latest release info
         id: latest_release
@@ -60,8 +68,12 @@ jobs:
         run: |
           CURRENT_VERSION=${{ steps.version.outputs.version }}
           HAS_PREVIOUS=${{ steps.latest_release.outputs.has_previous_release }}
+          IS_SNAPSHOT=${{ steps.version.outputs.is_snapshot }}
           
-          if [ "$HAS_PREVIOUS" = "true" ]; then
+          if [ "$IS_SNAPSHOT" = "true" ]; then
+            echo "release_type=pre-release" >> $GITHUB_OUTPUT
+            echo "is_higher_version=false" >> $GITHUB_OUTPUT
+          elif [ "$HAS_PREVIOUS" = "true" ]; then
             LATEST_VERSION=${{ steps.latest_release.outputs.latest_version }}
             
             # Compare versions using sort -V (version sort)
@@ -72,8 +84,7 @@ jobs:
               echo "release_type=release" >> $GITHUB_OUTPUT
             else
               echo "is_higher_version=false" >> $GITHUB_OUTPUT
-              # If same version, create a pre-release with build number
-              echo "release_type=pre-release" >> $GITHUB_OUTPUT
+              echo "release_type=update" >> $GITHUB_OUTPUT
             fi
           else
             # First release
@@ -87,13 +98,20 @@ jobs:
           REPO="${{ github.repository }}"
           git fetch --tags
           
-          # Determine which commits to include
-          if [ "${{ steps.latest_release.outputs.has_previous_release }}" = "true" ]; then
+          # Determine which commits to include based on release type
+          if [ "${{ steps.version_check.outputs.release_type }}" = "release" ]; then
+            # For new releases, show all commits since last release
             LATEST_TAG="${{ steps.latest_release.outputs.latest_tag }}"
-            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H|%ad" --date=short "$LATEST_TAG..HEAD" -- src/ pom.xml)
+            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_TAG..HEAD" -- src/ pom.xml)
+          elif [ "${{ steps.version_check.outputs.release_type }}" = "update" ]; then
+            # For updates, show only new commits since last pre-release/build
+            # Get the most recent pre-release tag
+            LATEST_PRERELEASE_TAG=$(git describe --tags --match "MasterCombat-*build*" --abbrev=0 2>/dev/null || echo "${{ steps.latest_release.outputs.latest_tag }}")
+            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_PRERELEASE_TAG..HEAD" -- src/ pom.xml)
           else
-            # First release - show all commits
-            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H|%ad" --date=short -n 50 -- src/ pom.xml)
+            # For pre-releases, show only new commits since last pre-release
+            LATEST_PRERELEASE_TAG=$(git describe --tags --match "MasterCombat-*build*" --abbrev=0 2>/dev/null || echo "${{ steps.latest_release.outputs.latest_tag }}")
+            COMMITS=$(git log --no-merges --pretty=format:"%s|%an|%H" "$LATEST_PRERELEASE_TAG..HEAD" -- src/ pom.xml)
           fi
           
           # Initialize sections
@@ -108,7 +126,7 @@ jobs:
             NOTES="No significant changes since last release."
           else
             # Process each commit
-            while IFS="|" read -r MSG AUTHOR HASH DATE; do
+            while IFS="|" read -r MSG AUTHOR HASH; do
               SHORT_HASH=${HASH:0:7}
               LINK="[\`${SHORT_HASH}\`](https://github.com/${REPO}/commit/${HASH})"
               
@@ -119,25 +137,27 @@ jobs:
               MSG_LOWER=$(echo "$CLEAN_MSG" | tr '[:upper:]' '[:lower:]')
               
               if echo "$MSG_LOWER" | grep -qE '\b(add|added|new|implement|create|feat|feature)\b'; then
-                FEATURES+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                FEATURES+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               elif echo "$MSG_LOWER" | grep -qE '\b(fix|fixed|bug|patch|repair|resolve|issue)\b'; then
-                FIXES+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                FIXES+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               elif echo "$MSG_LOWER" | grep -qE '\b(improve|optimiz|refactor|enhance|perf)\b'; then
-                IMPROVEMENTS+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                IMPROVEMENTS+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               elif echo "$MSG_LOWER" | grep -qE '\b(doc|readme|changelog|comment)\b'; then
-                DOCS+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                DOCS+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               elif echo "$MSG_LOWER" | grep -qE '\b(refactor|cleanup|style|format)\b'; then
-                REFACTOR+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                REFACTOR+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               else
-                OTHER+="- $CLEAN_MSG $LINK - $AUTHOR ($DATE)\n"
+                OTHER+="- $CLEAN_MSG $LINK - $AUTHOR\n"
               fi
             done <<< "$COMMITS"
             
             # Build the release notes
             NOTES="## MasterCombat v${{ steps.version.outputs.version }}\n\n"
             
-            if [ "${{ steps.version_check.outputs.is_higher_version }}" = "true" ]; then
+            if [ "${{ steps.version_check.outputs.release_type }}" = "release" ]; then
               NOTES+="### What's Changed\n\n"
+            elif [ "${{ steps.version_check.outputs.release_type }}" = "update" ]; then
+              NOTES+="### Updated Release\n\n"
             else
               NOTES+="### Development Build (${{ env.BUILD_NUMBER }})\n\n"
             fi
@@ -148,12 +168,6 @@ jobs:
             [ -n "$REFACTOR" ] && NOTES+="#### 🔧 Refactoring\n$REFACTOR\n"
             [ -n "$DOCS" ] && NOTES+="#### 📚 Documentation\n$DOCS\n"
             [ -n "$OTHER" ] && NOTES+="#### 📝 Other Changes\n$OTHER\n"
-            
-            # Add contributors section if multiple authors
-            AUTHORS=$(echo "$COMMITS" | cut -d'|' -f2 | sort | uniq -c | sort -nr | head -5 | awk '{print "- " $2 " (" $1 " commits)"}')
-            if [ $(echo "$AUTHORS" | wc -l) -gt 1 ]; then
-              NOTES+="### 👥 Contributors\n\n$AUTHORS\n"
-            fi
           fi
           
           # Add build info
@@ -165,10 +179,12 @@ jobs:
           cat release_notes.md
 
       - name: Prepare artifact
+        id: prepare_artifact
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          # For pre-releases, append build number
+          
           if [ "${{ steps.version_check.outputs.release_type }}" = "pre-release" ]; then
+            # For pre-releases, use SNAPSHOT-build number suffix
             JAR_NAME="MasterCombat-v${VERSION}-build-${{ env.BUILD_NUMBER }}.jar"
           else
             JAR_NAME="MasterCombat-v${VERSION}.jar"
