@@ -139,7 +139,10 @@ public final class SchedulerUtil {
                     currentTime - entry.getValue() > 600000);
                 
                 if (activeTaskCount > 1000) {
-                    Bukkit.getLogger().warning("MasterCombat: High task count detected: " + activeTaskCount);
+                    java.util.logging.Logger logger = Bukkit.getLogger();
+                    if (logger.isLoggable(java.util.logging.Level.WARNING)) {
+                        logger.log(java.util.logging.Level.WARNING, "MasterCombat: High task count detected: {0}", activeTaskCount);
+                    }
                 }
             },
             CLEANUP_INTERVAL, CLEANUP_INTERVAL
@@ -181,7 +184,9 @@ public final class SchedulerUtil {
             try {
                 task.run();
             } catch (Exception e) {
-                plugin.getLogger().severe("Error in " + context + " task: " + e.getMessage());
+                if (plugin.getLogger().isLoggable(java.util.logging.Level.SEVERE)) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error in {0} task", new Object[]{context, e});
+                }
             }
         };
     }
@@ -192,8 +197,8 @@ public final class SchedulerUtil {
                 task.run();
             } catch (Exception e) {
                 Plugin plugin = getPlugin();
-                if (plugin != null) {
-                    plugin.getLogger().warning("Arclight task error: " + e.getMessage());
+                if (plugin != null && plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING, "Arclight task error", e);
                 }
             }
         };
@@ -215,7 +220,9 @@ public final class SchedulerUtil {
             } catch (Exception e) {
                 Plugin plugin = getPlugin();
                 if (plugin != null) {
-                    plugin.getLogger().warning("Arclight async task error: " + e.getMessage());
+                    if (plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING, "Arclight async task error", e);
+                    }
                 }
             }
         };
@@ -599,7 +606,9 @@ public final class SchedulerUtil {
                             try {
                                 task.accept(entity);
                             } catch (Exception e) {
-                                plugin.getLogger().warning("Error in batch entity task: " + e.getMessage());
+                                if (plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                                plugin.getLogger().log(java.util.logging.Level.WARNING, "Error in batch entity task", e);
+                            }
                             }
                         }
                     }
@@ -636,7 +645,9 @@ public final class SchedulerUtil {
                         try {
                             task.accept(location);
                         } catch (Exception e) {
-                            plugin.getLogger().warning("Error in batch region task: " + e.getMessage());
+                            if (plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                                plugin.getLogger().log(java.util.logging.Level.WARNING, "Error in batch region task", e);
+                            }
                         }
                     }
                 });
@@ -736,7 +747,9 @@ public final class SchedulerUtil {
                     T result = processor.apply(player);
                     runEntityTask(plugin, player, () -> applier.accept(new PlayerProcessResult<>(player, result)));
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Error processing player " + player.getName() + ": " + e.getMessage());
+                    if (plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING, "Error processing player {0}", new Object[]{player.getName(), e});
+                    }
                 }
             }
         }, executor);
@@ -758,7 +771,9 @@ public final class SchedulerUtil {
                     T result = processor.apply(player);
                     results.add(new PlayerProcessResult<>(player, result));
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Error processing player " + player.getName() + ": " + e.getMessage());
+                    if (plugin.getLogger().isLoggable(java.util.logging.Level.WARNING)) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING, "Error processing player in batch operation", e);
+                    }
                 }
             }
             
