@@ -106,6 +106,16 @@ public class Combat extends JavaPlugin implements Listener {
     private final Map<String, Long> pendingTasks = new ConcurrentHashMap<>();
     private final Map<String, Long> taskMetrics = new ConcurrentHashMap<>();
     private long lastMetricsLog = 0;
+    private volatile double currentCpuUsage = 0.0;
+    private volatile long lastCpuCheck = 0;
+    private volatile long lastAdjustment = 0;
+    private final AtomicInteger lastActiveTaskCount = new AtomicInteger(0);
+    private final AtomicInteger adjustmentCycle = new AtomicInteger(0);
+    private final java.lang.management.OperatingSystemMXBean osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+    private static final long CPU_CHECK_INTERVAL = 5000;
+    private static final long ADJUSTMENT_INTERVAL = 10000;
+    private static final double HIGH_CPU_THRESHOLD = 0.75;
+    private static final double LOW_CPU_THRESHOLD = 0.30;
 
     public static class CombatRecord {
         public final long expiry;
@@ -546,6 +556,86 @@ public class Combat extends JavaPlugin implements Listener {
         }
     }
 
+    private double getCpuUsage() {
+        long now = System.currentTimeMillis();
+        if (now - lastCpuCheck < CPU_CHECK_INTERVAL) {
+            return currentCpuUsage;
+        }
+        
+        lastCpuCheck = now;
+        try {
+            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
+                double usage = sunBean.getProcessCpuLoad();
+                if (usage >= 0.0) {
+                    currentCpuUsage = usage;
+                    return usage;
+                }
+            }
+
+            int currentActive = combatWorkerPool.getActiveCount();
+            int availableProcessors = Runtime.getRuntime().availableProcessors();
+            currentCpuUsage = Math.min(1.0, (double) currentActive / availableProcessors);
+            return currentCpuUsage;
+        } catch (Exception e) {
+            return Math.min(0.5, (double) combatWorkerPool.getActiveCount() / maxWorkerPoolSize);
+        }
+    }
+    
+    private void adjustThreadPoolDynamically() {
+        long now = System.currentTimeMillis();
+        if (now - lastAdjustment < ADJUSTMENT_INTERVAL) {
+            return;
+        }
+        
+        lastAdjustment = now;
+        int currentActive = combatWorkerPool.getActiveCount();
+        int currentPoolSize = combatWorkerPool.getCorePoolSize();
+        int currentMaxSize = combatWorkerPool.getMaximumPoolSize();
+        int queueSize = combatWorkerPool.getQueue().size();
+        double cpuUsage = getCpuUsage();
+
+        int availableProcessors = Runtime.getRuntime().availableProcessors();
+        int minThreads = Math.max(1, availableProcessors / 4);
+        int maxThreads = Math.max(minThreads, folia ? Math.min(2, availableProcessors - 1) : availableProcessors);
+        int newCoreSize = currentPoolSize;
+        int newMaxSize = currentMaxSize;
+        boolean highLoad = (queueSize > 5) || (currentActive > currentPoolSize * 0.8) || (cpuUsage > HIGH_CPU_THRESHOLD);
+        boolean lowLoad = (queueSize == 0) && (currentActive < currentPoolSize * 0.3) && (cpuUsage < LOW_CPU_THRESHOLD);
+        
+        if (highLoad && currentMaxSize < maxThreads) {
+            newMaxSize = Math.min(maxThreads, currentMaxSize + 1);
+            newCoreSize = Math.min(newMaxSize, currentPoolSize + 1);
+            
+            if (debugEnabled) {
+                debug(String.format("Scaling UP thread pool - CPU: %.2f%%, Queue: %d, Active: %d/%d -> %d/%d", 
+                    cpuUsage * 100, queueSize, currentActive, currentMaxSize, newCoreSize, newMaxSize));
+            }
+        } else if (lowLoad && currentPoolSize > minThreads) {
+            newCoreSize = Math.max(minThreads, currentPoolSize - 1);
+            newMaxSize = Math.max(newCoreSize, currentMaxSize - 1);
+            
+            if (debugEnabled) {
+                debug(String.format("Scaling DOWN thread pool - CPU: %.2f%%, Queue: %d, Active: %d/%d -> %d/%d", 
+                    cpuUsage * 100, queueSize, currentActive, currentMaxSize, newCoreSize, newMaxSize));
+            }
+        }
+
+        if (newMaxSize != currentMaxSize || newCoreSize != currentPoolSize) {
+            try {
+                combatWorkerPool.setMaximumPoolSize(newMaxSize);
+                combatWorkerPool.setCorePoolSize(newCoreSize);
+                maxWorkerPoolSize = newMaxSize;
+            } catch (Exception e) {
+                if (debugEnabled) {
+                    debug("Failed to adjust thread pool size: " + e.getMessage());
+                }
+            }
+        }
+        
+        lastActiveTaskCount.set(currentActive);
+        adjustmentCycle.incrementAndGet();
+    }
+    
     private void startThreadPoolMetricsTask() {
         SchedulerUtil.runTaskTimerAsync(this, () -> {
             long now = System.currentTimeMillis();
@@ -553,10 +643,11 @@ public class Combat extends JavaPlugin implements Listener {
             int poolSize = combatWorkerPool.getPoolSize();
             int queueSize = combatWorkerPool.getQueue().size();
             int tasksCompleted = (int)combatWorkerPool.getCompletedTaskCount();
+            adjustThreadPoolDynamically();
             if (activeCount > 0 || poolSize > corePoolSize() || now - lastMetricsLog > 300000) {
                 if (debugEnabled) {
-                    debug(String.format("Thread pool stats - Active: %d, Size: %d/%d, Queue: %d, Completed: %d, Pending tasks: %d", 
-                        activeCount, poolSize, maxWorkerPoolSize, queueSize, tasksCompleted, pendingTasks.size()));
+                    debug(String.format("Thread pool stats - Active: %d, Size: %d/%d, Queue: %d, Completed: %d, Pending: %d, CPU: %.2f%%", 
+                        activeCount, poolSize, maxWorkerPoolSize, queueSize, tasksCompleted, pendingTasks.size(), currentCpuUsage * 100));
                     
                     if (!taskMetrics.isEmpty()) {
                         StringBuilder metricsLog = new StringBuilder("Task execution times (ms): ");
@@ -567,14 +658,12 @@ public class Combat extends JavaPlugin implements Listener {
                     }
                 }
                 lastMetricsLog = now;
-
                 pendingTasks.entrySet().removeIf(entry -> now - entry.getValue() > 10000);
-
                 if (taskMetrics.size() > 100) {
                     taskMetrics.clear();
                 }
             }
-        }, 60 * 20, 60 * 20);
+        }, 20 * 20, 20 * 20);
     }
     
     private int corePoolSize() {
@@ -593,8 +682,11 @@ public class Combat extends JavaPlugin implements Listener {
             if (playerUUIDs.isEmpty()) return;
 
             int total = playerUUIDs.size();
-
-            final int dynamicBatchSize = Math.min(BATCH_SIZE, Math.max(10, total / Math.max(1, combatWorkerPool.getPoolSize())));
+            int currentPoolSize = combatWorkerPool.getPoolSize();
+            int activeThreads = combatWorkerPool.getActiveCount();
+            double loadRatio = currentPoolSize > 0 ? (double) activeThreads / currentPoolSize : 0.0;
+            int baseBatchSize = loadRatio > 0.7 ? 15 : (loadRatio > 0.4 ? 30 : BATCH_SIZE);
+            final int dynamicBatchSize = Math.min(baseBatchSize, Math.max(5, total / Math.max(1, currentPoolSize)));
 
             for (int start = 0; start < total; start += dynamicBatchSize) {
                 final int s = start;
@@ -1181,11 +1273,12 @@ public class Combat extends JavaPlugin implements Listener {
         int cpus = Runtime.getRuntime().availableProcessors();
         folia = SchedulerUtil.isFolia();
         if (!folia) {
-            maxWorkerPoolSize = Math.max(2, cpus);
+            maxWorkerPoolSize = Math.max(2, Math.min(cpus, 8));
         } else {
+            // For Folia, be more conservative
             maxWorkerPoolSize = Math.max(1, Math.min(2, cpus - 1));
         }
-        int corePoolSize = Math.max(1, maxWorkerPoolSize / 2);
+        int corePoolSize = Math.max(1, Math.min(maxWorkerPoolSize / 3, 2));
         
         ThreadFactory threadFactory = new ThreadFactory() {
             private final AtomicInteger threadCount = new AtomicInteger(1);
@@ -1303,6 +1396,24 @@ public class Combat extends JavaPlugin implements Listener {
 
     public Executor getCombatWorkerPool() {
         return combatWorkerPool;
+    }
+    
+    /**
+     * Gets comprehensive thread pool status for monitoring
+     */
+    public String getThreadPoolStatus() {
+        if (combatWorkerPool == null) {
+            return "Thread pool not initialized";
+        }
+        
+        return String.format("Thread Pool Status - Core: %d, Max: %d, Active: %d, Queue: %d, CPU: %.1f%%, Completed: %d",
+            combatWorkerPool.getCorePoolSize(),
+            combatWorkerPool.getMaximumPoolSize(), 
+            combatWorkerPool.getActiveCount(),
+            combatWorkerPool.getQueue().size(),
+            currentCpuUsage * 100,
+            combatWorkerPool.getCompletedTaskCount()
+        );
     }
 
     private final java.util.concurrent.atomic.AtomicBoolean postInitDone = new java.util.concurrent.atomic.AtomicBoolean(false);
