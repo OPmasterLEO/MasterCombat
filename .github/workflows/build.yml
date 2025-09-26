@@ -106,7 +106,7 @@ jobs:
           else
             # For pre-releases/updates, show only new commits since last pre-release
             # Get the most recent pre-release tag (any tag with "build" in it)
-            LATEST_PRERELEASE_TAG=$(git tag --list "*build*" --sort=-version:refname | head -n 1)
+            LATEST_PRERELEASE_TAG=$(git tag --list "*build*" --sort=-creatordate | head -n 1)
             if [ -z "$LATEST_PRERELEASE_TAG" ]; then
               # If no pre-release tags found, fall back to last release
               LATEST_PRERELEASE_TAG="${{ steps.latest_release.outputs.latest_tag }}"
@@ -175,6 +175,13 @@ jobs:
           
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
+
+      - name: Upload artifact
+        if: steps.version_check.outputs.release_type != 'pre-release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MasterCombat
+          path: ./${{ steps.prepare_artifact.outputs.jar_name }}
 
       - name: Prepare artifact
         id: prepare_artifact
