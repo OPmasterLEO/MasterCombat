@@ -9,7 +9,9 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.util.Vector;
 
@@ -17,14 +19,9 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType.Play.Client;
-import com.github.retrooper.packetevents.protocol.world.BlockFace;
-import com.github.retrooper.packetevents.protocol.world.states.type.StateType;
-import com.github.retrooper.packetevents.protocol.world.states.type.StateTypes;
 import com.github.retrooper.packetevents.util.Vector3d;
-import com.github.retrooper.packetevents.util.Vector3i;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPosition;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPositionAndRotation;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
@@ -49,9 +46,14 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private int detectionRadius;
     private int barrierHeight;
     private double pushBackForce;
+    private boolean bypassEnabled;
+    private boolean opBypass;
+    private String bypassPermission;
     private final Map<UUID, Long> lastBarrierWarning = new ConcurrentHashMap<>();
     private final Map<UUID, Location> lastBarrierLocations = new ConcurrentHashMap<>();
     private final Map<UUID, Vector3d> lastPositions = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastBarrierRender = new ConcurrentHashMap<>();
+    private static final long BARRIER_RENDER_INTERVAL_MS = 150L;
     private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
         private final int maxSize;
 
@@ -124,6 +126,11 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         detectionRadius = plugin.getConfig().getInt("safezone_protection.barrier_detection_radius", 5);
         barrierHeight = plugin.getConfig().getInt("safezone_protection.barrier_height", 3);
         pushBackForce = plugin.getConfig().getDouble("safezone_protection.push_back_force", 0.6);
+    bypassEnabled = plugin.getConfig().getBoolean("safezone_protection.bypass.enabled", true);
+    opBypass = plugin.getConfig().getBoolean("safezone_protection.bypass.op_bypass", false);
+    String defPerm = "combat.bypass.safezone";
+    String cfgPerm = plugin.getConfig().getString("safezone_protection.bypass.permission", defPerm);
+    bypassPermission = (cfgPerm == null || cfgPerm.isBlank()) ? defPerm : cfgPerm;
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long currentTime = System.currentTimeMillis();
             lastBarrierWarning.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
@@ -131,6 +138,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 Player p = plugin.getServer().getPlayer(entry.getKey());
                 return p == null || !plugin.isInCombat(p);
             });
+            lastBarrierRender.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
         }, 100L, 100L);
     }
     
@@ -149,7 +157,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
                 Player player = (Player) event.getPlayer();
                 if (!player.isOnline()) return;
-                if (player.hasPermission("combat.bypass.safezone")) return;
+                if (shouldBypass(player)) return;
 
                 Vector3d newPos;
                 if (type == Client.PLAYER_POSITION) {
@@ -171,7 +179,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                     ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
                     : player.getLocation();
 
-                SchedulerUtil.runTask(plugin, () -> handlePlayerMovement(player, from, to));
+                SchedulerUtil.runEntityTask(plugin, player, () -> handlePlayerMovement(player, from, to));
             }
         } catch (IllegalStateException e) {
             if (plugin.isEnabled()) {
@@ -189,7 +197,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         if (!barrierEnabled) return;
 
         Player player = event.getPlayer();
-        if (!plugin.isInCombat(player)) return;
+        if (!plugin.isInCombat(player) || shouldBypass(player)) return;
 
         Location from = event.getFrom();
         Location to = event.getTo();
@@ -203,13 +211,13 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
 
     private void handlePlayerMovement(Player player, Location from, Location to) {
-        if (isNearSafezone(to)) {
+        if (plugin.isInCombat(player) && isNearSafezone(to)) {
             createVisualBarrier(player, to);
         } else {
             lastBarrierLocations.remove(player.getUniqueId());
         }
 
-        if (plugin.isInCombat(player) && !player.hasPermission("combat.bypass.safezone")) {
+        if (plugin.isInCombat(player) && !shouldBypass(player)) {
             boolean fromInSafe = isPvpDenied(from);
             boolean toInSafe = isPvpDenied(to);
             if (!fromInSafe && toInSafe) {
@@ -257,38 +265,51 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
     
     private boolean isNearSafezone(Location location) {
-        for (int x = -detectionRadius; x <= detectionRadius; x++) {
-            for (int z = -detectionRadius; z <= detectionRadius; z++) {
-                Location check = location.clone().add(x, 0, z);
-                if (isPvpDenied(check) != isPvpDenied(location)) {
-                    return true;
-                }
-            }
+        boolean base = isPvpDenied(location);
+        for (int i = 1; i <= detectionRadius; i++) {
+            if (isPvpDenied(location.clone().add(i, 0, 0)) != base) return true;
+            if (isPvpDenied(location.clone().add(-i, 0, 0)) != base) return true;
+            if (isPvpDenied(location.clone().add(0, 0, i)) != base) return true;
+            if (isPvpDenied(location.clone().add(0, 0, -i)) != base) return true;
         }
         return false;
     }
     
     private void createVisualBarrier(Player player, Location location) {
-        Location lastLoc = lastBarrierLocations.get(player.getUniqueId());
-        if (lastLoc != null && lastLoc.distanceSquared(location) < 9) {
+        UUID id = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        Long lastTime = lastBarrierRender.get(id);
+        if (lastTime != null && (now - lastTime) < BARRIER_RENDER_INTERVAL_MS) return;
+        Location lastLoc = lastBarrierLocations.get(id);
+        if (lastLoc != null && lastLoc.getWorld() == location.getWorld() && lastLoc.distanceSquared(location) < 9) {
             return;
         }
-        
-        lastBarrierLocations.put(player.getUniqueId(), location.clone());
-        for (int x = -detectionRadius; x <= detectionRadius; x++) {
-            for (int z = -detectionRadius; z <= detectionRadius; z++) {
-                Location check = location.clone().add(x, 0, z);
-                checkBorder(player, check, BlockFace.EAST);
-                checkBorder(player, check, BlockFace.SOUTH);
+
+        lastBarrierRender.put(id, now);
+        lastBarrierLocations.put(id, location.clone());
+
+        boolean base = isPvpDenied(location);
+        Location east = findBorder(location, 1, 0, base);
+        Location west = findBorder(location, -1, 0, base);
+        Location south = findBorder(location, 0, 1, base);
+        Location north = findBorder(location, 0, -1, base);
+
+        if (east != null) createBarrierLine(player, east);
+        if (west != null) createBarrierLine(player, west);
+        if (south != null) createBarrierLine(player, south);
+        if (north != null) createBarrierLine(player, north);
+    }
+
+    private Location findBorder(Location origin, int dx, int dz, boolean base) {
+        Location cursor = origin.clone();
+        for (int i = 1; i <= detectionRadius; i++) {
+            cursor.add(dx, 0, dz);
+            boolean state = isPvpDenied(cursor);
+            if (state != base) {
+                return cursor.clone().add(-dx, 0, -dz);
             }
         }
-    }
-    
-    private void checkBorder(Player player, Location start, BlockFace direction) {
-        Location adjacent = start.clone().add(direction.getModX(), 0, direction.getModZ());
-        if (isPvpDenied(start) != isPvpDenied(adjacent)) {
-            createBarrierLine(player, start);
-        }
+        return null;
     }
     
     private void createBarrierLine(Player player, Location start) {
@@ -296,7 +317,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
              Location blockLoc = start.clone().add(0, y, 0);
              sendBlockChange(player, blockLoc, barrierMaterial);
              
-             SchedulerUtil.runTaskLater(plugin, () -> {
+             SchedulerUtil.runRegionTaskLater(plugin, blockLoc, () -> {
                  if (player.isOnline()) {
                      resetBlockChange(player, blockLoc);
                  }
@@ -306,63 +327,58 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     
     private void sendBlockChange(Player player, Location loc, Material material) {
         try {
-            StateType stateType = StateTypes.getByName(material.name());
-            if (stateType == null) {
-                stateType = StateTypes.RED_STAINED_GLASS;
-            }
-
-            Object pkt = null;
-            try {
-                pkt = Combat.createWrapperPlayServerBlockChange(
-                    new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                    stateType.hashCode()
-                );
-            } catch (Throwable ignored) {}
-
-            if (pkt != null) {
-                try {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, pkt);
-                } catch (Throwable t) {
-                    try {
-                        com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange legacy =
-                            new com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange(
-                                new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                                stateType.hashCode()
-                            );
-                        PacketEvents.getAPI().getPlayerManager().sendPacket(player, legacy);
-                    } catch (Throwable ignored) {}
-                }
-            } else {
-                try {
-                    com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange legacy =
-                        new com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange(
-                            new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                            stateType.hashCode()
-                        );
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(player, legacy);
-                } catch (Throwable ignored) {}
-            }
-        } catch (Exception e) {
             player.sendBlockChange(loc, material.createBlockData());
+        } catch (Throwable ignored) {
         }
     }
 
     private void resetBlockChange(Player player, Location loc) {
         try {
-            StateType stateType = StateTypes.getByName(loc.getBlock().getType().name());
-            if (stateType == null) {
-                stateType = StateTypes.AIR;
-            }
-
-            WrapperPlayServerBlockChange packet = new WrapperPlayServerBlockChange(
-                new Vector3i(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-                stateType.hashCode()
-            );
-
-            PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
-        } catch (Exception e) {
             player.sendBlockChange(loc, loc.getBlock().getBlockData());
+        } catch (Throwable ignored) {
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPlayerMove(PlayerMoveEvent event) {
+        if (!barrierEnabled) return;
+
+        Player player = event.getPlayer();
+        if (!player.isOnline()) return;
+        if (shouldBypass(player)) return;
+
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (from.getBlockX() == to.getBlockX() && from.getBlockZ() == to.getBlockZ()) {
+            return;
+        }
+
+        if (plugin.isInCombat(player) && isNearSafezone(to)) {
+            createVisualBarrier(player, to);
+        }
+
+        if (plugin.isInCombat(player) && !shouldBypass(player)) {
+            boolean fromSafe = isPvpDenied(from);
+            boolean toSafe = isPvpDenied(to);
+            if (!fromSafe && toSafe) {
+                event.setTo(from);
+                pushPlayerBack(player);
+            }
+        }
+    }
+
+    private boolean shouldBypass(Player player) {
+        if (!bypassEnabled) return false;
+        if (opBypass && player.isOp()) return true;
+        return bypassPermission != null && !bypassPermission.isEmpty() && player.hasPermission(bypassPermission);
+    }
+
+    @EventHandler
+    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        UUID id = event.getPlayer().getUniqueId();
+        lastBarrierWarning.remove(id);
+        lastBarrierLocations.remove(id);
+        lastPositions.remove(id);
     }
     
     private void pushPlayerBack(Player player) {

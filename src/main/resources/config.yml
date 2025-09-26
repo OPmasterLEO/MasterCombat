@@ -116,6 +116,11 @@ safezone_protection:
   barrier_height: 4
   # Push force when player accidentally goes inside the barrier
   push_back_force: 0.6
+  # Bypass controls
+  bypass:
+    enabled: false                 # If true, allow players with the permission below to bypass safezone checks
+    permission: "combat.bypass.safezone"  # Permission node used for bypass
+    op_bypass: false              # If true, server operators always bypass safezone checks
 
 # ________________________________________________________________________
 #                         NEWBIE PROTECTION
