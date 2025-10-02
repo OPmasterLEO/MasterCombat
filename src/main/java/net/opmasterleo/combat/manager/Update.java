@@ -15,15 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import net.opmasterleo.combat.util.SchedulerUtil;
-
-import org.bukkit.configuration.file.YamlConfiguration;
-
 import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class Update {
 
@@ -36,6 +34,10 @@ public class Update {
     private static final Set<HttpURLConnection> activeConnections = ConcurrentHashMap.newKeySet();
     private static final Set<BukkitTask> updateTasks = ConcurrentHashMap.newKeySet();
     private static boolean updateFound = false;
+    private static long lastCheckTime = 0;
+    private static final long CHECK_CACHE_DURATION = 300000;
+    private static final ThreadLocal<StringBuilder> stringBuilderCache = 
+        ThreadLocal.withInitial(() -> new StringBuilder(256));
 
     public static void setShuttingDown(boolean shuttingDown) {
         isShuttingDown = shuttingDown;
@@ -52,6 +54,10 @@ public class Update {
     }
 
     public static String getLatestVersion() {
+        if (latestVersion != null && (System.currentTimeMillis() - lastCheckTime) < CHECK_CACHE_DURATION) {
+            return latestVersion;
+        }
+        
         if (latestVersion == null && !updateCheckInProgress && !isShuttingDown) {
             updateCheckInProgress = true;
             try {
@@ -65,7 +71,15 @@ public class Update {
 
     public static void checkForUpdates(Plugin plugin, CommandSender sender) {
         if (isShuttingDown) return;
-        if (updateCheckInProgress) return;
+        if (updateCheckInProgress || (System.currentTimeMillis() - lastCheckTime) < CHECK_CACHE_DURATION) {
+            if (latestVersion != null && sender != null) {
+                String currentVersion = plugin.getPluginMeta().getVersion();
+                String pluginName = plugin.getName();
+                String prefix = plugin.getConfig().getString("Messages.Prefix", "");
+                handleVersionNotification(sender, pluginName, currentVersion, prefix);
+            }
+            return;
+        }
 
         updateCheckInProgress = true;
         sendMessage(sender, "§b[MasterCombat] §eChecking for updates…");
@@ -98,7 +112,8 @@ public class Update {
         BukkitTask task = SchedulerUtil.runTaskLater(plugin, () -> {
             String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
-            if (latestVersion == null && !updateCheckInProgress && !isShuttingDown) {
+            if (latestVersion == null && !updateCheckInProgress && !isShuttingDown 
+                && (System.currentTimeMillis() - lastCheckTime) >= CHECK_CACHE_DURATION) {
                 updateCheckInProgress = true;
                 performUpdateCheck(plugin);
                 updateCheckInProgress = false;
@@ -110,6 +125,14 @@ public class Update {
 
     public static void notifyOnPlayerJoin(Player player, Plugin plugin) {
         if (isShuttingDown || !player.isOp() || !plugin.getConfig().getBoolean("update-notify-chat", false)) return;
+        if (latestVersion != null && (System.currentTimeMillis() - lastCheckTime) < CHECK_CACHE_DURATION) {
+            String pluginName = plugin.getName();
+            String currentVersion = plugin.getPluginMeta().getVersion();
+            String prefix = plugin.getConfig().getString("Messages.Prefix", "");
+            handleVersionNotification(player, pluginName, currentVersion, prefix);
+            return;
+        }
+        
         String pluginName = plugin.getName();
         String currentVersion = plugin.getPluginMeta().getVersion();
         final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
@@ -137,7 +160,10 @@ public class Update {
     private static void handleVersionNotification(CommandSender sender, String pluginName, String currentVersion, String prefix) {
         CommandSender target = (sender != null) ? sender : Bukkit.getConsoleSender();
         if (latestVersion == null) {
-            sendMessage(target, prefix + "§c[" + pluginName + "]» Unable to fetch update information.");
+            StringBuilder sb = stringBuilderCache.get();
+            sb.setLength(0);
+            sb.append(prefix).append("§c[").append(pluginName).append("]» Unable to fetch update information.");
+            sendMessage(target, sb.toString());
             return;
         }
         
@@ -145,20 +171,36 @@ public class Update {
         String normalizedLatest = normalizeVersion(latestVersion);
         int comparison = compareVersions(normalizedCurrent, normalizedLatest);
         int behind = getVersionsBehind(normalizedCurrent, normalizedLatest);
+        StringBuilder sb = stringBuilderCache.get();
         
         if (behind > 0 && comparison < 0) {
-            String behindMsg = prefix + "You are " + behind + " version" + (behind == 1 ? "" : "s") + " behind, update using §6/combat update";
-            sendMessage(target, behindMsg);
+            sb.setLength(0);
+            sb.append(prefix).append("You are ").append(behind).append(" version")
+              .append(behind == 1 ? "" : "s").append(" behind, update using §6/combat update");
+            sendMessage(target, sb.toString());
         }
 
         if (comparison == 0) {
-            sendMessage(target, "§a[" + pluginName + "]» Running latest version §7(" + currentVersion.replaceFirst("^v", "") + ")");
+            sb.setLength(0);
+            sb.append("§a[").append(pluginName).append("]» Running latest version §7(")
+              .append(currentVersion.replaceFirst("^v", "")).append(")");
+            sendMessage(target, sb.toString());
         } else if (comparison < 0) {
-            sendMessage(target, "§e[" + pluginName + "]» Update required! §7(Installed: " + currentVersion.replaceFirst("^v", "") + ", Latest: " + latestVersion.replaceFirst("^v", "") + ")");
+            sb.setLength(0);
+            sb.append("§e[").append(pluginName).append("]» Update required! §7(Installed: ")
+              .append(currentVersion.replaceFirst("^v", "")).append(", Latest: ")
+              .append(latestVersion.replaceFirst("^v", "")).append(")");
+            sendMessage(target, sb.toString());
             sendMessage(target, "§eUse §6/combat update §eto install the update");
         } else {
-            sendMessage(target, "§a[" + pluginName + "]» Development build detected §7(" + currentVersion.replaceFirst("^v", "") + ")");
-            sendMessage(target, "§aLatest public version: §7" + latestVersion.replaceFirst("^v", ""));
+            sb.setLength(0);
+            sb.append("§a[").append(pluginName).append("]» Development build detected §7(")
+              .append(currentVersion.replaceFirst("^v", "")).append(")");
+            sendMessage(target, sb.toString());
+            
+            sb.setLength(0);
+            sb.append("§aLatest public version: §7").append(latestVersion.replaceFirst("^v", ""));
+            sendMessage(target, sb.toString());
         }
     }
 
@@ -231,16 +273,16 @@ public class Update {
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
             connection.setRequestProperty("User-Agent", "MasterCombat-UpdateChecker");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
             
             if (isShuttingDown) return;
             if (connection.getResponseCode() != 200) {
                 return;
             }
-            
+
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                StringBuilder response = new StringBuilder();
+                StringBuilder response = new StringBuilder(512);
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (isShuttingDown) return;
@@ -249,6 +291,7 @@ public class Update {
                 latestVersion = parseVersion(response.toString());
                 downloadUrl = parseDownloadUrl(response.toString());
                 updateFound = (latestVersion != null);
+                lastCheckTime = System.currentTimeMillis();
             }
         } catch (IOException ignored) {
         } finally {
@@ -276,7 +319,6 @@ public class Update {
             activeConnections.add(connection);
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(30000);
-            
             try (ReadableByteChannel rbc = Channels.newChannel(connection.getInputStream());
                  FileOutputStream fos = new FileOutputStream(tempFile)) {
                 fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
