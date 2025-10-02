@@ -498,37 +498,38 @@ public class Combat extends JavaPlugin implements Listener {
         long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
         
         CombatRecord playerRecord = combatRecords.get(playerUUID);
-        CombatRecord opponentRecord = combatRecords.get(opponentUUID);
-        
         boolean playerWasInCombat = playerRecord != null;
-        boolean opponentWasInCombat = !playerUUID.equals(opponentUUID) && opponentRecord != null;
+        boolean isSamePlayer = playerUUID.equals(opponentUUID);
         
         combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
         
-        if (!playerUUID.equals(opponentUUID)) {
-            combatRecords.put(opponentUUID, new CombatRecord(expiry, playerUUID));
+        boolean opponentWasInCombat = false;
+        if (!isSamePlayer) {
+            CombatRecord opponentRecord = combatRecords.put(opponentUUID, new CombatRecord(expiry, playerUUID));
+            opponentWasInCombat = opponentRecord != null;
         }
         
         if (!playerWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
             sendCombatMessage(player, nowInCombatMsg, nowInCombatType);
         }
         
-        if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
+        if (!isSamePlayer && !opponentWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
             sendCombatMessage(opponent, nowInCombatMsg, nowInCombatType);
         }
 
         if (glowingEnabled && glowManager != null) {
             if (!playerWasInCombat) glowManager.setGlowing(player, true);
-            if (!playerUUID.equals(opponentUUID) && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
+            if (!isSamePlayer && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
         }
         lastActionBarUpdates.put(playerUUID, 0L);
-        if (!playerUUID.equals(opponentUUID)) {
+        if (!isSamePlayer) {
             lastActionBarUpdates.put(opponentUUID, 0L);
         }
         
-        updateActionBar(player, expiry, System.currentTimeMillis());
-        if (!playerUUID.equals(opponentUUID)) {
-            updateActionBar(opponent, expiry, System.currentTimeMillis());
+        long currentTime = System.currentTimeMillis();
+        updateActionBar(player, expiry, currentTime);
+        if (!isSamePlayer) {
+            updateActionBar(opponent, expiry, currentTime);
         }
     }
     
@@ -674,18 +675,18 @@ public class Combat extends JavaPlugin implements Listener {
         final long timerInterval = isPacketEventsAvailable() ? 20L : 30L;
         final boolean useWorkers = !folia;
         final int BATCH_SIZE = 50;
-        final List<UUID> playerUUIDs = new ArrayList<>();
+        final List<UUID> playerUUIDs = new ArrayList<>(512);
 
         Runnable timerTask = () -> {
             playerUUIDs.clear();
             playerUUIDs.addAll(combatRecords.keySet());
             if (playerUUIDs.isEmpty()) return;
 
-            int total = playerUUIDs.size();
-            int currentPoolSize = combatWorkerPool.getPoolSize();
-            int activeThreads = combatWorkerPool.getActiveCount();
-            double loadRatio = currentPoolSize > 0 ? (double) activeThreads / currentPoolSize : 0.0;
-            int baseBatchSize = loadRatio > 0.7 ? 15 : (loadRatio > 0.4 ? 30 : BATCH_SIZE);
+            final int total = playerUUIDs.size();
+            final int currentPoolSize = combatWorkerPool.getPoolSize();
+            final int activeThreads = combatWorkerPool.getActiveCount();
+            final double loadRatio = currentPoolSize > 0 ? (double) activeThreads / currentPoolSize : 0.0;
+            final int baseBatchSize = loadRatio > 0.7 ? 15 : (loadRatio > 0.4 ? 30 : BATCH_SIZE);
             final int dynamicBatchSize = Math.min(baseBatchSize, Math.max(5, total / Math.max(1, currentPoolSize)));
 
             for (int start = 0; start < total; start += dynamicBatchSize) {
@@ -707,9 +708,10 @@ public class Combat extends JavaPlugin implements Listener {
                         activeTaskCount.incrementAndGet();
                         
                         try {
-                            final List<UUID> toEnd = new ArrayList<>();
-                            final List<UUID> toActionbar = new ArrayList<>();
-                            final Map<UUID, Long> actionbarExpiry = new HashMap<>();
+                            final int batchSize = e - s;
+                            final List<UUID> toEnd = new ArrayList<>(batchSize);
+                            final List<UUID> toActionbar = new ArrayList<>(batchSize);
+                            final Map<UUID, Long> actionbarExpiry = new HashMap<>(batchSize);
 
                             long currentTime = System.currentTimeMillis();
 
@@ -742,9 +744,8 @@ public class Combat extends JavaPlugin implements Listener {
                                         lastActionBarUpdates.remove(uuid);
                                     }
                                     if (!toActionbar.isEmpty()) {
-                                        List<UUID> sortedActionbars = new ArrayList<>(toActionbar);
-                                        if (sortedActionbars.size() > 5) {
-                                            sortedActionbars.sort((a, b) -> {
+                                        if (toActionbar.size() > 10) {
+                                            toActionbar.sort((a, b) -> {
                                                 Long expA = actionbarExpiry.get(a);
                                                 Long expB = actionbarExpiry.get(b);
                                                 if (expA == null) return 1;
@@ -753,7 +754,7 @@ public class Combat extends JavaPlugin implements Listener {
                                             });
                                         }
                                         
-                                        for (UUID uuid : sortedActionbars) {
+                                        for (UUID uuid : toActionbar) {
                                             Player player = Bukkit.getPlayer(uuid);
                                             if (player != null) {
                                                 Long expiry = actionbarExpiry.get(uuid);
@@ -924,12 +925,13 @@ public class Combat extends JavaPlugin implements Listener {
     
     public void forceSetCombat(Player player, Player opponent) {
         if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
-        long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
+        long currentTime = System.currentTimeMillis();
+        long expiry = currentTime + (getConfig().getLong("General.duration", 0) * 1000L);
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent != null ? opponent.getUniqueId() : null;
         
         CombatRecord existing = combatRecords.get(playerUUID);
-        boolean wasInCombat = existing != null && existing.expiry > System.currentTimeMillis();
+        boolean wasInCombat = existing != null && existing.expiry > currentTime;
         
         combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
         
@@ -950,12 +952,12 @@ public class Combat extends JavaPlugin implements Listener {
         }
         
         lastActionBarUpdates.put(playerUUID, 0L);
-        updateActionBar(player, expiry, System.currentTimeMillis());
+        updateActionBar(player, expiry, currentTime);
         
         if (opponent != null && !opponent.equals(player)) {
             UUID oppUUID = opponent.getUniqueId();
             CombatRecord oppRecord = combatRecords.get(oppUUID);
-            boolean oppWasInCombat = oppRecord != null && oppRecord.expiry > System.currentTimeMillis();
+            boolean oppWasInCombat = oppRecord != null && oppRecord.expiry > currentTime;
             
             combatRecords.put(oppUUID, new CombatRecord(expiry, playerUUID));
             
@@ -970,7 +972,7 @@ public class Combat extends JavaPlugin implements Listener {
             }
             
             lastActionBarUpdates.put(oppUUID, 0L);
-            updateActionBar(opponent, expiry, System.currentTimeMillis());
+            updateActionBar(opponent, expiry, currentTime);
         }
     }
 
