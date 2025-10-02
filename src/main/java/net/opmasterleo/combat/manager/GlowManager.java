@@ -57,6 +57,8 @@ public class GlowManager {
     }
 
     public void cleanup() {
+        if (glowingPlayers.isEmpty()) return;
+        
         Player[] players = Bukkit.getOnlinePlayers().toArray(Player[]::new);
         
         SchedulerUtil.batchProcessPlayers(
@@ -148,9 +150,10 @@ public class GlowManager {
                 java.util.Collections.singletonList(entityData)
             );
 
-            for (Player target : Bukkit.getOnlinePlayers()) {
+            Player opponent = plugin.getCombatOpponent(player);
+            if (opponent != null && opponent.isOnline() && opponent.getWorld().equals(player.getWorld())) {
                 try {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(target, metadataPacket);
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(opponent, metadataPacket);
                 } catch (Exception ignored) {
                 }
             }
