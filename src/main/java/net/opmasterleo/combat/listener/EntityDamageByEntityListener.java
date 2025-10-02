@@ -69,13 +69,16 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
         if (useItemPacket.getHand() != com.github.retrooper.packetevents.protocol.player.InteractionHand.MAIN_HAND) return;
         
         Player shooter = (Player) event.getPlayer();
-        projectileOwners.put(shooter.getUniqueId(), shooter);
-        attackTimestamps.put(shooter.getUniqueId(), System.currentTimeMillis());
+        UUID shooterId = shooter.getUniqueId();
+        projectileOwners.put(shooterId, shooter);
+        attackTimestamps.put(shooterId, System.currentTimeMillis());
         
         scheduleCleanup();
     }
 
     private void scheduleCleanup() {
+        if (attackTimestamps.size() < 50) return;
+        
         SchedulerUtil.runTaskLater(combatInstance, () -> {
             long now = System.currentTimeMillis();
             attackTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > ATTACK_TIMEOUT);
@@ -140,11 +143,14 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     }
 
     private Player findLatestAttacker() {
+        if (projectileOwners.isEmpty()) return null;
+        
         Player latestAttacker = null;
         long latestTimestamp = 0;
         
         for (Map.Entry<UUID, Player> entry : projectileOwners.entrySet()) {
-            Long timestamp = attackTimestamps.get(entry.getKey());
+            UUID playerId = entry.getKey();
+            Long timestamp = attackTimestamps.get(playerId);
             if (timestamp != null && timestamp > latestTimestamp) {
                 latestTimestamp = timestamp;
                 latestAttacker = entry.getValue();
