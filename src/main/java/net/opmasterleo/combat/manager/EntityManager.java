@@ -75,15 +75,20 @@ public class EntityManager {
             if (lastUpdate == null || now - lastUpdate > WORLD_UPDATE_INTERVAL) {
                 for (Entity entity : world.getEntities()) {
                     if (entity.isValid() && !entity.isDead()) {
-                        entityCache.put(entity.getEntityId(), new EntityCacheEntry(entity));
+                        int eid = entity.getEntityId();
+                        entityCache.put(eid, new EntityCacheEntry(entity));
+                        if (eid == entityId) {
+                            worldUpdateTimes.put(world, now);
+                            return entity;
+                        }
                     }
                 }
                 worldUpdateTimes.put(world, now);
-            }
-
-            for (Entity entity : world.getEntities()) {
-                if (entity.getEntityId() == entityId && entity.isValid() && !entity.isDead()) {
-                    return entity;
+            } else {
+                for (Entity entity : world.getEntities()) {
+                    if (entity.getEntityId() == entityId && entity.isValid() && !entity.isDead()) {
+                        return entity;
+                    }
                 }
             }
         }
