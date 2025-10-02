@@ -211,17 +211,21 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
 
     private void handlePlayerMovement(Player player, Location from, Location to) {
-        if (plugin.isInCombat(player) && isNearSafezone(to)) {
+        boolean inCombat = plugin.isInCombat(player);
+        
+        if (inCombat && isNearSafezone(to)) {
             createVisualBarrier(player, to);
         } else {
             lastBarrierLocations.remove(player.getUniqueId());
         }
 
-        if (plugin.isInCombat(player) && !shouldBypass(player)) {
+        if (inCombat && !shouldBypass(player)) {
             boolean fromInSafe = isPvpDenied(from);
-            boolean toInSafe = isPvpDenied(to);
-            if (!fromInSafe && toInSafe) {
-                pushPlayerBack(player);
+            if (!fromInSafe) {
+                boolean toInSafe = isPvpDenied(to);
+                if (toInSafe) {
+                    pushPlayerBack(player);
+                }
             }
         }
     }
@@ -266,11 +270,18 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     
     private boolean isNearSafezone(Location location) {
         boolean base = isPvpDenied(location);
+        Location checkLoc = location.clone();
         for (int i = 1; i <= detectionRadius; i++) {
-            if (isPvpDenied(location.clone().add(i, 0, 0)) != base) return true;
-            if (isPvpDenied(location.clone().add(-i, 0, 0)) != base) return true;
-            if (isPvpDenied(location.clone().add(0, 0, i)) != base) return true;
-            if (isPvpDenied(location.clone().add(0, 0, -i)) != base) return true;
+            checkLoc.setX(location.getX() + i);
+            if (isPvpDenied(checkLoc) != base) return true;
+            checkLoc.setX(location.getX() - i);
+            if (isPvpDenied(checkLoc) != base) return true;
+            checkLoc.setX(location.getX());
+            checkLoc.setZ(location.getZ() + i);
+            if (isPvpDenied(checkLoc) != base) return true;
+            checkLoc.setZ(location.getZ() - i);
+            if (isPvpDenied(checkLoc) != base) return true;
+            checkLoc.setZ(location.getZ());
         }
         return false;
     }
@@ -302,24 +313,32 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
     private Location findBorder(Location origin, int dx, int dz, boolean base) {
         Location cursor = origin.clone();
+        double startX = origin.getX();
+        double startZ = origin.getZ();
         for (int i = 1; i <= detectionRadius; i++) {
-            cursor.add(dx, 0, dz);
+            cursor.setX(startX + dx * i);
+            cursor.setZ(startZ + dz * i);
             boolean state = isPvpDenied(cursor);
             if (state != base) {
-                return cursor.clone().add(-dx, 0, -dz);
+                cursor.setX(startX + dx * (i - 1));
+                cursor.setZ(startZ + dz * (i - 1));
+                return cursor.clone();
             }
         }
         return null;
     }
     
     private void createBarrierLine(Player player, Location start) {
-         for (int y = 0; y < barrierHeight; y++) {
-             Location blockLoc = start.clone().add(0, y, 0);
+         int maxHeight = Math.min(barrierHeight, 5);
+         Location blockLoc = start.clone();
+         for (int y = 0; y < maxHeight; y++) {
+             blockLoc.setY(start.getY() + y);
              sendBlockChange(player, blockLoc, barrierMaterial);
              
-             SchedulerUtil.runRegionTaskLater(plugin, blockLoc, () -> {
+             final Location finalLoc = blockLoc.clone();
+             SchedulerUtil.runRegionTaskLater(plugin, finalLoc, () -> {
                  if (player.isOnline()) {
-                     resetBlockChange(player, blockLoc);
+                     resetBlockChange(player, finalLoc);
                  }
              }, 100L);
          }
@@ -382,13 +401,14 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
     
     private void pushPlayerBack(Player player) {
+        UUID playerId = player.getUniqueId();
         long now = System.currentTimeMillis();
-        Long lastWarning = lastBarrierWarning.get(player.getUniqueId());
+        Long lastWarning = lastBarrierWarning.get(playerId);
         if (lastWarning != null && now - lastWarning < 1000) {
             return;
         }
         
-        lastBarrierWarning.put(player.getUniqueId(), now);
+        lastBarrierWarning.put(playerId, now);
         
         Location playerLoc = player.getLocation();
         Vector pushVector = findEscapeDirection(playerLoc);
@@ -402,12 +422,15 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
     
     private Vector findEscapeDirection(Location playerLoc) {
-        for (int radius = 1; radius <= detectionRadius * 2; radius++) {
+        Location check = playerLoc.clone();
+        int maxRadius = detectionRadius * 2;
+        for (int radius = 1; radius <= maxRadius; radius++) {
             for (int x = -radius; x <= radius; x++) {
                 for (int z = -radius; z <= radius; z++) {
                     if (Math.abs(x) != radius && Math.abs(z) != radius) continue;
                     
-                    Location check = playerLoc.clone().add(x, 0, z);
+                    check.setX(playerLoc.getX() + x);
+                    check.setZ(playerLoc.getZ() + z);
                     if (!isPvpDenied(check)) {
                         return new Vector(x, 0, z).normalize();
                     }
