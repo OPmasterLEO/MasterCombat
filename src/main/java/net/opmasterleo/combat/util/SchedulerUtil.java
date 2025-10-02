@@ -123,20 +123,29 @@ public final class SchedulerUtil {
             () -> {
                 activeTasks.removeIf(task -> task == null || task.isCancelled());
                 
+                activeTasks.removeIf(task -> task == null || task.isCancelled());
                 int activeTaskCount = activeTasks.size();
                 long currentTime = System.currentTimeMillis();
                 
-                regionTaskCounters.entrySet().removeIf(entry -> 
-                    currentTime - entry.getValue().get() > 300000);
+                if (regionTaskCounters.size() > 100) {
+                    regionTaskCounters.entrySet().removeIf(entry -> 
+                        currentTime - entry.getValue().get() > 300000);
+                }
                 
-                entityTaskCounters.entrySet().removeIf(entry -> 
-                    currentTime - entry.getValue().get() > 300000);
+                if (entityTaskCounters.size() > 100) {
+                    entityTaskCounters.entrySet().removeIf(entry -> 
+                        currentTime - entry.getValue().get() > 300000);
+                }
                 
-                lastRegionExecution.entrySet().removeIf(entry -> 
-                    currentTime - entry.getValue() > 600000);
+                if (lastRegionExecution.size() > 100) {
+                    lastRegionExecution.entrySet().removeIf(entry -> 
+                        currentTime - entry.getValue() > 600000);
+                }
                 
-                lastEntityExecution.entrySet().removeIf(entry -> 
-                    currentTime - entry.getValue() > 600000);
+                if (lastEntityExecution.size() > 100) {
+                    lastEntityExecution.entrySet().removeIf(entry -> 
+                        currentTime - entry.getValue() > 600000);
+                }
                 
                 if (activeTaskCount > 1000) {
                     java.util.logging.Logger logger = Bukkit.getLogger();
