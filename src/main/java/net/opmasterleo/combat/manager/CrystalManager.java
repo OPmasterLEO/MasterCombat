@@ -1,5 +1,7 @@
 package net.opmasterleo.combat.manager;
 
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -101,10 +103,15 @@ public class CrystalManager {
         if (crystalData.isEmpty()) return;
         lastCleanup = System.currentTimeMillis();
         
+        final Map<String, World> worldCache = new HashMap<>();
+        for (World world : Bukkit.getWorlds()) {
+            worldCache.put(world.getName(), world);
+        }
+        
         crystalData.keySet().removeIf(crystalId -> {
             CrystalData data = crystalData.get(crystalId);
             if (data == null || data.isExpired()) return true;
-            World world = Bukkit.getWorld(data.worldName);
+            World world = worldCache.get(data.worldName);
             if (world == null) return true;
             Entity entity = world.getEntity(crystalId);
             return entity == null || !entity.isValid() || entity.isDead();
