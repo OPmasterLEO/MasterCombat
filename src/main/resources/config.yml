@@ -195,6 +195,7 @@ Commands:
     - warp
     - warps
   Format: '&7You cannot use &c%command% &7while in combat!'
+  Sound: 'entity.villager.no'  # Set to "none" to disable sounds
 
 # ________________________________________________________________________
 #                      COMBAT MECHANICS & LOGIC
