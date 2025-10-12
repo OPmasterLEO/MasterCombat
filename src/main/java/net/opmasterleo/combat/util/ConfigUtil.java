@@ -15,6 +15,7 @@ public class ConfigUtil {
     private static final Pattern VERSION_PATTERN = Pattern.compile("generated-by-version\\s*:");
     private static final Pattern COMMENT_PATTERN = Pattern.compile("^\\s*#");
     private static final Pattern SECTION_HEADER = Pattern.compile("^\\s*[#=_]+");
+    private static final Pattern LIST_ITEM_PATTERN = Pattern.compile("^\\s*-\\s*(.+)");
 
     public static void updateConfig(JavaPlugin plugin) {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
@@ -26,7 +27,7 @@ public class ConfigUtil {
         if (userLines.isEmpty()) return;
         
         List<String> output = new ArrayList<>();
-        Map<String, String> userValues = parseValues(userLines);
+        Map<String, List<String>> userValues = parseValuesWithLists(userLines);
         Set<String> processedKeys = Collections.newSetFromMap(new ConcurrentHashMap<>());
         Deque<String> pathStack = new ArrayDeque<>();
         
@@ -46,6 +47,26 @@ public class ConfigUtil {
                 continue;
             }
             
+            var listMatcher = LIST_ITEM_PATTERN.matcher(defaultLine);
+            if (listMatcher.find()) {
+                String listItem = listMatcher.group(1).trim();
+                String parentPath = buildPath(pathStack);
+                List<String> userListItems = userValues.get(parentPath);
+                
+                if (userListItems != null && !userListItems.isEmpty()) {
+                    if (!processedKeys.contains(parentPath)) {
+                        for (String userListItem : userListItems) {
+                            output.add(getIndentation(defaultLine) + "- " + userListItem);
+                        }
+                        processedKeys.add(parentPath);
+                    }
+                    continue;
+                } else {
+                    output.add(defaultLine);
+                }
+                continue;
+            }
+            
             String key = extractKey(defaultLine);
             if (key == null) {
                 output.add(defaultLine);
@@ -59,15 +80,17 @@ public class ConfigUtil {
             pathStack.push(defaultLine);
             
             String fullKey = buildPath(pathStack);
-            String userLine = userValues.get(fullKey);
+            List<String> userLinesForPath = userValues.get(fullKey);
             
-            if (userLine != null) {
-                output.add(userLine);
+            if (userLinesForPath != null && !userLinesForPath.isEmpty()) {
+                output.add(userLinesForPath.get(0));
                 processedKeys.add(fullKey);
             } else {
                 output.add(defaultLine);
             }
         }
+        
+        addMissingUserSections(userValues, processedKeys, output);
         
         saveConfig(configFile, output, plugin);
     }
@@ -94,9 +117,11 @@ public class ConfigUtil {
         return path.toString();
     }
 
-    private static Map<String, String> parseValues(List<String> lines) {
-        Map<String, String> values = new LinkedHashMap<>();
+    private static Map<String, List<String>> parseValuesWithLists(List<String> lines) {
+        Map<String, List<String>> values = new LinkedHashMap<>();
         Deque<String> pathStack = new ArrayDeque<>();
+        String currentListPath = null;
+        List<String> currentListItems = null;
         
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
@@ -112,13 +137,80 @@ public class ConfigUtil {
                 pathStack.pop();
             }
             
+            var listMatcher = LIST_ITEM_PATTERN.matcher(line);
+            if (listMatcher.find()) {
+                String listItem = listMatcher.group(1).trim();
+                if (currentListPath != null && currentListItems != null) {
+                    currentListItems.add(listItem);
+                }
+                continue;
+            }
+            
+            currentListPath = null;
+            currentListItems = null;
+            
             String key = extractKey(line);
             if (key != null) {
                 pathStack.push(line);
-                values.put(buildPath(pathStack), line);
+                String fullPath = buildPath(pathStack);
+                
+                List<String> pathLines = new ArrayList<>();
+                pathLines.add(line);
+                
+                int nextLineIndex = i + 1;
+                while (nextLineIndex < lines.size()) {
+                    String nextLine = lines.get(nextLineIndex);
+                    String nextTrimmed = nextLine.trim();
+                    
+                    if (nextTrimmed.isEmpty() || COMMENT_PATTERN.matcher(nextLine).find()) {
+                        nextLineIndex++;
+                        continue;
+                    }
+                    
+                    var nextListMatcher = LIST_ITEM_PATTERN.matcher(nextLine);
+                    if (nextListMatcher.find() && countIndent(nextLine) > indent) {
+                        String listItem = nextListMatcher.group(1).trim();
+                        pathLines.add(nextLine);
+                        nextLineIndex++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                values.put(fullPath, pathLines);
+                
+                if (pathLines.size() > 1) {
+                    currentListPath = fullPath;
+                    currentListItems = new ArrayList<>();
+                    for (int j = 1; j < pathLines.size(); j++) {
+                        var itemMatcher = LIST_ITEM_PATTERN.matcher(pathLines.get(j));
+                        if (itemMatcher.find()) {
+                            currentListItems.add(itemMatcher.group(1).trim());
+                        }
+                    }
+                    values.put(fullPath, pathLines);
+                }
             }
         }
         return values;
+    }
+
+    private static void addMissingUserSections(Map<String, List<String>> userValues, 
+                                             Set<String> processedKeys, 
+                                             List<String> output) {
+        for (Map.Entry<String, List<String>> entry : userValues.entrySet()) {
+            String key = entry.getKey();
+            if (!processedKeys.contains(key)) {
+                output.add("# User-added configuration:");
+                output.addAll(entry.getValue());
+                output.add("");
+            }
+        }
+    }
+
+    private static String getIndentation(String line) {
+        int indent = countIndent(line);
+        return " ".repeat(indent);
     }
 
     private static List<String> readLinesFromResource(InputStream is) {
@@ -173,6 +265,19 @@ public class ConfigUtil {
 
     public static void updateOption(FileConfiguration config, String path, Object defaultValue) {
         if (!config.contains(path)) {
+            config.set(path, defaultValue);
+        }
+    }
+
+    public static void reloadConfigSafely(JavaPlugin plugin) {
+        File configFile = new File(plugin.getDataFolder(), "config.yml");
+        if (configFile.exists()) {
+            List<String> userLines = readLinesFromFile(configFile);
+            updateConfig(plugin);
+            plugin.reloadConfig();
+        }
+    }
+}        if (!config.contains(path)) {
             config.set(path, defaultValue);
         }
     }
