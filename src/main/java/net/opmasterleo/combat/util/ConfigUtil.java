@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
@@ -64,30 +64,34 @@ public class ConfigUtil {
             return;
         }
         
-        SchedulerUtil.supplyAsync(plugin, SchedulerUtil.getPlugin(), 
-            () -> {
-                try {
-                    Yaml defaultYaml = createYamlParser();
-                    Map<String, Object> defaultConfig = loadConfigFromResource(plugin.getResource("config.yml"), defaultYaml);
-                    if (defaultConfig == null) return null;
-                    
-                    Yaml userYaml = createYamlParser();
-                    Map<String, Object> userConfig = loadConfigFromFile(configFile, userYaml);
-                    if (userConfig == null) return null;
-                    
-                    return mergeConfigs(defaultConfig, userConfig);
-                } catch (Exception e) {
-                    plugin.getLogger().log(Level.SEVERE, "Failed to process config in parallel", e);
-                    return null;
+        SchedulerUtil.runTaskAsync(plugin, () -> {
+            try {
+                Yaml defaultYaml = createYamlParser();
+                Map<String, Object> defaultConfig = loadConfigFromResource(plugin.getResource("config.yml"), defaultYaml);
+                if (defaultConfig == null) {
+                    lock.set(false);
+                    return;
                 }
-            },
-            mergedConfig -> {
-                if (mergedConfig != null) {
+                
+                Yaml userYaml = createYamlParser();
+                Map<String, Object> userConfig = loadConfigFromFile(configFile, userYaml);
+                if (userConfig == null) {
+                    lock.set(false);
+                    return;
+                }
+                
+                Map<String, Object> mergedConfig = mergeConfigs(defaultConfig, userConfig);
+                
+                SchedulerUtil.runTask(plugin, () -> {
                     saveMergedConfig(configFile, mergedConfig, plugin, createYamlParser());
-                }
+                    lock.set(false);
+                });
+                
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to process config in parallel", e);
                 lock.set(false);
             }
-        );
+        });
     }
     
     private static Yaml createYamlParser() {
@@ -142,7 +146,7 @@ public class ConfigUtil {
     
     @SuppressWarnings("unchecked")
     private static List<Object> convertToConcurrentList(List<Object> originalList) {
-        List<Object> concurrentList = new ConcurrentLinkedQueue<>();
+        List<Object> concurrentList = new CopyOnWriteArrayList<>();
         for (Object item : originalList) {
             if (item instanceof Map) {
                 concurrentList.add(convertToConcurrentMap(item));
@@ -195,7 +199,7 @@ public class ConfigUtil {
             return copiedMap;
         } else if (object instanceof List) {
             List<Object> originalList = (List<Object>) object;
-            List<Object> copiedList = new ConcurrentLinkedQueue<>();
+            List<Object> copiedList = new CopyOnWriteArrayList<>();
             for (Object item : originalList) {
                 copiedList.add(deepCopyConcurrent(item));
             }
