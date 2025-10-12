@@ -2,7 +2,6 @@ package net.opmasterleo.combat.util;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
-
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -210,7 +209,11 @@ public class ConfigUtil {
 
     private static String getIndentation(String line) {
         int indent = countIndent(line);
-        return " ".repeat(indent);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < indent; i++) {
+            sb.append(' ');
+        }
+        return sb.toString();
     }
 
     private static List<String> readLinesFromResource(InputStream is) {
@@ -275,10 +278,6 @@ public class ConfigUtil {
             List<String> userLines = readLinesFromFile(configFile);
             updateConfig(plugin);
             plugin.reloadConfig();
-        }
-    }
-}        if (!config.contains(path)) {
-            config.set(path, defaultValue);
         }
     }
 }
