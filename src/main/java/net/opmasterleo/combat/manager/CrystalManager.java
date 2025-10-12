@@ -6,6 +6,9 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.Player;
 
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
