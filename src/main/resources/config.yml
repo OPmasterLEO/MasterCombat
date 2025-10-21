@@ -20,6 +20,25 @@ General:
   duration: 20               # Combat tag duration (seconds)
   Format: "&#C7CEDCCombat: &#37bff9%seconds%s"
   CombatTagGlowing: true     # Visual glowing indicator
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  # 🎨 COLORED GLOWING SETTINGS
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  # 💡 What is this?
+  #    Automatically matches the glowing color to the player's username color
+  #    or prefix color from their display name. Requires Paper 1.21+.
+  #
+  # ⚙️ How it works:
+  #    - Extracts color from player's display name (set by chat plugins)
+  #    - If no color found, defaults to RED
+  #    - Works automatically with permission plugins like LuckPerms
+  #
+  # 📝 Note:
+  #    The color is automatically detected from player display names,
+  #    so it will match their chat prefix/suffix colors.
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  ColoredGlowing: false      # Enable automatic color matching (requires Paper 1.21+)
+  
   ignore-op: false           # Exclude server operators
   
   # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
@@ -93,7 +112,23 @@ trident:
 #   ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║╚════██║
 #   ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝███████║
 #    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ╚══════╝
-#   EXPERIMENTAL - May cause issues. Use at own risk.
+#
+#   💡 What is this?
+#   Enable combat tagging only in specific worlds. When disabled, combat
+#   works everywhere. When enabled, only listed worlds will have combat.
+#
+#   ⚙️ How to use:
+#   1. Set "enabled: true" to activate world filtering
+#   2. Add world names to the "worlds" list below
+#   3. World names are CASE-SENSITIVE (must match exactly)
+#
+#   📝 Example:
+#   If you want combat only in "PvP_Arena" and "Survival":
+#     enabled: true
+#     worlds:
+#       - PvP_Arena
+#       - Survival
+#
 EnabledWorlds:
   enabled: false
   worlds:
@@ -125,6 +160,25 @@ safezone_protection:
 # ________________________________________________________________________
 #                         NEWBIE PROTECTION
 # ========================================================================
+#
+#   🛡️ What is this?
+#   Protects new players from PvP combat for a set duration after joining.
+#   Perfect for giving newcomers time to learn your server without being
+#   immediately attacked.
+#
+#   ⚙️ Key Features:
+#   - Auto-protection for new players (default: 5 minutes)
+#   - Players can disable it early with a command
+#   - Optional mob protection included
+#   - Visual indicators (bossbar, actionbar, messages)
+#   - Blocks certain items (crystals, anchors) while protected
+#
+#   📝 How it works:
+#   1. New player joins → Gets protection for "time" duration
+#   2. Protection prevents: PvP attacks, being attacked, using certain items
+#   3. Player can remove early with /enablepvp (or custom command)
+#   4. Protection auto-expires after time runs out
+#
 NewbieProtection:
   enabled: true            # Protect new players from PvP
   time: 5m                 # Protection duration (formats: 10s, 5m, 1h, 30m, etc.)
@@ -220,6 +274,27 @@ lightning-on-kill: true       # Lightning effect on PvP kill
 # ________________________________________________________________________
 #                         ENTITY LINKING SYSTEM
 # ========================================================================
+#
+#   🔗 What is this?
+#   Links indirect damage sources (pets, TNT, crystals, etc.) back to the
+#   player who caused them. This prevents players from avoiding combat tags
+#   by using indirect methods to deal damage.
+#
+#   ⚙️ How it works:
+#   When enabled, if you use one of these methods to damage another player,
+#   YOU get combat tagged, not just the victim.
+#
+#   📝 Examples:
+#   - link-pets: true → Your wolf attacks someone = YOU get combat tagged
+#   - link-tnt: true → Your TNT damages someone = YOU get combat tagged
+#   - link-end-crystals: true → Your crystal damages someone = YOU get tagged
+#   - link-bed-explosions: true → Your bed trap kills someone = YOU get tagged
+#
+#   💡 Prevents exploits like:
+#   - Hiding behind pets while avoiding combat
+#   - TNT bombing without getting tagged
+#   - Crystal PvP without combat consequences
+#
 link-pets: true               # Link tamed animals to owners
 link-projectiles: true        # Link projectiles to shooters
 link-fishing-rod: true        # EXPERIMENTAL: Link fishing rods
@@ -231,7 +306,29 @@ link-bed-explosions: true     # Link bed explosions in nether/end
 # ________________________________________________________________________
 #                   PROJECTILE LINKING EXCEPTIONS
 # ========================================================================
-#  Valid types: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
+#
+#   🎯 What is this?
+#   Some projectiles are harmless and shouldn't trigger combat tags.
+#   This list lets you exclude specific projectile types from combat.
+#
+#   ⚙️ How it works:
+#   Any projectile type listed here will NOT cause combat tagging when
+#   thrown/shot, even if it hits another player.
+#
+#   📝 Common use cases:
+#   - EGG: Fun item, doesn't damage, shouldn't tag
+#   - SNOWBALL: Same as eggs, harmless fun
+#   - ENDER_PEARL: Movement ability, not an attack
+#   - FISHING_HOOK: Fishing mechanic, not combat
+#
+#   🔧 Valid types:
+#   Full list: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
+#
+#   💡 Examples to add:
+#   - TRIDENT (if you want tridents to not tag)
+#   - ARROW (NOT recommended - would break bow combat)
+#   - SPLASH_POTION (would prevent potion pvp tagging)
+#
 ignored-projectiles:
   - EGG
   - ENDER_PEARL
