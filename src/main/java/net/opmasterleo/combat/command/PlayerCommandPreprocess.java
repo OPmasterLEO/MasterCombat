@@ -47,7 +47,10 @@ public final class PlayerCommandPreprocess implements Listener {
             
             String prefix = Combat.getInstance().getMessage("Messages.Prefix");
             String format = Combat.getInstance().getMessage("Commands.Format");
-            Component message = ChatUtil.parse(prefix + format.replace("%command%", baseCommand));
+            String formatted = format
+                .replace("%mastercombat_command%", baseCommand)
+                .replace("%command%", baseCommand);
+            Component message = ChatUtil.parse(prefix + formatted);
             player.sendMessage(message);
             
             if (soundEnabled) {

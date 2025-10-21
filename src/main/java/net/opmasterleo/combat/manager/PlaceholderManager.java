@@ -24,23 +24,29 @@ public class PlaceholderManager {
 
         String formattedTime = formatTime(time);
         message = message.replace("%mastercombat_time%", formattedTime);
-        message = message.replace("%time%", formattedTime);
-
         String disableCommand = getDisableCommand();
+        message = message.replace("%mastercombat_command%", disableCommand);
         message = message.replace("%command%", disableCommand);
         
         Combat combat = Combat.getInstance();
         if (combat != null) {
-            message = message.replace("%prefix%", combat.getConfig().getString("Messages.Prefix", ""));
-            message = message.replace("%combat_duration%", String.valueOf(combat.getConfig().getLong("General.duration", 0)));
-            message = message.replace("%combat_enabled%", String.valueOf(combat.isCombatEnabled()));
+            String prefix = combat.getConfig().getString("Messages.Prefix", "");
+            long duration = combat.getConfig().getLong("General.duration", 0);
+            boolean enabled = combat.isCombatEnabled();
+
+            // Prefixed placeholders
+            message = message.replace("%mastercombat_prefix%", prefix);
+            message = message.replace("%mastercombat_duration%", String.valueOf(duration));
+            message = message.replace("%mastercombat_enabled%", String.valueOf(enabled));
+            message = message.replace("%mastercombat_status%", enabled ? "Fighting" : "Idle");
+
+            // Legacy fallbacks (kept for backward compatibility)
+            message = message.replace("%prefix%", prefix);
+            message = message.replace("%combat_duration%", String.valueOf(duration));
+            message = message.replace("%combat_enabled%", String.valueOf(enabled));
         }
 
         if (player != null) {
-            message = message.replace("%player_name%", player.getName());
-            message = message.replace("%player_displayname%", player.displayName().toString());
-            message = message.replace("%player_uuid%", player.getUniqueId().toString());
-
             if (isPlaceholderAPILoaded()) {
                 message = PlaceholderAPI.setPlaceholders(player, message);
             }

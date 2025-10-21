@@ -208,6 +208,40 @@ public class Example {
     }
 }
 ```
+
+## 🧩 Placeholders
+
+MasterCombat supports placeholders in its messages and UI. These resolve automatically, and if PlaceholderAPI is installed, any PAPI placeholders inside your messages will be applied too.
+
+Built-in placeholders provided by the plugin (all prefixed with `mastercombat_`):
+
+| Placeholder | Description |
+|-------------|-------------|
+| `%mastercombat_time%` | Remaining combat time formatted as MM:SS |
+| `%mastercombat_command%` | The configured “disable protection” command name (from `NewbieProtection.settings.disableCommand`, defaults to `removeprotect`) |
+| `%mastercombat_prefix%` | Message prefix from config (`Messages.Prefix`) |
+| `%mastercombat_duration%` | Configured combat duration in seconds (`General.duration`) |
+| `%mastercombat_enabled%` | Whether combat system is currently enabled (`true`/`false`) |
+| `%mastercombat_status%` | Human-readable status: `Fighting` or `Idle` |
+
+Notes:
+- You can also use any PlaceholderAPI placeholders if PlaceholderAPI is present.
+- Developers can register additional custom placeholders at runtime via `PlaceholderManager.registerCustomPlaceholder(String placeholder, String value)`.
+- `%mastercombat_time%` is only meaningful in contexts where the message is rendered with a known remaining time (e.g., actionbar or combat messages).
+- Legacy tokens like `%prefix%`, `%combat_enabled%`, `%combat_duration%`, and `%command%` are still accepted for backward compatibility, but new configs should prefer the `mastercombat_` variants.
+
+Example (config):
+
+```yaml
+Messages:
+    Prefix: "&7[&cCombat&7] "
+    NowInCombat:
+        type: both
+        text: "%mastercombat_prefix% &fYou are now in combat for &c%mastercombat_time%&f."
+    ElytraDisabled:
+        type: actionbar
+        text: "%mastercombat_prefix% &cElytra disabled during combat (&f%mastercombat_time%&c left)"
+```
 ### 🔧 Server Compatibility
 
 This plugin features advanced multi-threading support across all major Minecraft server platforms:
