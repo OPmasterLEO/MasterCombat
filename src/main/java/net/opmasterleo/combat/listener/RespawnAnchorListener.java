@@ -138,18 +138,36 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     private Block findNearestAnchorBlock(Location loc, double radius) {
         if (loc == null || loc.getWorld() == null) return null;
         int r = (int) Math.ceil(radius);
+        double radiusSquared = radius * radius;
         Block nearest = null;
-        double best = Double.MAX_VALUE;
-        for (int x = -r; x <= r; x++) {
-            for (int y = -r; y <= r; y++) {
-                for (int z = -r; z <= r; z++) {
-                    Block b = loc.getWorld().getBlockAt(loc.getBlockX() + x, loc.getBlockY() + y, loc.getBlockZ() + z);
-                    if (b.getType() == Material.RESPAWN_ANCHOR) {
-                        double d = b.getLocation().distanceSquared(loc);
-                        if (d < best) { best = d; nearest = b; }
+        double bestDistSquared = Double.MAX_VALUE;
+        int centerX = loc.getBlockX();
+        int centerY = loc.getBlockY();
+        int centerZ = loc.getBlockZ();
+        for (int distance = 0; distance <= r; distance++) {
+            for (int x = -distance; x <= distance; x++) {
+                for (int y = -distance; y <= distance; y++) {
+                    for (int z = -distance; z <= distance; z++) {
+                        if (Math.abs(x) != distance && Math.abs(y) != distance && Math.abs(z) != distance) {
+                            continue;
+                        }
+                        
+                        Block b = loc.getWorld().getBlockAt(centerX + x, centerY + y, centerZ + z);
+                        if (b.getType() == Material.RESPAWN_ANCHOR) {
+                            double dx = x;
+                            double dy = y;
+                            double dz = z;
+                            double distSquared = dx*dx + dy*dy + dz*dz;
+                            
+                            if (distSquared <= radiusSquared && distSquared < bestDistSquared) {
+                                bestDistSquared = distSquared;
+                                nearest = b;
+                            }
+                        }
                     }
                 }
             }
+            if (nearest != null) break;
         }
         return nearest;
     }
@@ -233,21 +251,26 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     }
 
     private Player findActivatorForDamage(Location damageLocation) {
+        final double maxDistanceSquared = 100.0;
         for (Map.Entry<Location, ExplosionData> entry : explosionCache.entrySet()) {
-            if (isSameWorld(entry.getKey(), damageLocation) &&
-                entry.getKey().distanceSquared(damageLocation) <= 100) {
-
-                UUID activatorId = entry.getValue().activatorId;
-                return Bukkit.getPlayer(activatorId);
+            Location explosionLoc = entry.getKey();
+            if (isSameWorld(explosionLoc, damageLocation)) {
+                double distSq = explosionLoc.distanceSquared(damageLocation);
+                if (distSq <= maxDistanceSquared) {
+                    UUID activatorId = entry.getValue().activatorId;
+                    return Bukkit.getPlayer(activatorId);
+                }
             }
         }
 
         for (Map.Entry<Block, UUID> entry : anchorActivators.entrySet()) {
             Block block = entry.getKey();
-            if (isSameWorld(block.getLocation(), damageLocation) &&
-                block.getLocation().distanceSquared(damageLocation) <= 100) {
-
-                return Bukkit.getPlayer(entry.getValue());
+            Location blockLoc = block.getLocation();
+            if (isSameWorld(blockLoc, damageLocation)) {
+                double distSq = blockLoc.distanceSquared(damageLocation);
+                if (distSq <= maxDistanceSquared) {
+                    return Bukkit.getPlayer(entry.getValue());
+                }
             }
         }
 
