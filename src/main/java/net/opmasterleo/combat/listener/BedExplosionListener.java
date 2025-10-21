@@ -67,11 +67,13 @@ public class BedExplosionListener implements PacketListener, Listener {
 
             World.Environment dimension = player.getWorld().getEnvironment();
             if (dimension != World.Environment.NETHER && dimension != World.Environment.THE_END) return;
-
             Location bedLocation = targetBlock.getLocation();
-            UUID bedId = UUID.nameUUIDFromBytes(bedLocation.toString().getBytes());
+            String locationKey = bedLocation.getBlockX() + "," + bedLocation.getBlockY() + "," + bedLocation.getBlockZ();
+            UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
             recentBedInteractions.put(bedId, player);
-            interactionTimestamps.put(bedId, System.currentTimeMillis());
+            long currentTime = System.currentTimeMillis();
+            interactionTimestamps.put(bedId, currentTime);
+            
             SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
                 long now = System.currentTimeMillis();
                 interactionTimestamps.entrySet().removeIf(entry ->
@@ -107,8 +109,8 @@ public class BedExplosionListener implements PacketListener, Listener {
     private void handleExplosion(Player victim, Location explosionLocation) {
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-bed-explosions", true)) return;
-
-        UUID bedId = UUID.nameUUIDFromBytes(explosionLocation.toString().getBytes());
+        String locationKey = explosionLocation.getBlockX() + "," + explosionLocation.getBlockY() + "," + explosionLocation.getBlockZ();
+        UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
         Player activator = recentBedInteractions.get(bedId);
 
         if (activator != null && activator.isOnline()) {
@@ -148,9 +150,11 @@ public class BedExplosionListener implements PacketListener, Listener {
 
     public void registerPotentialExplosion(Location location, Player player) {
         if (location == null || player == null) return;
-        UUID bedId = UUID.nameUUIDFromBytes(location.toString().getBytes());
+        String locationKey = location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
+        UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
         recentBedInteractions.put(bedId, player);
-        interactionTimestamps.put(bedId, System.currentTimeMillis());
+        long currentTime = System.currentTimeMillis();
+        interactionTimestamps.put(bedId, currentTime);
         SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
             long now = System.currentTimeMillis();
             interactionTimestamps.entrySet().removeIf(entry ->
