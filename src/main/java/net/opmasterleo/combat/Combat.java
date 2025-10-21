@@ -15,7 +15,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
@@ -169,9 +168,10 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         ignoredProjectiles.clear();
-        ignoredProjectiles.addAll(getConfig().getStringList("ignored-projectiles").stream()
-            .map(String::toUpperCase)
-            .collect(Collectors.toSet()));
+        List<String> projectileList = getConfig().getStringList("ignored-projectiles");
+        for (String projectile : projectileList) {
+            ignoredProjectiles.add(projectile.toUpperCase());
+        }
     }
 
     private void initializeManagers() {
@@ -826,7 +826,10 @@ public class Combat extends JavaPlugin implements Listener {
             if (record.opponent != null) {
                 Player opponent = Bukkit.getPlayer(record.opponent);
                 if (opponent != null) {
-                    glowManager.setGlowing(opponent, false);
+                    boolean opponentStillInCombat = isInCombat(opponent);
+                    if (!opponentStillInCombat) {
+                        glowManager.setGlowing(opponent, false);
+                    }
                 }
             }
         }
