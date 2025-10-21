@@ -77,7 +77,7 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     }
 
     private void scheduleCleanup() {
-        if (attackTimestamps.size() < 50) return;
+        if (attackTimestamps.size() < 100) return;
         
         SchedulerUtil.runTaskLater(combatInstance, () -> {
             long now = System.currentTimeMillis();
@@ -87,8 +87,8 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     }
 
     private boolean isInvalidAttack(Player attacker, Player victim) {
-        return attacker.isDead() || victim.isDead() || 
-               attacker.getHealth() <= 0 || victim.getHealth() <= 0;
+        return attacker.getHealth() <= 0 || victim.getHealth() <= 0 || 
+               attacker.isDead() || victim.isDead();
     }
 
     private void handlePlayerAttack(Player attacker, Player victim) {
