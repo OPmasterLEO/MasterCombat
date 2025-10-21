@@ -219,8 +219,20 @@ public class ConfigUtil {
             return deepCopyList(defaults);
         }
 
-        boolean allStringsDefault = defaults.stream().allMatch(o -> o == null || o instanceof String);
-        boolean allStringsUser = user.stream().allMatch(o -> o == null || o instanceof String);
+        boolean allStringsDefault = true;
+        boolean allStringsUser = true;
+        for (Object o : defaults) {
+            if (o != null && !(o instanceof String)) {
+                allStringsDefault = false;
+                break;
+            }
+        }
+        for (Object o : user) {
+            if (o != null && !(o instanceof String)) {
+                allStringsUser = false;
+                break;
+            }
+        }
 
         if (allStringsDefault && allStringsUser) {
             boolean caseInsensitive = isCaseInsensitivePath(path);
@@ -241,8 +253,21 @@ public class ConfigUtil {
             return result;
         }
 
-        boolean mapsDefault = defaults.stream().allMatch(v -> v instanceof Map);
-        boolean mapsUser = user.stream().allMatch(v -> v instanceof Map);
+        boolean mapsDefault = true;
+        boolean mapsUser = true;
+        for (Object v : defaults) {
+            if (!(v instanceof Map)) {
+                mapsDefault = false;
+                break;
+            }
+        }
+        for (Object v : user) {
+            if (!(v instanceof Map)) {
+                mapsUser = false;
+                break;
+            }
+        }
+        
         if (mapsDefault && mapsUser) {
             String idKey = detectIdKey(defaults, user);
             if (idKey != null) {
@@ -288,8 +313,22 @@ public class ConfigUtil {
     private static String detectIdKey(List<Object> defaults, List<Object> user) {
         String[] candidates = {"name", "id", "key", "command", "material", "type"};
         for (String c : candidates) {
-            boolean inDefaults = defaults.stream().allMatch(o -> (o instanceof Map) && ((Map<?, ?>) o).containsKey(c));
-            boolean inUser = user.stream().allMatch(o -> (o instanceof Map) && ((Map<?, ?>) o).containsKey(c));
+            boolean inDefaults = true;
+            for (Object o : defaults) {
+                if (!(o instanceof Map) || !((Map<?, ?>) o).containsKey(c)) {
+                    inDefaults = false;
+                    break;
+                }
+            }
+
+            boolean inUser = true;
+            for (Object o : user) {
+                if (!(o instanceof Map) || !((Map<?, ?>) o).containsKey(c)) {
+                    inUser = false;
+                    break;
+                }
+            }
+            
             if (inDefaults || inUser) return c;
         }
         return null;
