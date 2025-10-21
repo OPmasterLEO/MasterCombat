@@ -1266,7 +1266,11 @@ public class Combat extends JavaPlugin implements Listener {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-        ConfigUtil.updateConfig(this);
+        boolean configUpdated = ConfigUtil.updateConfig(this);
+        
+        if (configUpdated) {
+            getLogger().info("Config updated successfully");
+        }
         
         int pluginId = 25701;
         @SuppressWarnings("unused")

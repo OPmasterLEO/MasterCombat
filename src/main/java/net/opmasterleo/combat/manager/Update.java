@@ -328,6 +328,7 @@ public class Update {
                 sendMessage(sender, "§aUpdate downloaded successfully!");
                 sendMessage(sender, "§aFile saved to: §7" + updateFolder.getName());
                 sendMessage(sender, "§aRestart server to apply update");
+                sendMessage(sender, "§7Note: Config will be automatically updated on restart");
             } else {
                 sendMessage(sender, "§cDownload failed: Empty file created");
             }
