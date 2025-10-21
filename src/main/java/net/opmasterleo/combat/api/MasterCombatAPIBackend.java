@@ -147,9 +147,14 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
 
     @Override
     public int getActiveCombatCount() {
-        return (int)plugin.getCombatRecords().values().stream()
-            .filter(record -> record.expiry > System.currentTimeMillis())
-            .count();
+        long currentTime = System.currentTimeMillis();
+        int count = 0;
+        for (Combat.CombatRecord record : plugin.getCombatRecords().values()) {
+            if (record.expiry > currentTime) {
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override
