@@ -1,12 +1,13 @@
 package net.opmasterleo.combat.manager;
 
-import me.clip.placeholderapi.PlaceholderAPI;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+
+import me.clip.placeholderapi.PlaceholderAPI;
 import net.opmasterleo.combat.Combat;
 
 public class PlaceholderManager {
@@ -47,6 +48,14 @@ public class PlaceholderManager {
         }
 
         if (player != null) {
+            try {
+                Combat c = Combat.getInstance();
+                if (c != null) {
+                    boolean vis = c.isCombatVisible(player);
+                    message = message.replace("%mastercombat_visibility%", vis ? "ᴏɴ" : "ᴏꜰꜰ");
+                }
+            } catch (Exception ignored) {}
+
             if (isPlaceholderAPILoaded()) {
                 message = PlaceholderAPI.setPlaceholders(player, message);
             }

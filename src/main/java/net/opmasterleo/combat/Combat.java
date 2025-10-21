@@ -1389,6 +1389,15 @@ public class Combat extends JavaPlugin implements Listener {
         registerListeners();
         startCombatTimer();
         initializeAPI();
+        // Register PlaceholderAPI expansion if present
+        try {
+            if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+                new net.opmasterleo.combat.manager.MasterCombatExpansion(this).register();
+                debug("Registered PlaceholderAPI expansion: mastercombat");
+            }
+        } catch (Throwable t) {
+            getLogger().warning(() -> "Failed to register PlaceholderAPI expansion: " + t.getMessage());
+        }
         sendStartupMessage();
 
         try {

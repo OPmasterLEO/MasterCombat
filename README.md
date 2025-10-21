@@ -222,7 +222,8 @@ Built-in placeholders provided by the plugin (all prefixed with `mastercombat_`)
 | `%mastercombat_prefix%` | Message prefix from config (`Messages.Prefix`) |
 | `%mastercombat_duration%` | Configured combat duration in seconds (`General.duration`) |
 | `%mastercombat_enabled%` | Whether combat system is currently enabled (`true`/`false`) |
-| `%mastercombat_status%` | Human-readable status: `Fighting` or `Idle` |
+| `%mastercombat_status%` | Plugin status: `Fighting` or `Idle` |
+| `%mastercombat_visibility%` | Player’s combat UI visibility: `ᴏɴ` or `ᴏꜰꜰ` (lowercase) |
 
 Notes:
 - You can also use any PlaceholderAPI placeholders if PlaceholderAPI is present.
