@@ -9,8 +9,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,6 +37,11 @@ public class ConfigUtil {
             
             SchedulerUtil.runTaskAsync(plugin, () -> {
                 try {
+                    if (tryPreserveCommentsMerge(plugin, configFile)) {
+                        lock.set(false);
+                        return;
+                    }
+                    
                     Yaml defaultYaml = createYamlParser();
                     Map<String, Object> defaultConfig = loadConfigFromResource(plugin.getResource("config.yml"), defaultYaml);
                     if (defaultConfig == null) return;
@@ -76,6 +81,11 @@ public class ConfigUtil {
         
         SchedulerUtil.runTaskAsync(plugin, () -> {
             try {
+                if (tryPreserveCommentsMerge(plugin, configFile)) {
+                    lock.set(false);
+                    return;
+                }
+                
                 Yaml defaultYaml = createYamlParser();
                 Map<String, Object> defaultConfig = loadConfigFromResource(plugin.getResource("config.yml"), defaultYaml);
                 if (defaultConfig == null) {
@@ -103,6 +113,125 @@ public class ConfigUtil {
             }
         });
     }
+
+    private static boolean tryPreserveCommentsMerge(JavaPlugin plugin, File userConfigFile) {
+        try {
+            String defaultText;
+            try (InputStream in = plugin.getResource("config.yml")) {
+                if (in == null) return false;
+                defaultText = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            String userText;
+            try (FileInputStream fis = new FileInputStream(userConfigFile)) {
+                userText = new String(fis.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            Yaml yaml = createYamlParser();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> defaultMap = (Map<String, Object>) yaml.load(defaultText);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> userMap = (Map<String, Object>) yaml.load(userText);
+            if (defaultMap == null || userMap == null) return false;
+            Map<String, Object> mergedMap = mergeConfigs(defaultMap, userMap);
+            mergedMap.put("generated-by-version", "v" + plugin.getPluginMeta().getVersion());
+            String result = mergeYamlWithComments(defaultText, mergedMap, yaml);
+            try (FileOutputStream fos = new FileOutputStream(userConfigFile);
+                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+                writer.write(result);
+            }
+            
+            return true;
+        } catch (IOException | IllegalArgumentException e) {
+            plugin.getLogger().fine(() -> "Comment-preserving merge failed, falling back to SnakeYAML: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static String mergeYamlWithComments(String template, Map<String, Object> newValues, Yaml yaml) {
+        String[] lines = template.split("\r?\n");
+        StringBuilder result = new StringBuilder();
+        String currentPath = "";
+        int indentLevel = 0;
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#") || trimmed.isEmpty()) {
+                result.append(line).append("\n");
+                continue;
+            }
+
+            int colonIndex = line.indexOf(':');
+            if (colonIndex > 0) {
+                int indent = 0;
+                for (int i = 0; i < line.length(); i++) {
+                    if (line.charAt(i) == ' ') indent++;
+                    else break;
+                }
+                
+                String key = line.substring(indent, colonIndex).trim();
+                String rest = line.substring(colonIndex + 1).trim();
+                if (indent == 0) {
+                    currentPath = key;
+                    indentLevel = 0;
+                } else {
+                    int levels = indent / 2;
+                    if (levels <= indentLevel) {
+                        String[] parts = currentPath.split("\\.");
+                        if (levels < parts.length) {
+                            currentPath = String.join(".", java.util.Arrays.copyOf(parts, levels)) + (levels > 0 ? "." : "") + key;
+                        } else {
+                            currentPath = key;
+                        }
+                    } else {
+                        currentPath = currentPath + "." + key;
+                    }
+                    indentLevel = levels;
+                }
+
+                Object newValue = getValueAtPath(newValues, currentPath);
+                if (newValue != null && !(newValue instanceof Map) && !(newValue instanceof List)) {
+                    String inlineComment = "";
+                    int commentIdx = rest.indexOf('#');
+                    if (commentIdx > 0) {
+                        inlineComment = " " + rest.substring(commentIdx);
+                    }
+                    
+                    String valueStr = yaml.dump(newValue).trim();
+                    result.append(line.substring(0, colonIndex + 1))
+                          .append(" ")
+                          .append(valueStr)
+                          .append(inlineComment)
+                          .append("\n");
+                } else {
+                    result.append(line).append("\n");
+                }
+            } else {
+                result.append(line).append("\n");
+            }
+        }
+
+        return result.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object getValueAtPath(Map<String, Object> map, String path) {
+        if (map == null || path == null) return null;
+        
+        String[] parts = path.split("\\.");
+        Object current = map;
+        
+        for (String part : parts) {
+            if (current instanceof Map) {
+                current = ((Map<String, Object>) current).get(part);
+                if (current == null) return null;
+            } else {
+                return null;
+            }
+        }
+        
+        return current;
+    }
+
     
     private static Yaml createYamlParser() {
         DumperOptions options = new DumperOptions();
