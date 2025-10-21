@@ -1029,7 +1029,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void reloadCombatConfig() {
-        reloadConfig();
+        ConfigUtil.reloadConfigSafely(this);
         ConfigUtil.updateConfig(this);
         loadConfigValues();
         if (newbieProtectionListener != null) {

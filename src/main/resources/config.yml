@@ -1,0 +1,240 @@
+# ========================================================================
+#                      MasterCombat Configuration
+#         Developed by OPmasterLEO • https://github.com/OPmasterLEO
+# ========================================================================
+
+# ________________________________________________________________________
+#                           CORE SETTINGS
+# ========================================================================
+generated-by-version: "v${project.version}"  # Auto-generated - DO NOT MODIFY
+update-notify-chat: true                     # Notify OPs about updates on join
+update-check-interval: 120                   # Update check interval (minutes)
+update-confirmation-timeout: 10000           # Update confirmation timeout (ms)
+debug: false                                 # Enable debug logging for troubleshooting
+
+# ________________________________________________________________________
+#                       GENERAL COMBAT SETTINGS
+# ________________________________________________________________________
+General:
+  combat-enabled: true       # Master combat toggle
+  duration: 20               # Combat tag duration (seconds)
+  Format: "&#C7CEDCCombat: &#37bff9%seconds%s"
+  CombatTagGlowing: true     # Visual glowing indicator
+  ignore-op: false           # Exclude server operators
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  disable-elytra:
+    enabled: false           # Block elytra during combat
+    text: "%prefix% &cElytra usage is disabled while in combat."
+    type: both               # [chat/actionbar/both]
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  EnderPearl:                # Ender pearl combat restrictions
+    Enabled: false           # Block long pearl throws in combat
+    Distance: 25             # Maximum allowed throw distance
+    Format: '&cYou cannot teleport that far away in combat!'
+  
+  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+  CustomDeathMessage:        # Custom death messages
+    enabled: false
+    prefix: '&c☠ '
+
+# ________________________________________________________________________
+#                     ITEM & ABILITY RESTRICTIONS
+# ========================================================================
+item_restrictions:
+  # Enable or disable item restrictions during combat
+  enabled: false
+  # Items blocked during combat (Materials like CHORUS_FRUIT, ELYTRA, etc.)
+  disabled_items:
+    - CHORUS_FRUIT
+    - ELYTRA
+
+# ________________________________________________________________________
+#                    ENDER PEARL & TRIDENT SETTINGS
+# ========================================================================
+enderpearl:
+  # Enable/disable ender pearl settings below
+  enabled: false
+  # Refresh combat timer when player lands an ender pearl
+  refresh_combat_on_land: false
+  # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
+  duration: "10s"
+  # Only apply cooldowns during combat
+  in_combat_only: true
+  # Per-world settings (overrides global setting)
+  worlds:
+    minigames: false  # Example: cooldowns disabled in minigames world
+
+trident:
+  # Enable/disable trident settings below
+  enabled: true
+  # Refresh combat timer when trident lands (similar to enderpearl)
+  refresh_combat_on_land: false
+  # Worlds where tridents are completely banned
+  banned_worlds:
+    world_nether: true
+  # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
+  duration: "10s"
+  # Only apply cooldown when player is in combat
+  in_combat_only: true
+  # Per-world cooldown settings (overrides global enabled setting)
+  worlds:
+    world: true          # Enable cooldown in overworld
+    world_nether: false  # Disable cooldown in nether
+    world_the_end: true  # Enable cooldown in end
+
+# ________________________________________________________________________
+#                         WORLD RESTRICTIONS
+# ========================================================================
+#   ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ███████╗
+#   ██║    ██║██╔═══██╗██╔══██╗██║     ██╔══██╗██╔════╝
+#   ██║ █╗ ██║██║   ██║██████╔╝██║     ██║  ██║███████╗
+#   ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║╚════██║
+#   ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝███████║
+#    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ╚══════╝
+#   EXPERIMENTAL - May cause issues. Use at own risk.
+EnabledWorlds:
+  enabled: false
+  worlds:
+    - world
+    - pvpworld
+
+# ________________________________________________________________________
+#                         SAFEZONE PROTECTION
+# ========================================================================
+safezone_protection:
+  # Enable/disable WorldGuard integration for safezone barriers
+  # This will prevent players from entering safezones while in combat
+  enabled: true
+  # Block type for the barrier
+  # Set "BARRIER" for invisible but solid barrier
+  barrier_material: "RED_STAINED_GLASS"
+  # How close to borders before barriers appear
+  barrier_detection_radius: 3 # blocks
+  # How tall the barriers are
+  barrier_height: 4
+  # Push force when player accidentally goes inside the barrier
+  push_back_force: 0.6
+  # Bypass controls
+  bypass:
+    enabled: false                 # If true, allow players with the permission below to bypass safezone checks
+    permission: "combat.bypass.safezone"  # Permission node used for bypass
+    op_bypass: false              # If true, server operators always bypass safezone checks
+
+# ________________________________________________________________________
+#                         NEWBIE PROTECTION
+# ========================================================================
+NewbieProtection:
+  enabled: true            # Protect new players from PvP
+  time: 5m                 # Protection duration (formats: 10s, 5m, 1h, 30m, etc.)
+  
+  settings:
+    MobsProtect: false     # Include mob protection
+    disableCommand: "enablepvp"
+    display:
+      use_bossbar: true
+      use_actionbar: true
+      bossbar:
+        title: "&#4CAF50PvP Protection: &#FFFFFF%time%"
+        color: "GREEN"      # BLUE, GREEN, PINK, PURPLE, RED, WHITE, YELLOW
+        style: "SOLID"      # SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+    MessageType: ActionBar # [ActionBar/Chat/Title]
+    BlockedItems:
+      - END_CRYSTAL
+      - RESPAWN_ANCHOR
+
+  # ──────────────────────────────────────────────────────────────────────
+  #                        PROTECTION MESSAGES
+  # ──────────────────────────────────────────────────────────────────────
+  Messages:
+    ExpiredMessage: "&cYour newbie protection has expired."
+    protectedMessage: "&aYou are protected from PvP for %time% seconds."
+    DisabledMessage: "&cYou are no longer protected from PvP."
+    disableMessage: "&cWarning! &fYou'll be vulnerable to PvP. Use /%command% confirm to disable protection."
+    TriedAttackMessage: "&cYou cannot attack while protected. Use /%command% to disable."
+    AttackerMessage: "&cYou cannot attack that user while in protected mode."
+    CrystalBlockMessage: "&cYou cannot attack unprotected players with crystals while protected."
+    ProtectionLeftMessage: "&aProtection Left: %time%"
+    BlockedMessage: "&cYou can't do that while protected."
+
+# ________________________________________________________________________
+#                           COMBAT MESSAGES
+# ========================================================================
+Messages:
+  Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
+  
+  NowInCombat:
+    text: '&7You are now in combat!'
+    type: both  # [chat/actionbar/both]
+  
+  NoLongerInCombat:
+    text: '&7You are no longer in combat!'
+    type: both
+  
+  LogoutInCombat:
+    text: '&c%player% has logged out while in combat!'
+    type: chat
+    
+  CombatLogged:
+    text: '&c%player% has logged out while fighting you!' # Sent only to the attacker
+    type: chat
+
+# ________________________________________________________________________
+#                        COMMAND RESTRICTIONS
+# ========================================================================
+Commands:
+  Blocked:   # Commands disabled during combat
+    - spawn
+    - tpa
+    - tpahere
+    - home
+    - homes
+    - rtp
+    - afk 
+    - warp
+    - warps
+  Format: '&7You cannot use &c%command% &7while in combat!'
+  Sound: 'entity.villager.no'  # Set to "none" to disable sounds
+
+# ________________________________________________________________________
+#                      COMBAT MECHANICS & LOGIC
+# ========================================================================
+#  ██████╗ ██████╗ ███╗   ███╗██████╗  █████╗ ████████╗                   
+# ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██╔══██╗╚══██╔══╝                   
+# ██║     ██║   ██║██╔████╔██║██████╔╝███████║   ██║                      
+# ██║     ██║   ██║██║╚██╔╝██║██╔══██╗██╔══██║   ██║                      
+# ╚██████╗╚██████╔╝██║ ╚═╝ ██║██████╔╝██║  ██║   ██║                      
+#  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝                                                                                             
+# ███╗   ███╗███████╗ ██████╗██╗  ██╗ █████╗ ███╗   ██╗██╗ ██████╗███████╗
+# ████╗ ████║██╔════╝██╔════╝██║  ██║██╔══██╗████╗  ██║██║██╔════╝██╔════╝
+# ██╔████╔██║█████╗  ██║     ███████║███████║██╔██╗ ██║██║██║     ███████╗
+# ██║╚██╔╝██║██╔══╝  ██║     ██╔══██║██╔══██║██║╚██╗██║██║██║     ╚════██║
+# ██║ ╚═╝ ██║███████╗╚██████╗██║  ██║██║  ██║██║ ╚████║██║╚██████╗███████║
+# ╚═╝     ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝ ╚═════╝╚══════╝
+self-combat: false            # Tag players for self-damage?
+untag-on-death: true          # Remove tag on player death
+untag-on-enemy-death: true    # Remove tag when attacker dies
+lightning-on-kill: true       # Lightning effect on PvP kill
+
+# ________________________________________________________________________
+#                         ENTITY LINKING SYSTEM
+# ========================================================================
+link-pets: true               # Link tamed animals to owners
+link-projectiles: true        # Link projectiles to shooters
+link-fishing-rod: true        # EXPERIMENTAL: Link fishing rods
+link-tnt: true                # Link TNT to igniters
+link-end-crystals: true       # Link end crystals to placers
+link-respawn-anchor: true     # Link respawn anchor explosions
+link-bed-explosions: true     # Link bed explosions in nether/end
+
+# ________________________________________________________________________
+#                   PROJECTILE LINKING EXCEPTIONS
+# ========================================================================
+#  Valid types: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
+ignored-projectiles:
+  - EGG
+  - ENDER_PEARL
+  - SNOWBALL
+
+# ============================= END OF CONFIG =============================
