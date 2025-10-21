@@ -29,7 +29,7 @@ public class ChatUtil {
             return Component.empty();
         }
 
-        if (message.contains("<") && message.contains(">")) {
+        if (message.indexOf('<') != -1 && message.indexOf('>') != -1) {
             try {
                 return MINI_MESSAGE.deserialize(message);
             } catch (Exception e) {
@@ -38,16 +38,27 @@ public class ChatUtil {
 
         String processed = message.replace('&', '§');
         Matcher matcher = HEX_COLOR_PATTERN.matcher(processed);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            String hex = matcher.group(1);
-            StringBuilder replacement = new StringBuilder("§x");
-            for (char c : hex.toCharArray()) {
-                replacement.append("§").append(c);
+        if (!matcher.find()) {
+            try {
+                return LegacyComponentSerializer.legacySection().deserialize(processed);
+            } catch (Exception e) {
+                return Component.text(message).color(NamedTextColor.WHITE);
             }
-            matcher.appendReplacement(sb, replacement.toString());
         }
-        matcher.appendTail(sb);
+        matcher.reset();
+        StringBuilder sb = new StringBuilder(processed.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            sb.append(processed, lastEnd, matcher.start());
+            String hex = matcher.group(1);
+            sb.append("§x");
+            for (int i = 0; i < 6; i++) {
+                sb.append("§").append(hex.charAt(i));
+            }
+            lastEnd = matcher.end();
+        }
+        sb.append(processed, lastEnd, processed.length());
+        
         try {
             return LegacyComponentSerializer.legacySection().deserialize(sb.toString());
         } catch (Exception e) {
@@ -108,20 +119,27 @@ public class ChatUtil {
 
     public static String toConsoleFormat(String input) {
         if (input == null || input.isEmpty()) return "";
-        input = input.replace('&', '§');
-        Matcher matcher = HEX_COLOR_PATTERN.matcher(input);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            String hex = matcher.group(1);
-            StringBuilder replacement = new StringBuilder("§x");
-            for (char c : hex.toCharArray()) {
-                replacement.append("§").append(c);
-            }
-            matcher.appendReplacement(sb, replacement.toString());
-        }
-        matcher.appendTail(sb);
-        input = sb.toString();
         
-        return input;
+        String processed = input.replace('&', '§');
+        Matcher matcher = HEX_COLOR_PATTERN.matcher(processed);
+        if (!matcher.find()) {
+            return processed;
+        }
+
+        matcher.reset();
+        StringBuilder sb = new StringBuilder(processed.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            sb.append(processed, lastEnd, matcher.start());
+            String hex = matcher.group(1);
+            sb.append("§x");
+            for (int i = 0; i < 6; i++) {
+                sb.append("§").append(hex.charAt(i));
+            }
+            lastEnd = matcher.end();
+        }
+        sb.append(processed, lastEnd, processed.length());
+        
+        return sb.toString();
     }
 }
