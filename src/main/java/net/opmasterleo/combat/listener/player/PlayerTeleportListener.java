@@ -39,7 +39,10 @@ public final class PlayerTeleportListener implements Listener {
             long maxDistance = combat.getEnderPearlDistance();
             if (distance > maxDistance) {
                 String prefix = combat.getMessage("Messages.Prefix");
-                String msg = combat.getMessage("EnderPearl.Format");
+                String msg = combat.getMessage("enderpearl.message");
+                if (msg == null || msg.isEmpty()) {
+                    msg = combat.getMessage("EnderPearl.Format");
+                }
                 event.setCancelled(true);
                 player.sendMessage(prefix + msg);
                 combat.debug("Cancelled ender pearl teleport: distance " + distance + " > " + maxDistance);
