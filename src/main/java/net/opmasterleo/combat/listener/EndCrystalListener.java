@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -72,11 +73,15 @@ public class EndCrystalListener implements PacketListener, Listener {
 
                     NewbieProtectionListener protection = combat.getNewbieProtectionListener();
                     if (protection != null && protection.isActuallyProtected(player)) {
-                        List<Player> nearbyPlayers = entity.getNearbyEntities(6.0, 6.0, 6.0).stream()
-                                .filter(e -> e instanceof Player && !e.getUniqueId().equals(player.getUniqueId()))
-                                .map(e -> (Player) e)
-                                .filter(p -> !protection.isActuallyProtected(p))
-                                .toList();
+                        List<Player> nearbyPlayers = new ArrayList<>();
+                        for (Entity e : entity.getNearbyEntities(6.0, 6.0, 6.0)) {
+                            if (e instanceof Player && !e.getUniqueId().equals(player.getUniqueId())) {
+                                Player p = (Player) e;
+                                if (!protection.isActuallyProtected(p)) {
+                                    nearbyPlayers.add(p);
+                                }
+                            }
+                        }
 
                         if (!nearbyPlayers.isEmpty()) {
                             protection.sendBlockedMessage(player, protection.getCrystalBlockMessage());
