@@ -84,8 +84,6 @@ public class GlowManager {
             
             if (plugin.getConfig().getBoolean("General.ColoredGlowing", false)) {
                 final String teamName = "combat_" + player.getName().substring(0, Math.min(player.getName().length(), 10));
-                final String cfgColor = plugin.getConfig().getString("General.GlowingColor", "RED");
-                final String ampColor = colorCodeFromName(cfgColor);
                 
                 SchedulerUtil.runTask(plugin, () -> {
                     Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
@@ -95,8 +93,8 @@ public class GlowManager {
                     }
                     
                     try {
-                        Component comp = ChatUtil.parse(ampColor);
-                        team.prefix(comp);
+                        Component playerColor = extractPlayerColor(player);
+                        team.prefix(playerColor);
                     } catch (Exception e) {
                         plugin.getLogger().warning(String.format("Failed to apply glowing effect to %s: %s", player.getName(), e.getMessage()));
                     }
@@ -150,11 +148,16 @@ public class GlowManager {
                 java.util.Collections.singletonList(entityData)
             );
 
-            Player opponent = plugin.getCombatOpponent(player);
-            if (opponent != null && opponent.isOnline() && opponent.getWorld().equals(player.getWorld())) {
-                try {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(opponent, metadataPacket);
-                } catch (Exception ignored) {
+            UUID playerUUID = player.getUniqueId();
+            Combat.CombatRecord record = plugin.getCombatRecords().get(playerUUID);
+            
+            if (record != null && record.opponent != null) {
+                Player opponent = Bukkit.getPlayer(record.opponent);
+                if (opponent != null && opponent.isOnline()) {
+                    try {
+                        PacketEvents.getAPI().getPlayerManager().sendPacket(opponent, metadataPacket);
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             
@@ -172,23 +175,14 @@ public class GlowManager {
         return player != null && glowingPlayers.contains(player.getUniqueId());
     }
 
-    private static String colorCodeFromName(String name) {
-        if (name == null) return "&c";
-        return switch (name.trim().toUpperCase()) {
-            case "BLACK" -> "&0";
-            case "DARK_BLUE", "DARKBLUE", "BLUE" -> "&1";
-            case "DARK_GREEN", "DARKGREEN", "GREEN" -> "&2";
-            case "DARK_AQUA", "DARKAQUA", "AQUA" -> "&3";
-            case "DARK_RED", "DARKRED", "RED" -> "&4";
-            case "DARK_PURPLE", "DARKPURPLE", "PURPLE" -> "&5";
-            case "GOLD" -> "&6";
-            case "GRAY" -> "&7";
-            case "DARK_GRAY", "DARKGRAY" -> "&8";
-            case "LIGHT_PURPLE", "LIGHTPURPLE", "PINK" -> "&d";
-            case "YELLOW" -> "&e";
-            case "WHITE" -> "&f";
-            case "MAGIC" -> "&k";
-            default -> "&c";
-        };
+    private Component extractPlayerColor(Player player) {
+        Component displayName = player.displayName();
+        net.kyori.adventure.text.format.TextColor color = ChatUtil.getLastColor(displayName);
+        
+        if (color != null) {
+            return Component.empty().color(color);
+        }
+
+        return Component.empty().color(net.kyori.adventure.text.format.NamedTextColor.RED);
     }
 }
