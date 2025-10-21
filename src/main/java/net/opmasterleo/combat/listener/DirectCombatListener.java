@@ -26,6 +26,9 @@ import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class DirectCombatListener implements PacketListener, Listener {
 
+    private static final long PACKET_THROTTLE_MS = 50;
+    private final Map<UUID, Long> lastPacketTime = new ConcurrentHashMap<>();
+
     public DirectCombatListener() {
     }
 
@@ -38,9 +41,6 @@ public class DirectCombatListener implements PacketListener, Listener {
         } catch (Exception ignored) {
         }
     }
-
-    private static final long PACKET_THROTTLE_MS = 50;
-    private final Map<UUID, Long> lastPacketTime = new ConcurrentHashMap<>();
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
