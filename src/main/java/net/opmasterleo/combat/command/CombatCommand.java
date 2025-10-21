@@ -137,6 +137,25 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
                     yield true;
                 }
                 
+                case "visibility" -> {
+                    if (sender == null) yield true;
+                    if (!(sender instanceof Player player)) {
+                        sender.sendMessage(ChatUtil.parse("&cOnly players can use this command."));
+                        yield true;
+                    }
+                    Combat combatInstance = Combat.getInstance();
+                    if (combatInstance != null) {
+                        boolean currentVisibility = combatInstance.isCombatVisible(player);
+                        combatInstance.setCombatVisibility(player, !currentVisibility);
+                        if (!currentVisibility) {
+                            player.sendMessage(ChatUtil.parse("&aCombat visibility: &eON"));
+                        } else {
+                            player.sendMessage(ChatUtil.parse("&cCombat visibility: &eOFF"));
+                        }
+                    }
+                    yield true;
+                }
+                
                 case "removeprotect", "protection" -> {
                     if (sender == null) yield true;
                     if (!(sender instanceof Player player)) {
@@ -209,6 +228,7 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
         sender.sendMessage(ChatUtil.parse("&eMasterCombat Command List:"));
         sender.sendMessage(ChatUtil.parse("/combat reload &7- Reloads the plugin configuration."));
         sender.sendMessage(ChatUtil.parse("/combat toggle &7- Enables/disables combat tagging."));
+        sender.sendMessage(ChatUtil.parse("/combat visibility &7- Toggle combat UI visibility (messages/timer)."));
         sender.sendMessage(ChatUtil.parse("/combat update &7- Checks for and downloads plugin updates."));
         if (newbieProtectionEnabled) {
             sender.sendMessage(ChatUtil.parse("/protection &7- Shows your PvP protection time left."));
@@ -236,6 +256,9 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
             }
             if ("toggle".startsWith(args[0].toLowerCase())) {
                 completions.add("toggle");
+            }
+            if ("visibility".startsWith(args[0].toLowerCase())) {
+                completions.add("visibility");
             }
             if ("update".startsWith(args[0].toLowerCase())) {
                 completions.add("update");

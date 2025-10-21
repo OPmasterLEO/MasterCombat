@@ -74,6 +74,7 @@ You are free to DM me on Discord (`opmasterleo`)!
 |---------|-------------|------------|
 | `/combat reload` | 🔄 Reload configuration | `combat.admin` |
 | `/combat toggle` | 🔀 Toggle combat tagging | `combat.admin` |
+| `/combat visibility` | 👁️ Toggle combat UI visibility | `none` |
 | `/combat update` | 📥 Check/download updates | `combat.admin` |
 | `/combat api` | 📊 View API status | `combat.admin` |
 | `/combat protection` | 🛡️ Check protection time | `combat.protection` |
@@ -131,6 +132,25 @@ dependencies {
 
 > 💡 Check the JitPack badge at the top for the latest version number
 
+### API Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `tagPlayer(UUID)` | Tag a player for combat | `void` |
+| `untagPlayer(UUID)` | Remove combat tag | `void` |
+| `getMasterCombatState(UUID)` | Get combat state ("Fighting"/"Idle") | `String` |
+| `isPlayerGlowing(UUID)` | Check if player is glowing | `boolean` |
+| `getMasterCombatStateWithGlow(UUID)` | State with glow annotation | `String` |
+| `getRemainingCombatTime(UUID)` | Get remaining combat seconds | `int` |
+| `getTotalCombatTime(UUID)` | Get total combat duration | `long` |
+| `getCombatOpponent(UUID)` | Get opponent's UUID | `UUID` |
+| `isCombatSystemEnabled()` | Check if system is active | `boolean` |
+| `getActiveCombatCount()` | Count active combat players | `int` |
+| `setCombatVisibility(UUID, boolean)` | Show/hide combat UI | `void` |
+| `isCombatVisible(UUID)` | Check UI visibility | `boolean` |
+
+> 💡 **Combat Visibility Feature**: Hide combat UI (messages, action bar timer) while keeping mechanics active. Perfect for custom UIs or stealth modes!
+
 ### Example Usage
 
 ```java
@@ -162,6 +182,11 @@ public class Example {
         boolean systemEnabled = api.isCombatSystemEnabled();
         int activeCombats = api.getActiveCombatCount();
         
+        // Combat visibility control (NEW in v5.2.4+)
+        api.setCombatVisibility(player.getUniqueId(), false); // Hide combat UI
+        boolean isVisible = api.isCombatVisible(player.getUniqueId());
+        api.setCombatVisibility(player.getUniqueId(), true); // Show combat UI
+        
         // Example: Print combat status
         if (api.isCombatSystemEnabled()) {
             System.out.printf("Player %s is %s with %d seconds remaining%n",
@@ -173,6 +198,11 @@ public class Example {
             if (opponentId != null) {
                 System.out.printf("Fighting against: %s%n",
                     Bukkit.getPlayer(opponentId).getName());
+            }
+            
+            // Check if player has UI visible
+            if (!api.isCombatVisible(player.getUniqueId())) {
+                System.out.println("Player has combat UI hidden (combat still active)");
             }
         }
     }

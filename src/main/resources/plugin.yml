@@ -14,7 +14,7 @@ softdepend:
 commands:
   combat:
     description: Main command for combat plugin.
-    usage: /combat <toggle|reload|update>
+    usage: /combat <toggle|reload|visibility|update>
     permission: combat.admin
     permission-message: You do not have permission to use this command.
   protection:

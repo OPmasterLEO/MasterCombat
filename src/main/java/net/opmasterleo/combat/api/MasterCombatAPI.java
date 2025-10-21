@@ -69,4 +69,20 @@ public interface MasterCombatAPI {
      * @return the count of players currently in combat
      */
     int getActiveCombatCount();
+
+    /**
+     * Set combat visibility for a player (hides UI but keeps combat mechanics active).
+     * 
+     * @param uuid the player's UUID
+     * @param visible true to show combat UI, false to hide it
+     */
+    void setCombatVisibility(UUID uuid, boolean visible);
+
+    /**
+     * Check if combat UI is visible for a player.
+     * 
+     * @param uuid the player's UUID
+     * @return true if combat UI is visible, false if hidden
+     */
+    boolean isCombatVisible(UUID uuid);
 }

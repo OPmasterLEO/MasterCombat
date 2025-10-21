@@ -151,4 +151,18 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
             .filter(record -> record.expiry > System.currentTimeMillis())
             .count();
     }
+
+    @Override
+    public void setCombatVisibility(UUID uuid, boolean visible) {
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null) {
+            plugin.setCombatVisibility(player, visible);
+        }
+    }
+
+    @Override
+    public boolean isCombatVisible(UUID uuid) {
+        Player player = Bukkit.getPlayer(uuid);
+        return player != null && plugin.isCombatVisible(player);
+    }
 }

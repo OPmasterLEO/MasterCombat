@@ -68,6 +68,7 @@ public class Combat extends JavaPlugin implements Listener {
     private static Combat instance;
     private final ConcurrentHashMap<UUID, CombatRecord> combatRecords = new ConcurrentHashMap<>(512, 0.75f, 64);
     private final ConcurrentHashMap<UUID, Long> lastActionBarUpdates = new ConcurrentHashMap<>(512, 0.75f, 64);
+    private final ConcurrentHashMap<UUID, Boolean> combatVisibility = new ConcurrentHashMap<>(512, 0.75f, 64);
     
     private boolean enableWorldsEnabled;
     private Set<String> enabledWorlds;
@@ -837,6 +838,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void sendCombatMessage(Player player, String message, String type) {
         if (message == null || message.isEmpty() || player == null) return;
+        if (!isCombatVisible(player)) return;
         
         try {
             net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
@@ -860,6 +862,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     private void sendNoLongerInCombatMessage(Player player, String message, String type) {
         if (message == null || message.isEmpty() || player == null) return;
+        if (!isCombatVisible(player)) return;
         
         try {
             net.kyori.adventure.text.Component component = ChatUtil.parse(prefix + message);
@@ -883,6 +886,7 @@ public class Combat extends JavaPlugin implements Listener {
     
     private void updateActionBar(Player player, long endTime, long currentTime) {
         if (player == null) return;
+        if (!isCombatVisible(player)) return;
         long seconds = (endTime - currentTime + 999) / 1000;
         if (seconds <= 0) seconds = 0;
         if (combatFormat == null || combatFormat.isEmpty()) return;
@@ -1058,6 +1062,16 @@ public class Combat extends JavaPlugin implements Listener {
     public boolean isEnderPearlEnabled() { return enderPearlEnabled; }
     public long getEnderPearlDistance() { return enderPearlDistance; }
     public Set<String> getIgnoredProjectiles() { return ignoredProjectiles; }
+
+    public void setCombatVisibility(Player player, boolean visible) {
+        if (player == null) return;
+        combatVisibility.put(player.getUniqueId(), visible);
+    }
+
+    public boolean isCombatVisible(Player player) {
+        if (player == null) return true;
+        return combatVisibility.getOrDefault(player.getUniqueId(), true);
+    }
 
     public void setCombatEnabled(boolean enabled) {
         this.combatEnabled = enabled;
