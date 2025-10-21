@@ -22,6 +22,9 @@ public class SelfCombatListener implements Listener {
 
         Combat combat = Combat.getInstance();
         boolean selfCombatEnabled = combat.getConfig().getBoolean("self-combat", false);
+        if (!combat.isCombatEnabledInWorld(player)) {
+            return;
+        }
         if (combat.getWorldGuardUtil() != null && combat.getWorldGuardUtil().isPvpDenied(player.getLocation())) {
             return;
         }
@@ -46,7 +49,7 @@ public class SelfCombatListener implements Listener {
             
             if (projectile.getShooter() instanceof Player shooter && shooter.getUniqueId().equals(player.getUniqueId())) {
                 if (selfCombatEnabled) {
-                    combat.setCombat(player, player);
+                    combat.directSetCombat(player, player);
                 }
                 return;
             }
@@ -54,7 +57,7 @@ public class SelfCombatListener implements Listener {
 
         if (damager instanceof Player damagerPlayer && damagerPlayer.getUniqueId().equals(player.getUniqueId())) {
             if (selfCombatEnabled) {
-                combat.setCombat(player, player);
+                combat.directSetCombat(player, player);
             }
             return;
         }
@@ -67,7 +70,7 @@ public class SelfCombatListener implements Listener {
 
                 if (placer != null && placer.getUniqueId().equals(player.getUniqueId())) {
                     if (selfCombatEnabled) {
-                        combat.setCombat(player, player);
+                        combat.directSetCombat(player, player);
                     }
                     return;
                 }
@@ -79,7 +82,7 @@ public class SelfCombatListener implements Listener {
                 Object activatorObj = tnt.getMetadata("respawn_anchor_activator").get(0).value();
                 if (activatorObj instanceof Player activator && activator.getUniqueId().equals(player.getUniqueId())) {
                     if (selfCombatEnabled) {
-                        combat.setCombat(player, player);
+                        combat.directSetCombat(player, player);
                     }
                     return;
                 }
@@ -89,7 +92,7 @@ public class SelfCombatListener implements Listener {
         if (combat.getConfig().getBoolean("link-fishing-rod", true) && damager instanceof Projectile projectile) {
             if (projectile.getShooter() instanceof Player shooter && shooter.getUniqueId().equals(player.getUniqueId())) {
                 if (selfCombatEnabled) {
-                    combat.setCombat(player, player);
+                    combat.directSetCombat(player, player);
                 }
             }
         }
