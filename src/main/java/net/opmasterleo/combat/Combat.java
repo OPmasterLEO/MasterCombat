@@ -134,8 +134,10 @@ public class Combat extends JavaPlugin implements Listener {
         enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
         enabledWorlds = ConcurrentHashMap.newKeySet();
         enabledWorlds.addAll(getConfig().getStringList("EnabledWorlds.worlds"));
-        enderPearlEnabled = getConfig().getBoolean("EnderPearl.Enabled", false);
-        enderPearlDistance = getConfig().getLong("EnderPearl.Distance", 0);
+    enderPearlEnabled = getConfig().getBoolean("enderpearl.enabled",
+        getConfig().getBoolean("EnderPearl.Enabled", false));
+    enderPearlDistance = getConfig().getLong("enderpearl.distance",
+        getConfig().getLong("EnderPearl.Distance", 0));
         debugEnabled = getConfig().getBoolean("debug", false);
         combatFormat = getConfig().getString("General.Format", "");
         

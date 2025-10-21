@@ -48,12 +48,6 @@ General:
     type: both               # [chat/actionbar/both]
   
   # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-  EnderPearl:                # Ender pearl combat restrictions
-    Enabled: false           # Block long pearl throws in combat
-    Distance: 25             # Maximum allowed throw distance
-    Format: '&cYou cannot teleport that far away in combat!'
-  
-  # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
   CustomDeathMessage:        # Custom death messages
     enabled: false
     prefix: '&c☠ '
@@ -73,8 +67,12 @@ item_restrictions:
 #                    ENDER PEARL & TRIDENT SETTINGS
 # ========================================================================
 enderpearl:
-  # Enable/disable ender pearl settings below
+  # Enable/disable ender pearl features
   enabled: false
+  # Maximum allowed throw distance while in combat (horizontal distance in blocks)
+  distance: 25
+  # Message shown when a pearl throw is cancelled for exceeding distance
+  message: '&cYou cannot teleport that far away in combat!'
   # Refresh combat timer when player lands an ender pearl
   refresh_combat_on_land: false
   # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
