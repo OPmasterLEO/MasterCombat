@@ -541,8 +541,8 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         if (glowingEnabled && glowManager != null) {
-            if (!playerWasInCombat) glowManager.setGlowing(player, true);
-            if (!isSamePlayer && !opponentWasInCombat) glowManager.setGlowing(opponent, true);
+            if (!playerWasInCombat) glowManager.setGlowing(player, true, opponentUUID);
+            if (!isSamePlayer && !opponentWasInCombat) glowManager.setGlowing(opponent, true, playerUUID);
         }
         lastActionBarUpdates.put(playerUUID, 0L);
         if (!isSamePlayer) {
@@ -562,7 +562,7 @@ public class Combat extends JavaPlugin implements Listener {
         lastActionBarUpdates.remove(playerUUID);
         Player player = Bukkit.getPlayer(playerUUID);
         if (player != null && glowingEnabled && glowManager != null) {
-            glowManager.setGlowing(player, false);
+            glowManager.setGlowing(player, false, null);
         }
 
         if (record != null && record.opponent != null) {
@@ -573,7 +573,7 @@ public class Combat extends JavaPlugin implements Listener {
                 if (glowingEnabled && glowManager != null) {
                     Player opponent = Bukkit.getPlayer(record.opponent);
                     if (opponent != null) {
-                        glowManager.setGlowing(opponent, false);
+                        glowManager.setGlowing(opponent, false, null);
                     }
                 }
             }
@@ -899,13 +899,13 @@ public class Combat extends JavaPlugin implements Listener {
         if (record == null) return;
         
         if (glowingEnabled && glowManager != null) {
-            glowManager.setGlowing(player, false);
+            glowManager.setGlowing(player, false, null);
             if (record.opponent != null) {
                 Player opponent = Bukkit.getPlayer(record.opponent);
                 if (opponent != null) {
                     boolean opponentStillInCombat = isInCombat(opponent);
                     if (!opponentStillInCombat) {
-                        glowManager.setGlowing(opponent, false);
+                        glowManager.setGlowing(opponent, false, null);
                     }
                 }
             }
@@ -1031,7 +1031,7 @@ public class Combat extends JavaPlugin implements Listener {
                 }
             }
             if (glowingEnabled && glowManager != null) {
-                glowManager.setGlowing(player, true);
+                glowManager.setGlowing(player, true, opponentUUID);
             }
         }
         
@@ -1050,7 +1050,7 @@ public class Combat extends JavaPlugin implements Listener {
                     sendCombatMessage(opponent, nowInCombatMsg, nowInCombatType);
                 }
                 if (glowingEnabled && glowManager != null) {
-                    glowManager.setGlowing(opponent, true);
+                    glowManager.setGlowing(opponent, true, playerUUID);
                 }
                 updateActionBar(opponent, expiry, System.currentTimeMillis());
             }
