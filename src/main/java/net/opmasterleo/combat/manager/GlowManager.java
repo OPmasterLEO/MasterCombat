@@ -44,6 +44,7 @@ public class GlowManager {
     public void initialize(Combat plugin) {
         this.plugin = plugin;
         schedulePeriodicCleanup();
+        schedulePeriodicSync();
     }
     
     private void schedulePeriodicCleanup() {
@@ -72,6 +73,35 @@ public class GlowManager {
                 });
             }
         }, 200L, 200L);
+    }
+
+    private void schedulePeriodicSync() {
+        SchedulerUtil.runTaskTimerAsync(plugin, () -> {
+            try {
+                for (UUID uuid : new ArrayList<>(plugin.getCombatRecords().keySet())) {
+                    Player p = Bukkit.getPlayer(uuid);
+                    if (p != null && p.isOnline()) {
+                        syncWithCombat(p);
+                    }
+                }
+
+                long now = System.currentTimeMillis();
+                for (Map.Entry<UUID, GlowState> entry : new ArrayList<>(glowingPlayers.entrySet())) {
+                    UUID uuid = entry.getKey();
+                    GlowState state = entry.getValue();
+                    if (state == null || !state.isGlowing) continue;
+                    Player p = Bukkit.getPlayer(uuid);
+                    if (p == null || !p.isOnline()) continue;
+
+                    Long last = lastPacketSent.get(uuid);
+                    if (last == null || now - last >= 500L) {
+                        SchedulerUtil.runEntityTask(plugin, p, () -> applyGlowEffect(p, state.opponentId));
+                    }
+                }
+            } catch (Exception e) {
+                plugin.debug("Glow sync tick error: " + e.getMessage());
+            }
+        }, 10L, 10L);
     }
 
     public void setGlowing(Player player, boolean glowing) {
