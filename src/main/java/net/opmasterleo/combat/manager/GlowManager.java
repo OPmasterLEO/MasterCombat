@@ -17,6 +17,7 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
@@ -253,23 +254,48 @@ public class GlowManager {
         
         try {
             int entityId = player.getEntityId();
-            byte flags = 0x00;
-            if (glowing) {
-                flags |= 0x40;
-            }
-            if (player.isSneaking()) {
-                flags |= 0x02;
-            }
-            if (player.isSprinting()) {
-                flags |= 0x08;
-            }
-            if (player.isInvisible()) {
-                flags |= 0x20;
+            List<EntityData<?>> metadata;
+            try {
+                metadata = new ArrayList<>(SpigotConversionUtil.getEntityMetadata(player));
+                boolean foundFlag = false;
+                for (int i = 0; i < metadata.size(); i++) {
+                    EntityData<?> data = metadata.get(i);
+                    if (data.getIndex() == 0 && data.getType() == EntityDataTypes.BYTE) {
+                        @SuppressWarnings("unchecked")
+                        EntityData<Byte> byteData = (EntityData<Byte>) data;
+                        byte currentFlags = byteData.getValue();
+                        byte newFlags;
+                        if (glowing) {
+                            newFlags = (byte) (currentFlags | 0x40);
+                        } else {
+                            newFlags = (byte) (currentFlags & ~0x40);
+                        }
+                        metadata.set(i, new EntityData<>(0, EntityDataTypes.BYTE, newFlags));
+                        foundFlag = true;
+                        break;
+                    }
+                }
+
+                if (!foundFlag) {
+                    byte flags = 0x00;
+                    if (glowing) flags |= 0x40;
+                    if (player.isSneaking()) flags |= 0x02;
+                    if (player.isSprinting()) flags |= 0x08;
+                    if (player.isInvisible()) flags |= 0x20;
+                    metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, flags));
+                }
+            } catch (Exception e) {
+                plugin.debug("SpigotConversionUtil fallback for " + player.getName() + ": " + e.getMessage());
+                byte flags = 0x00;
+                if (glowing) flags |= 0x40;
+                if (player.isSneaking()) flags |= 0x02;
+                if (player.isSprinting()) flags |= 0x08;
+                if (player.isInvisible()) flags |= 0x20;
+                
+                metadata = new ArrayList<>();
+                metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, flags));
             }
             
-            EntityData<Byte> entityData = new EntityData<>(0, EntityDataTypes.BYTE, flags);
-            List<EntityData<?>> metadata = new ArrayList<>();
-            metadata.add(entityData);
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                 entityId, 
                 metadata
