@@ -55,6 +55,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private String enderpearlCooldownMessage;
     private String tridentCooldownMessage;
     private String itemRestrictedMessage;
+    private String itemRestrictedType;
     private boolean enderpearlBlockInCombat;
     private boolean tridentBlockInCombat;
     private String enderpearlCombatMessage;
@@ -109,8 +110,9 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
                 plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use ender pearls while in combat!");
         tridentCombatMessage = plugin.getConfig().getString("trident.combat_message",
                 plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use tridents while in combat!");
-        itemRestrictedMessage = plugin.getConfig().getString("Messages.Prefix", "") +
-                "&cYou cannot use this item while in combat!";
+        itemRestrictedMessage = plugin.getConfig().getString("item_restrictions.text",
+                plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use this item while in combat!");
+        itemRestrictedType = plugin.getConfig().getString("item_restrictions.type", "actionbar");
 
         worldTridentBans.clear();
         ConfigurationSection tridentBanned = plugin.getConfig().getConfigurationSection("trident.banned_worlds");
@@ -161,7 +163,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         ItemStack item = player.getInventory().getItem(slot);
         if (disabledItems.contains(item.getType())) {
             event.setCancelled(true);
-            player.sendActionBar(ChatUtil.parse(itemRestrictedMessage));
+            sendItemRestrictionMessage(player, itemRestrictedMessage);
             return;
         }
 
@@ -321,6 +323,18 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
                 event.setCancelled(true);
                 player.sendMessage(ChatUtil.parse(tridentCombatMessage));
             }
+        }
+    }
+
+    private void sendItemRestrictionMessage(Player player, String message) {
+        if (message == null || message.isEmpty()) return;
+        switch (itemRestrictedType == null ? "actionbar" : itemRestrictedType.toLowerCase()) {
+            case "chat" -> player.sendMessage(ChatUtil.parse(message));
+            case "both" -> {
+                player.sendMessage(ChatUtil.parse(message));
+                player.sendActionBar(ChatUtil.parse(message));
+            }
+            default -> player.sendActionBar(ChatUtil.parse(message));
         }
     }
 }

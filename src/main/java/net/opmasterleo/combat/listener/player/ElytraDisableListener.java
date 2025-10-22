@@ -26,18 +26,48 @@ public class ElytraDisableListener implements Listener {
     }
 
     private boolean isActive(Player player) {
-        return plugin.isDisableElytra() && plugin.isInCombat(player);
+        if (!plugin.isInCombat(player)) return false;
+        if (plugin.isDisableElytra()) return true;
+        if (plugin.getConfig().getBoolean("item_restrictions.enabled", false)) {
+            for (String item : plugin.getConfig().getStringList("item_restrictions.disabled_items")) {
+                if (item.equalsIgnoreCase("ELYTRA")) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     private void sendBlocked(Player player) {
+        if (plugin.getConfig().getBoolean("item_restrictions.enabled", false)) {
+            for (String item : plugin.getConfig().getStringList("item_restrictions.disabled_items")) {
+                if (item.equalsIgnoreCase("ELYTRA")) {
+                    String msg = plugin.getConfig().getString("item_restrictions.text", 
+                        plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use this item while in combat!");
+                    String type = plugin.getConfig().getString("item_restrictions.type", "actionbar");
+                    sendMessage(player, msg, type);
+                    return;
+                }
+            }
+        }
+
         String msg = plugin.getElytraDisabledMsg();
         String type = plugin.getElytraDisabledType();
         if (msg == null || msg.isEmpty()) return;
+        sendMessage(player, plugin.getPrefix() + msg, type);
+    }
+    
+    private void sendMessage(Player player, String message, String type) {
         switch (type == null ? "chat" : type.toLowerCase()) {
-            case "actionbar" -> player.sendActionBar(ChatUtil.parse(plugin.getPrefix() + msg));
+            case "actionbar" -> player.sendActionBar(ChatUtil.parse(message));
             case "title" -> player.showTitle(net.kyori.adventure.title.Title.title(
-                    ChatUtil.parse(plugin.getPrefix() + msg), ChatUtil.parse(" ")));
-            default -> player.sendMessage(ChatUtil.parse(plugin.getPrefix() + msg));
+                    ChatUtil.parse(message), ChatUtil.parse(" ")));
+            case "both" -> {
+                player.sendMessage(ChatUtil.parse(message));
+                player.sendActionBar(ChatUtil.parse(message));
+            }
+            default -> player.sendMessage(ChatUtil.parse(message));
         }
     }
 

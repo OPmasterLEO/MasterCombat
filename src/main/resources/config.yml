@@ -58,11 +58,14 @@ General:
 item_restrictions:
   # Enable or disable item restrictions during combat
   enabled: false
-  # Items blocked during combat (Materials like CHORUS_FRUIT, ELYTRA, etc.)
+  # Items blocked during combat (Materials like CHORUS_FRUIT, ENCHANTED_GOLDEN_APPLE,, etc.)
   disabled_items:
     - CHORUS_FRUIT
-    - ELYTRA
-
+    - ENCHANTED_GOLDEN_APPLE
+  # Message shown when item is blocked
+  text: "%prefix% &cYou cannot use this item while in combat!"
+  # Message type [chat/actionbar/both]
+  type: actionbar
 # ________________________________________________________________________
 #                    ENDER PEARL & TRIDENT SETTINGS
 # ========================================================================
