@@ -118,10 +118,12 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 WrapperPlayServerExplosion explosion = new WrapperPlayServerExplosion(event);
                 Player sample = (Player) event.getPlayer();
                 Vector3d pos = explosion.getPosition();
-                Location explosionLoc = new Location(sample.getWorld(), pos.getX(), pos.getY(), pos.getZ());
-
+                final double x = pos.getX();
+                final double y = pos.getY();
+                final double z = pos.getZ();
                 SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
+                    Location explosionLoc = new Location(sample.getWorld(), x, y, z);
                     Block nearest = findNearestAnchorBlock(explosionLoc, 3.0);
                     if (nearest == null) return;
                     UUID activator = anchorActivators.get(nearest);
@@ -139,6 +141,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
 
     private Block findNearestAnchorBlock(Location loc, double radius) {
         if (loc == null || loc.getWorld() == null) return null;
+        if (anchorActivators.isEmpty()) return null;
         int r = (int) Math.ceil(radius);
         double radiusSquared = radius * radius;
         Block nearest = null;
@@ -153,18 +156,15 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                         if (Math.abs(x) != distance && Math.abs(y) != distance && Math.abs(z) != distance) {
                             continue;
                         }
+                        double distSquared = x*x + y*y + z*z;
+                        if (distSquared > radiusSquared || distSquared >= bestDistSquared) {
+                            continue;
+                        }
                         
                         Block b = loc.getWorld().getBlockAt(centerX + x, centerY + y, centerZ + z);
                         if (b.getType() == Material.RESPAWN_ANCHOR) {
-                            double dx = x;
-                            double dy = y;
-                            double dz = z;
-                            double distSquared = dx*dx + dy*dy + dz*dz;
-                            
-                            if (distSquared <= radiusSquared && distSquared < bestDistSquared) {
-                                bestDistSquared = distSquared;
-                                nearest = b;
-                            }
+                            bestDistSquared = distSquared;
+                            nearest = b;
                         }
                     }
                 }
