@@ -485,14 +485,12 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void directSetCombat(Player player, Player opponent) {
         if (!combatEnabled || player == null || opponent == null) return;
-        
         if (!isCombatEnabledInWorld(player) || shouldBypass(player)) return;
         if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR ||
             opponent.getGameMode() == GameMode.CREATIVE || opponent.getGameMode() == GameMode.SPECTATOR) {
             return;
         }
 
-        if (superVanishManager != null && 
         if (superVanishManager != null &&
             (superVanishManager.isVanished(player) || superVanishManager.isVanished(opponent))) {
             return;
@@ -500,7 +498,6 @@ public class Combat extends JavaPlugin implements Listener {
 
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent.getUniqueId();
-        
 
         if (worldGuardUtil != null) {
             boolean playerInProtectedRegion = worldGuardUtil.isPvpDenied(player.getLocation());
@@ -511,26 +508,18 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
-        
 
         CombatRecord playerRecord = combatRecords.get(playerUUID);
-        boolean playerWasInCombat = playerRecord != null;
         boolean playerWasInCombat = playerRecord != null && playerRecord.expiry > System.currentTimeMillis();
         boolean isSamePlayer = playerUUID.equals(opponentUUID);
-        
 
         combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
-        
 
         boolean opponentWasInCombat = false;
         if (!isSamePlayer) {
             CombatRecord opponentRecord = combatRecords.put(opponentUUID, new CombatRecord(expiry, playerUUID));
-            opponentWasInCombat = opponentRecord != null;
             opponentWasInCombat = opponentRecord != null && opponentRecord.expiry > System.currentTimeMillis();
         }
-        
-        if (!playerWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
-            sendCombatMessage(player, nowInCombatMsg, nowInCombatType);
 
         if (!playerWasInCombat) {
             if (nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
@@ -544,9 +533,6 @@ public class Combat extends JavaPlugin implements Listener {
                 }
             }
         }
-        
-        if (!isSamePlayer && !opponentWasInCombat && nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
-            sendCombatMessage(opponent, nowInCombatMsg, nowInCombatType);
 
         if (!isSamePlayer && !opponentWasInCombat) {
             if (nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
@@ -562,7 +548,6 @@ public class Combat extends JavaPlugin implements Listener {
         if (!isSamePlayer) {
             lastActionBarUpdates.put(opponentUUID, 0L);
         }
-        
 
         long currentTime = System.currentTimeMillis();
         updateActionBar(player, expiry, currentTime);
