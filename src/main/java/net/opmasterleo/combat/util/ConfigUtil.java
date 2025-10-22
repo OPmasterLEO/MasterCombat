@@ -8,9 +8,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -153,10 +150,13 @@ public class ConfigUtil {
         StringBuilder result = new StringBuilder();
         String currentPath = "";
         int indentLevel = 0;
-        for (String line : lines) {
+        int lineIndex = 0;
+        while (lineIndex < lines.length) {
+            String line = lines[lineIndex];
             String trimmed = line.trim();
             if (trimmed.startsWith("#") || trimmed.isEmpty()) {
                 result.append(line).append("\n");
+                lineIndex++;
                 continue;
             }
 
@@ -202,11 +202,61 @@ public class ConfigUtil {
                           .append(valueStr)
                           .append(inlineComment)
                           .append("\n");
-                } else {
+                    lineIndex++;
+                }
+                else if (newValue instanceof List) {
+                    List<?> newList = (List<?>) newValue;
                     result.append(line).append("\n");
+                    lineIndex++;
+                    int listIndent = indent + 2;
+                    while (lineIndex < lines.length) {
+                        String nextLine = lines[lineIndex];
+                        String nextTrimmed = nextLine.trim();
+                        if (nextTrimmed.isEmpty() || nextTrimmed.startsWith("#")) {
+                            int nextIndent = 0;
+                            for (int i = 0; i < nextLine.length(); i++) {
+                                if (nextLine.charAt(i) == ' ') nextIndent++;
+                                else break;
+                            }
+                            if (nextIndent < listIndent || nextTrimmed.isEmpty()) {
+                                break;
+                            }
+                        }
+
+                        if (nextTrimmed.startsWith("-") || nextLine.indexOf(':') > 0) {
+                            int nextIndent = 0;
+                            for (int i = 0; i < nextLine.length(); i++) {
+                                if (nextLine.charAt(i) == ' ') nextIndent++;
+                                else break;
+                            }
+                            
+                            if (nextTrimmed.startsWith("-")) {
+                                if (nextIndent == listIndent) {
+                                    lineIndex++;
+                                    continue;
+                                } else if (nextIndent < listIndent) {
+                                    break;
+                                }
+                            } else if (nextLine.indexOf(':') > 0 && nextIndent <= indent) {
+                                break;
+                            }
+                        }
+                        
+                        lineIndex++;
+                    }
+
+                    for (Object item : newList) {
+                        String itemStr = yaml.dump(item).trim();
+                        result.append(" ".repeat(listIndent)).append("- ").append(itemStr).append("\n");
+                    }
+                }
+                else {
+                    result.append(line).append("\n");
+                    lineIndex++;
                 }
             } else {
                 result.append(line).append("\n");
+                lineIndex++;
             }
         }
 
@@ -327,149 +377,11 @@ public class ConfigUtil {
 
                 if (defVal instanceof Map && usrVal instanceof Map) {
                     merged.put(key, mergeConfigs((Map<String, Object>) defVal, (Map<String, Object>) usrVal, childPath));
-                } else if (defVal instanceof List && usrVal instanceof List) {
-                    List<Object> mergedList = mergeLists((List<Object>) defVal, (List<Object>) usrVal, childPath);
-                    merged.put(key, mergedList);
-                } else {
-                    merged.put(key, usrVal);
                 }
             }
         }
 
         return merged;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Object> mergeLists(List<Object> defaults, List<Object> user, String path) {
-        if (defaults == null || defaults.isEmpty()) {
-            return deepCopyList(user);
-        }
-        if (user == null || user.isEmpty()) {
-            return deepCopyList(defaults);
-        }
-
-        boolean allStringsDefault = true;
-        boolean allStringsUser = true;
-        for (Object o : defaults) {
-            if (o != null && !(o instanceof String)) {
-                allStringsDefault = false;
-                break;
-            }
-        }
-        for (Object o : user) {
-            if (o != null && !(o instanceof String)) {
-                allStringsUser = false;
-                break;
-            }
-        }
-
-        if (allStringsDefault && allStringsUser) {
-            boolean caseInsensitive = isCaseInsensitivePath(path);
-            List<Object> result = new ArrayList<>(user.size() + defaults.size());
-            HashSet<String> seen = new HashSet<>();
-            for (Object u : user) {
-                String key = caseInsensitive ? String.valueOf(u).toLowerCase() : String.valueOf(u);
-                if (seen.add(key)) {
-                    result.add(u);
-                }
-            }
-            for (Object d : defaults) {
-                String key = caseInsensitive ? String.valueOf(d).toLowerCase() : String.valueOf(d);
-                if (seen.add(key)) {
-                    result.add(d);
-                }
-            }
-            return result;
-        }
-
-        boolean mapsDefault = true;
-        boolean mapsUser = true;
-        for (Object v : defaults) {
-            if (!(v instanceof Map)) {
-                mapsDefault = false;
-                break;
-            }
-        }
-        for (Object v : user) {
-            if (!(v instanceof Map)) {
-                mapsUser = false;
-                break;
-            }
-        }
-        
-        if (mapsDefault && mapsUser) {
-            String idKey = detectIdKey(defaults, user);
-            if (idKey != null) {
-                Map<String, Map<String, Object>> userIndex = new LinkedHashMap<>();
-                for (Object uObj : user) {
-                    Map<String, Object> uMap = (Map<String, Object>) uObj;
-                    Object id = uMap.get(idKey);
-                    if (id != null) {
-                        userIndex.put(String.valueOf(id), (Map<String, Object>) deepCopyConcurrent(uMap));
-                    }
-                }
-                for (Object dObj : defaults) {
-                    Map<String, Object> dMap = (Map<String, Object>) dObj;
-                    Object id = dMap.get(idKey);
-                    String idStr = id == null ? null : String.valueOf(id);
-                    if (idStr != null) {
-                        Map<String, Object> uMap = userIndex.get(idStr);
-                        if (uMap == null) {
-                            userIndex.put(idStr, (Map<String, Object>) deepCopyConcurrent(dMap));
-                        } else {
-                            userIndex.put(idStr, mergeConfigs(dMap, uMap, path + "[" + idKey + "=" + idStr + "]"));
-                        }
-                    }
-                }
-                return new ArrayList<>(userIndex.values());
-            }
-        }
-
-        return deepCopyList(user);
-    }
-
-    private static boolean isCaseInsensitivePath(String path) {
-        if (path == null) return false;
-        String p = path.toLowerCase();
-        return p.endsWith("ignored-projectiles")
-            || p.endsWith("enabledworlds.worlds")
-            || p.endsWith("commands.blocked")
-            || p.endsWith("blocked-commands")
-            || p.contains("disabled_items")
-            || p.contains("blockeditems");
-    }
-
-    private static String detectIdKey(List<Object> defaults, List<Object> user) {
-        String[] candidates = {"name", "id", "key", "command", "material", "type"};
-        for (String c : candidates) {
-            boolean inDefaults = true;
-            for (Object o : defaults) {
-                if (!(o instanceof Map) || !((Map<?, ?>) o).containsKey(c)) {
-                    inDefaults = false;
-                    break;
-                }
-            }
-
-            boolean inUser = true;
-            for (Object o : user) {
-                if (!(o instanceof Map) || !((Map<?, ?>) o).containsKey(c)) {
-                    inUser = false;
-                    break;
-                }
-            }
-            
-            if (inDefaults || inUser) return c;
-        }
-        return null;
-    }
-
-    private static List<Object> deepCopyList(List<Object> list) {
-        if (list == null) return new ArrayList<>();
-        List<Object> copy = new ArrayList<>(list.size());
-        for (Object o : list) {
-            copy.add(deepCopyConcurrent(o));
-        }
-        return copy;
     }
     
     @SuppressWarnings("unchecked")
