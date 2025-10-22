@@ -63,11 +63,12 @@ public class EndCrystalListener implements PacketListener, Listener {
             if (action != WrapperPlayClientInteractEntity.InteractAction.INTERACT &&
                 action != WrapperPlayClientInteractEntity.InteractAction.ATTACK) return;
 
+            final int entityId = interactPacket.getEntityId();
             SchedulerUtil.runTask(Combat.getInstance(), () -> {
                 try {
                     Player player = (Player) event.getPlayer();
                     Combat combat = Combat.getInstance();
-                    Entity entity = combat.getEntityManager().getEntity(interactPacket.getEntityId());
+                    Entity entity = combat.getEntityManager().getEntity(entityId);
                     if (entity == null || entity.getType() != EntityType.END_CRYSTAL) return;
                     combat.getCrystalManager().setPlacer(entity, player);
 
