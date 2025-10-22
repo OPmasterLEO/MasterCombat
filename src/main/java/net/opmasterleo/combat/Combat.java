@@ -1223,7 +1223,7 @@ public class Combat extends JavaPlugin implements Listener {
             if (Bukkit.getPluginManager().getPlugin("PacketEvents") != null) {
                 PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
                 PacketEvents.getAPI().getSettings()
-                    .reEncodeByDefault(true)
+                    .reEncodeByDefault(false)
                     .checkForUpdates(false);
                 debug("Successfully initialized PacketEvents settings");
             }
