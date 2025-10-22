@@ -756,16 +756,21 @@ public class Combat extends JavaPlugin implements Listener {
                             }
 
                             if (!toEnd.isEmpty() || !toActionbar.isEmpty()) {
-                                SchedulerUtil.runTask(Combat.this, () -> {
+                                if (SchedulerUtil.isFolia()) {
                                     long syncNow = System.currentTimeMillis();
                                     for (UUID uuid : toEnd) {
                                         Player player = Bukkit.getPlayer(uuid);
-                                        if (player != null) {
-                                            handleCombatEnd(player);
+                                        if (player == null) {
+                                            combatRecords.remove(uuid);
+                                            lastActionBarUpdates.remove(uuid);
+                                            continue;
                                         }
-                                        combatRecords.remove(uuid);
-                                        lastActionBarUpdates.remove(uuid);
+                                        SchedulerUtil.runEntityTask(Combat.this, player, () -> {
+                                            handleCombatEnd(player);
+                                            lastActionBarUpdates.remove(uuid);
+                                        });
                                     }
+
                                     if (!toActionbar.isEmpty()) {
                                         if (toActionbar.size() > 10) {
                                             toActionbar.sort((a, b) -> {
@@ -776,19 +781,51 @@ public class Combat extends JavaPlugin implements Listener {
                                                 return expA.compareTo(expB);
                                             });
                                         }
-                                        
                                         for (UUID uuid : toActionbar) {
                                             Player player = Bukkit.getPlayer(uuid);
+                                            if (player == null) continue;
+                                            Long expiry = actionbarExpiry.get(uuid);
+                                            if (expiry == null) continue;
+                                            SchedulerUtil.runEntityTask(Combat.this, player, () -> {
+                                                updateActionBar(player, expiry, syncNow);
+                                                lastActionBarUpdates.put(uuid, syncNow);
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    SchedulerUtil.runTask(Combat.this, () -> {
+                                        long syncNow = System.currentTimeMillis();
+                                        for (UUID uuid : toEnd) {
+                                            Player player = Bukkit.getPlayer(uuid);
                                             if (player != null) {
-                                                Long expiry = actionbarExpiry.get(uuid);
-                                                if (expiry != null) {
-                                                    updateActionBar(player, expiry, syncNow);
-                                                    lastActionBarUpdates.put(uuid, syncNow);
+                                                handleCombatEnd(player);
+                                            }
+                                            combatRecords.remove(uuid);
+                                            lastActionBarUpdates.remove(uuid);
+                                        }
+                                        if (!toActionbar.isEmpty()) {
+                                            if (toActionbar.size() > 10) {
+                                                toActionbar.sort((a, b) -> {
+                                                    Long expA = actionbarExpiry.get(a);
+                                                    Long expB = actionbarExpiry.get(b);
+                                                    if (expA == null) return 1;
+                                                    if (expB == null) return -1;
+                                                    return expA.compareTo(expB);
+                                                });
+                                            }
+                                            for (UUID uuid : toActionbar) {
+                                                Player player = Bukkit.getPlayer(uuid);
+                                                if (player != null) {
+                                                    Long expiry = actionbarExpiry.get(uuid);
+                                                    if (expiry != null) {
+                                                        updateActionBar(player, expiry, syncNow);
+                                                        lastActionBarUpdates.put(uuid, syncNow);
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
-                                });
+                                    });
+                                }
                             }
                         } finally {
                             pendingTasks.remove(batchKey);
@@ -811,14 +848,32 @@ public class Combat extends JavaPlugin implements Listener {
                             continue;
                         }
 
-                        if (currentTime >= record.expiry) {
-                            handleCombatEnd(player);
-                            lastActionBarUpdates.remove(uuid);
+                        if (SchedulerUtil.isFolia()) {
+                            if (currentTime >= record.expiry) {
+                                SchedulerUtil.runEntityTask(this, player, () -> {
+                                    handleCombatEnd(player);
+                                    lastActionBarUpdates.remove(uuid);
+                                });
+                            } else {
+                                Long lastUpdate = lastActionBarUpdates.get(uuid);
+                                if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                    long ts = currentTime;
+                                    SchedulerUtil.runEntityTask(this, player, () -> {
+                                        updateActionBar(player, record.expiry, ts);
+                                        lastActionBarUpdates.put(uuid, ts);
+                                    });
+                                }
+                            }
                         } else {
-                            Long lastUpdate = lastActionBarUpdates.get(uuid);
-                            if (lastUpdate == null || currentTime - lastUpdate >= 250) {
-                                updateActionBar(player, record.expiry, currentTime);
-                                lastActionBarUpdates.put(uuid, currentTime);
+                            if (currentTime >= record.expiry) {
+                                handleCombatEnd(player);
+                                lastActionBarUpdates.remove(uuid);
+                            } else {
+                                Long lastUpdate = lastActionBarUpdates.get(uuid);
+                                if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                    updateActionBar(player, record.expiry, currentTime);
+                                    lastActionBarUpdates.put(uuid, currentTime);
+                                }
                             }
                         }
                     }
