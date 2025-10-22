@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,11 +27,9 @@ import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.protocol.player.InteractionHand;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.util.Vector3i;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
 
 import net.opmasterleo.combat.Combat;
@@ -41,7 +40,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     private final Map<Block, UUID> anchorActivators = new ConcurrentHashMap<>();
     private final Map<Block, Long> activationTimestamps = new ConcurrentHashMap<>();
     private final Map<Location, ExplosionData> explosionCache = new ConcurrentHashMap<>();
-    private static final long ACTIVATION_TIMEOUT_MS = 5000L;
+    private static final long ACTIVATION_TIMEOUT_MS = 15000L;
     private static final long EXPLOSION_CACHE_TIMEOUT_MS = 10000L;
 
     private static class ExplosionData {
@@ -82,8 +81,6 @@ public class RespawnAnchorListener implements Listener, PacketListener {
             if (!plugin.isPluginEnabled() || !plugin.isEnabled()) return;
 
             if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
-                WrapperPlayClientUseItem use = new WrapperPlayClientUseItem(event);
-                if (use.getHand() != InteractionHand.MAIN_HAND) return;
                 Player player = (Player) event.getPlayer();
                 SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
@@ -101,7 +98,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     Block block = new Location(player.getWorld(), pos.getX(), pos.getY(), pos.getZ()).getBlock();
                     if (block.getType() != Material.RESPAWN_ANCHOR) return;
                     trackAnchorInteraction(block, player);
-                    plugin.debug("PacketEvents: tracked anchor placed by " + player.getName() + " at " + block.getLocation());
+                    plugin.debug("PacketEvents: tracked anchor interaction by " + player.getName() + " at " + block.getLocation());
                 });
             }
         } catch (IllegalArgumentException e) {
@@ -124,13 +121,12 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 SchedulerUtil.runTask(plugin, () -> {
                     if (!plugin.isEnabled()) return;
                     Location explosionLoc = new Location(sample.getWorld(), x, y, z);
-                    Block nearest = findNearestAnchorBlock(explosionLoc, 3.0);
+                    Block nearest = findNearestTrackedAnchor(explosionLoc, 5.0);
                     if (nearest == null) return;
                     UUID activator = anchorActivators.get(nearest);
                     if (activator != null) {
                         explosionCache.put(explosionLoc, new ExplosionData(activator));
                         plugin.debug("PacketEvents: tracked anchor explosion at " + explosionLoc + " by " + activator);
-                        SchedulerUtil.runTaskLater(plugin, () -> explosionCache.remove(explosionLoc), 4L);
                     }
                 });
             }
@@ -139,37 +135,21 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         }
     }
 
-    private Block findNearestAnchorBlock(Location loc, double radius) {
+
+    private Block findNearestTrackedAnchor(Location loc, double radius) {
         if (loc == null || loc.getWorld() == null) return null;
         if (anchorActivators.isEmpty()) return null;
-        int r = (int) Math.ceil(radius);
         double radiusSquared = radius * radius;
         Block nearest = null;
         double bestDistSquared = Double.MAX_VALUE;
-        int centerX = loc.getBlockX();
-        int centerY = loc.getBlockY();
-        int centerZ = loc.getBlockZ();
-        for (int distance = 0; distance <= r; distance++) {
-            for (int x = -distance; x <= distance; x++) {
-                for (int y = -distance; y <= distance; y++) {
-                    for (int z = -distance; z <= distance; z++) {
-                        if (Math.abs(x) != distance && Math.abs(y) != distance && Math.abs(z) != distance) {
-                            continue;
-                        }
-                        double distSquared = x*x + y*y + z*z;
-                        if (distSquared > radiusSquared || distSquared >= bestDistSquared) {
-                            continue;
-                        }
-                        
-                        Block b = loc.getWorld().getBlockAt(centerX + x, centerY + y, centerZ + z);
-                        if (b.getType() == Material.RESPAWN_ANCHOR) {
-                            bestDistSquared = distSquared;
-                            nearest = b;
-                        }
-                    }
-                }
+        for (Block b : anchorActivators.keySet()) {
+            Location bl = b.getLocation();
+            if (!isSameWorld(bl, loc)) continue;
+            double d2 = bl.distanceSquared(loc);
+            if (d2 <= radiusSquared && d2 < bestDistSquared) {
+                bestDistSquared = d2;
+                nearest = b;
             }
-            if (nearest != null) break;
         }
         return nearest;
     }
@@ -178,7 +158,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (!isEnabled() || plugin.isPacketEventsAvailable()) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getHand() != EquipmentSlot.HAND && event.getHand() != EquipmentSlot.OFF_HAND) return;
 
         Block block = event.getClickedBlock();
         if (block == null || block.getType() != Material.RESPAWN_ANCHOR) return;
@@ -253,7 +233,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     }
 
     private Player findActivatorForDamage(Location damageLocation) {
-        final double maxDistanceSquared = 100.0;
+        final double maxDistanceSquared = 196.0;
         for (Map.Entry<Location, ExplosionData> entry : explosionCache.entrySet()) {
             Location explosionLoc = entry.getKey();
             if (isSameWorld(explosionLoc, damageLocation)) {
@@ -288,7 +268,18 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         if (!isEnabled()) return;
         for (Block block : event.blockList()) {
             if (block.getType() == Material.RESPAWN_ANCHOR) {
-                UUID activatorId = anchorActivators.remove(block);
+                UUID activatorId = null;
+                try {
+                    List<org.bukkit.metadata.MetadataValue> meta = block.getMetadata("anchor_activator_uuid");
+                    for (org.bukkit.metadata.MetadataValue mv : meta) {
+                        Object v = mv.value();
+                        if (v instanceof UUID uuid) { activatorId = uuid; break; }
+                        if (v instanceof String str) { try { activatorId = UUID.fromString(str); break; } catch (IllegalArgumentException ignored) {} }
+                    }
+                } catch (Exception ignored) {}
+                if (activatorId == null) {
+                    activatorId = anchorActivators.remove(block);
+                }
                 activationTimestamps.remove(block);
                 if (activatorId != null) {
                     explosionCache.put(event.getLocation(), new ExplosionData(activatorId));
@@ -298,6 +289,18 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                     SchedulerUtil.runTaskLaterAsync(plugin, () -> explosionCache.remove(event.getLocation()), 100L);
 
                     break;
+                }
+            }
+        }
+        if (!explosionCache.containsKey(event.getLocation())) {
+            Block nearest = findNearestTrackedAnchor(event.getLocation(), 5.0);
+            if (nearest != null) {
+                UUID activatorId = anchorActivators.get(nearest);
+                if (activatorId != null) {
+                    explosionCache.put(event.getLocation(), new ExplosionData(activatorId));
+                    plugin.debug("Fallback association: explosion at " + event.getLocation() +
+                        " linked to nearest tracked anchor by activator " + activatorId);
+                    SchedulerUtil.runTaskLaterAsync(plugin, () -> explosionCache.remove(event.getLocation()), 100L);
                 }
             }
         }
