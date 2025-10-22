@@ -14,8 +14,13 @@ softdepend:
 commands:
   combat:
     description: Main command for combat plugin.
-    usage: /combat <toggle|reload|visibility|update>
+    usage: /combat <toggle|reload|update>
     permission: combat.admin
+    permission-message: You do not have permission to use this command.
+  visibility:
+    description: Toggle visibility of combat tags.
+    usage: /combat visibility
+    permission: combat.visibility
     permission-message: You do not have permission to use this command.
   protection:
     description: Check your PvP protection time left.
@@ -33,6 +38,9 @@ permissions:
     default: op
   combat.protection:
     description: Access to protection commands
+    default: true
+  combat.visibility:
+    description: Access to toggle combat tag visibility
     default: true
   combat.bypass.safezone:
     description: Allows bypassing safezone barriers during combat
