@@ -1,33 +1,43 @@
 package net.opmasterleo.combat.listener;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.title.Title;
-import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.manager.PlaceholderManager;
-import net.opmasterleo.combat.util.ChatUtil;
-import net.opmasterleo.combat.util.SchedulerUtil;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.entity.*;
+import org.bukkit.entity.Animals;
+import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.inventory.ItemStack;
 
-import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.title.Title;
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.placeholder.PlaceholderAPI;
+import net.opmasterleo.combat.util.ChatUtil;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class NewbieProtectionListener implements Listener {
 
@@ -91,7 +101,7 @@ public class NewbieProtectionListener implements Listener {
                     if (protectionLeftMessage != null && !protectionLeftMessage.isEmpty()) {
                         long remaining = entry.getValue() - currentTime;
                         if (remaining > 0 && remaining / 1000 % 5 == 0) {
-                            String message = PlaceholderManager.applyPlaceholders(player, protectionLeftMessage, remaining / 1000);
+                            String message = PlaceholderAPI.applyPlaceholders(player, protectionLeftMessage, remaining / 1000);
                             sendMessage(player, message);
                         }
                     }
@@ -187,7 +197,7 @@ public class NewbieProtectionListener implements Listener {
 
     public void sendProtectionMessage(Player player) {
         long remaining = protectedPlayers.get(player.getUniqueId()) - System.currentTimeMillis();
-        String message = PlaceholderManager.applyPlaceholders(player, msgProtected, remaining / 1000);
+        String message = PlaceholderAPI.applyPlaceholders(player, msgProtected, remaining / 1000);
         sendMessage(player, message);
     }
 

@@ -227,7 +227,7 @@ Built-in placeholders provided by the plugin (all prefixed with `mastercombat_`)
 
 Notes:
 - You can also use any PlaceholderAPI placeholders if PlaceholderAPI is present.
-- Developers can register additional custom placeholders at runtime via `PlaceholderManager.registerCustomPlaceholder(String placeholder, String value)`.
+- Developers can register additional custom placeholders at runtime via `PlaceholderAPI.registerCustomPlaceholder(String placeholder, String value)`.
 - `%mastercombat_time%` is only meaningful in contexts where the message is rendered with a known remaining time (e.g., actionbar or combat messages).
 - Legacy tokens like `%prefix%`, `%combat_enabled%`, `%combat_duration%`, and `%command%` are still accepted for backward compatibility, but new configs should prefer the `mastercombat_` variants.
 

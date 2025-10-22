@@ -1,4 +1,4 @@
-package net.opmasterleo.combat.manager;
+package net.opmasterleo.combat.placeholder;
 
 import java.util.List;
 import java.util.Locale;
@@ -7,16 +7,15 @@ import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.api.MasterCombatAPI;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
 
-public class MasterCombatExpansion extends PlaceholderExpansion {
+public class PlaceholderExpansion extends me.clip.placeholderapi.expansion.PlaceholderExpansion {
 
     private final Combat plugin;
 
-    public MasterCombatExpansion(Combat plugin) {
+    public PlaceholderExpansion(Combat plugin) {
         this.plugin = plugin;
     }
 
@@ -64,7 +63,7 @@ public class MasterCombatExpansion extends PlaceholderExpansion {
             case "time" -> {
                 if (player == null || api == null) yield "00:00";
                 int secs = api.getRemainingCombatTime(player.getUniqueId());
-                yield PlaceholderManager.formatTime(secs);
+                yield net.opmasterleo.combat.placeholder.PlaceholderAPI.formatTime(secs);
             }
             case "command" ->
                 plugin.getConfig().getString("NewbieProtection.settings.disableCommand", "removeprotect");

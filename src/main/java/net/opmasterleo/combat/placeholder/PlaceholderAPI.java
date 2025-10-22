@@ -1,4 +1,4 @@
-package net.opmasterleo.combat.manager;
+package net.opmasterleo.combat.placeholder;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -7,10 +7,9 @@ import java.util.concurrent.TimeUnit;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import me.clip.placeholderapi.PlaceholderAPI;
 import net.opmasterleo.combat.Combat;
 
-public class PlaceholderManager {
+public class PlaceholderAPI {
 
     private static final Map<String, String> customPlaceholders = new ConcurrentHashMap<>();
 
@@ -35,13 +34,11 @@ public class PlaceholderManager {
             long duration = combat.getConfig().getLong("General.duration", 0);
             boolean enabled = combat.isCombatEnabled();
 
-            // Prefixed placeholders
             message = message.replace("%mastercombat_prefix%", prefix);
             message = message.replace("%mastercombat_duration%", String.valueOf(duration));
             message = message.replace("%mastercombat_enabled%", String.valueOf(enabled));
             message = message.replace("%mastercombat_status%", enabled ? "Fighting" : "Idle");
 
-            // Legacy fallbacks (kept for backward compatibility)
             message = message.replace("%prefix%", prefix);
             message = message.replace("%combat_duration%", String.valueOf(duration));
             message = message.replace("%combat_enabled%", String.valueOf(enabled));
@@ -57,7 +54,7 @@ public class PlaceholderManager {
             } catch (Exception ignored) {}
 
             if (isPlaceholderAPILoaded()) {
-                message = PlaceholderAPI.setPlaceholders(player, message);
+                message = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, message);
             }
         }
 
