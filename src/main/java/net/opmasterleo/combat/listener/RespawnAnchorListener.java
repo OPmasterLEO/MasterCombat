@@ -1,16 +1,9 @@
 package net.opmasterleo.combat.listener;
 
-import com.github.retrooper.packetevents.event.PacketListener;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
-import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
-import com.github.retrooper.packetevents.util.Vector3d;
-import com.github.retrooper.packetevents.util.Vector3i;
-import com.github.retrooper.packetevents.protocol.player.InteractionHand;
-import net.opmasterleo.combat.Combat;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -26,13 +19,22 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.inventory.EquipmentSlot;
-import net.opmasterleo.combat.util.SchedulerUtil;
+import org.bukkit.metadata.FixedMetadataValue;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.InteractionHand;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
+
+import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class RespawnAnchorListener implements Listener, PacketListener {
     private final Combat plugin;
@@ -233,12 +235,12 @@ public class RespawnAnchorListener implements Listener, PacketListener {
             boolean selfCombat = plugin.getConfig().getBoolean("self-combat", false);
             if (activator.getUniqueId().equals(victim.getUniqueId())) {
                 if (selfCombat) {
-                    plugin.directSetCombat(activator, activator);
+                    plugin.setCombat(activator, activator);
                     plugin.debug("Self-combat applied from anchor explosion");
                 }
             } else {
-                plugin.directSetCombat(activator, victim);
-                plugin.directSetCombat(victim, activator);
+                plugin.setCombat(activator, victim);
+                plugin.setCombat(victim, activator);
                 plugin.debug("Combat tagged from anchor explosion: " +
                     activator.getName() + " <-> " + victim.getName());
             }
