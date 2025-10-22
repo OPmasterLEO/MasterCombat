@@ -55,6 +55,10 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private String enderpearlCooldownMessage;
     private String tridentCooldownMessage;
     private String itemRestrictedMessage;
+    private boolean enderpearlBlockInCombat;
+    private boolean tridentBlockInCombat;
+    private String enderpearlCombatMessage;
+    private String tridentCombatMessage;
 
     public ItemRestrictionListener() {
         this.plugin = Combat.getInstance();
@@ -93,10 +97,18 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         tridentCombatOnly = plugin.getConfig().getBoolean("trident_cooldown.in_combat_only", true);
         String tridentCooldownString = plugin.getConfig().getString("trident_cooldown.duration", "10s");
         tridentCooldownDuration = TimeUtil.parseTimeToMillis(tridentCooldownString);
+        
+        enderpearlBlockInCombat = plugin.getConfig().getBoolean("enderpearl.block_in_combat", false);
+        tridentBlockInCombat = plugin.getConfig().getBoolean("trident.block_in_combat", false);
+        
         enderpearlCooldownMessage = plugin.getConfig().getString("Messages.Prefix", "") +
                 "&cYou cannot use Ender Pearls for another &e%time%&c!";
         tridentCooldownMessage = plugin.getConfig().getString("Messages.Prefix", "") +
                 "&cYou cannot use Tridents for another &e%time%&c!";
+        enderpearlCombatMessage = plugin.getConfig().getString("enderpearl.combat_message",
+                plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use ender pearls while in combat!");
+        tridentCombatMessage = plugin.getConfig().getString("trident.combat_message",
+                plugin.getConfig().getString("Messages.Prefix", "") + "&cYou cannot use tridents while in combat!");
         itemRestrictedMessage = plugin.getConfig().getString("Messages.Prefix", "") +
                 "&cYou cannot use this item while in combat!";
 
@@ -286,14 +298,16 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!itemRestrictionsEnabled) return;
+        if (!itemRestrictionsEnabled && !enderpearlBlockInCombat && !tridentBlockInCombat) return;
         Player player = event.getPlayer();
+        if (!plugin.isCombatEnabledInWorld(player)) return;
         Material item = player.getInventory().getItemInMainHand().getType();
         World world = player.getWorld();
+        
         if (item == Material.ENDER_PEARL) {
-            if (plugin.isInCombat(player) && plugin.getConfig().getBoolean("enderpearl.in_combat_only", true)) {
+            if (enderpearlBlockInCombat && plugin.isInCombat(player)) {
                 event.setCancelled(true);
-                player.sendMessage(ChatUtil.parse("&cYou cannot use ender pearls while in combat!"));
+                player.sendMessage(ChatUtil.parse(enderpearlCombatMessage));
             }
         }
 
@@ -301,10 +315,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             if (plugin.getConfig().getBoolean("trident.banned_worlds." + world.getName(), false)) {
                 event.setCancelled(true);
                 player.sendMessage(ChatUtil.parse("&cTridents are disabled in this world!"));
+                return;
             }
-            if (plugin.isInCombat(player) && plugin.getConfig().getBoolean("trident.in_combat_only", true)) {
+            if (tridentBlockInCombat && plugin.isInCombat(player)) {
                 event.setCancelled(true);
-                player.sendMessage(ChatUtil.parse("&cYou cannot use tridents while in combat!"));
+                player.sendMessage(ChatUtil.parse(tridentCombatMessage));
             }
         }
     }

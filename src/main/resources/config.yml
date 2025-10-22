@@ -73,6 +73,10 @@ enderpearl:
   distance: 25
   # Message shown when a pearl throw is cancelled for exceeding distance
   message: '&cYou cannot teleport that far away in combat!'
+  # Block ender pearl usage during combat
+  block_in_combat: false
+  # Message shown when ender pearl is blocked during combat
+  combat_message: '&cYou cannot use ender pearls while in combat!'
   # Refresh combat timer when player lands an ender pearl
   refresh_combat_on_land: false
   # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
@@ -86,6 +90,10 @@ enderpearl:
 trident:
   # Enable/disable trident settings below
   enabled: true
+  # Block trident usage during combat
+  block_in_combat: false
+  # Message shown when trident is blocked during combat
+  combat_message: '&cYou cannot use tridents while in combat!'
   # Refresh combat timer when trident lands (similar to enderpearl)
   refresh_combat_on_land: false
   # Worlds where tridents are completely banned
