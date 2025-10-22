@@ -353,6 +353,15 @@ public class Combat extends JavaPlugin implements Listener {
             debug("Failed to register ItemRestrictionListener: " + e.getMessage());
         }
 
+        if (isDisableElytra()) {
+            try {
+                Bukkit.getPluginManager().registerEvents(new net.opmasterleo.combat.listener.player.ElytraDisableListener(this), this);
+                debug("Registered ElytraDisableListener successfully.");
+            } catch (Exception e) {
+                debug("Failed to register ElytraDisableListener: " + e.getMessage());
+            }
+        }
+
         if (worldGuardUtil != null && getConfig().getBoolean("safezone_protection.enabled", true)) {
             try {
                 worldGuardUtil.reloadConfig();
