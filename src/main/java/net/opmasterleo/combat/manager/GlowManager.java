@@ -253,11 +253,26 @@ public class GlowManager {
         
         try {
             int entityId = player.getEntityId();
-            byte entityMask = glowing ? (byte) 0x40 : (byte) 0x00;
-            EntityData<Byte> entityData = new EntityData<>(0, EntityDataTypes.BYTE, entityMask);
+            byte flags = 0x00;
+            if (glowing) {
+                flags |= 0x40;
+            }
+            if (player.isSneaking()) {
+                flags |= 0x02;
+            }
+            if (player.isSprinting()) {
+                flags |= 0x08;
+            }
+            if (player.isInvisible()) {
+                flags |= 0x20;
+            }
+            
+            EntityData<Byte> entityData = new EntityData<>(0, EntityDataTypes.BYTE, flags);
+            List<EntityData<?>> metadata = new ArrayList<>();
+            metadata.add(entityData);
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                 entityId, 
-                java.util.Collections.singletonList(entityData)
+                metadata
             );
 
             List<Player> recipients = new ArrayList<>();
