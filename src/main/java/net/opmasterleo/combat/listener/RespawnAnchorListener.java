@@ -82,13 +82,11 @@ public class RespawnAnchorListener implements Listener, PacketListener {
 
             if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
                 Player player = (Player) event.getPlayer();
-                SchedulerUtil.runTask(plugin, () -> {
-                    if (!plugin.isEnabled()) return;
-                    Block target = player.getTargetBlockExact(5);
-                    if (target == null || target.getType() != Material.RESPAWN_ANCHOR) return;
+                Block target = player.getTargetBlockExact(5);
+                if (target != null && target.getType() == Material.RESPAWN_ANCHOR) {
                     trackAnchorInteraction(target, player);
-                    plugin.debug("PacketEvents: tracked anchor interaction by " + player.getName() + " at " + target.getLocation());
-                });
+                    plugin.debug("PacketEvents: pre-tracked anchor interaction by " + player.getName() + " at " + target.getLocation());
+                }
             } else if (event.getPacketType() == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 WrapperPlayClientPlayerBlockPlacement placement = new WrapperPlayClientPlayerBlockPlacement(event);
                 Player player = (Player) event.getPlayer();
@@ -156,7 +154,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!isEnabled() || plugin.isPacketEventsAvailable()) return;
+        if (!isEnabled()) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getHand() != EquipmentSlot.HAND && event.getHand() != EquipmentSlot.OFF_HAND) return;
 
@@ -166,6 +164,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
         if (shouldBypass(player)) return;
 
         plugin.debug("Bukkit fallback: Player " + player.getName() + " interacting with respawn anchor at " + block.getLocation());
+        trackAnchorInteraction(block, player);
         NewbieProtectionListener protectionListener = plugin.getNewbieProtectionListener();
         if (protectionListener != null && protectionListener.isActuallyProtected(player)) {
             boolean isDangerousDimension = player.getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER;
@@ -180,8 +179,6 @@ public class RespawnAnchorListener implements Listener, PacketListener {
                 }
             }
         }
-
-        trackAnchorInteraction(block, player);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -194,8 +191,11 @@ public class RespawnAnchorListener implements Listener, PacketListener {
             return;
         }
 
+        plugin.debug("EntityDamageEvent for " + victim.getName() + " cause: " + event.getCause() + " at " + victim.getLocation());
+
         Location damageLocation = victim.getLocation();
         Player activator = findActivatorForDamage(damageLocation);
+        plugin.debug("Found activator: " + (activator != null ? activator.getName() : "null") + " for damage at " + damageLocation);
         if (activator != null && !shouldBypass(activator)) {
             if (plugin.getSuperVanishManager() != null && plugin.getSuperVanishManager().isVanished(activator)) {
                 plugin.debug("Skipping combat tag: activator is vanished");
@@ -234,13 +234,19 @@ public class RespawnAnchorListener implements Listener, PacketListener {
 
     private Player findActivatorForDamage(Location damageLocation) {
         final double maxDistanceSquared = 196.0;
+        plugin.debug("Finding activator for damage at " + damageLocation + 
+            " - explosionCache size: " + explosionCache.size() + 
+            ", anchorActivators size: " + anchorActivators.size());
         for (Map.Entry<Location, ExplosionData> entry : explosionCache.entrySet()) {
             Location explosionLoc = entry.getKey();
             if (isSameWorld(explosionLoc, damageLocation)) {
                 double distSq = explosionLoc.distanceSquared(damageLocation);
+                plugin.debug("  Checking explosion at " + explosionLoc + ", distSq: " + distSq);
                 if (distSq <= maxDistanceSquared) {
                     UUID activatorId = entry.getValue().activatorId;
-                    return Bukkit.getPlayer(activatorId);
+                    Player found = Bukkit.getPlayer(activatorId);
+                    plugin.debug("  Found activator from explosion cache: " + (found != null ? found.getName() : activatorId));
+                    return found;
                 }
             }
         }
@@ -250,12 +256,16 @@ public class RespawnAnchorListener implements Listener, PacketListener {
             Location blockLoc = block.getLocation();
             if (isSameWorld(blockLoc, damageLocation)) {
                 double distSq = blockLoc.distanceSquared(damageLocation);
+                plugin.debug("  Checking anchor block at " + blockLoc + ", distSq: " + distSq);
                 if (distSq <= maxDistanceSquared) {
-                    return Bukkit.getPlayer(entry.getValue());
+                    Player found = Bukkit.getPlayer(entry.getValue());
+                    plugin.debug("  Found activator from anchor block: " + (found != null ? found.getName() : entry.getValue()));
+                    return found;
                 }
             }
         }
 
+        plugin.debug("  No activator found!");
         return null;
     }
 
@@ -266,6 +276,7 @@ public class RespawnAnchorListener implements Listener, PacketListener {
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
         if (!isEnabled()) return;
+        plugin.debug("EntityExplodeEvent at " + event.getLocation() + " with " + event.blockList().size() + " blocks");
         for (Block block : event.blockList()) {
             if (block.getType() == Material.RESPAWN_ANCHOR) {
                 UUID activatorId = null;
