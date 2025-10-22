@@ -59,14 +59,14 @@ public class BedExplosionListener implements PacketListener, Listener {
             Object pktPlayer = event.getPlayer();
             if (!(pktPlayer instanceof Player)) return;
             Player player = (Player) pktPlayer;
+            World.Environment dimension = player.getWorld().getEnvironment();
+            if (dimension != World.Environment.NETHER && dimension != World.Environment.THE_END) return;
             Block targetBlock = player.getTargetBlockExact(5);
             if (targetBlock == null) return;
 
             String blockTypeName = targetBlock.getType().name();
             if (!blockTypeName.endsWith("_BED")) return;
 
-            World.Environment dimension = player.getWorld().getEnvironment();
-            if (dimension != World.Environment.NETHER && dimension != World.Environment.THE_END) return;
             Location bedLocation = targetBlock.getLocation();
             String locationKey = bedLocation.getBlockX() + "," + bedLocation.getBlockY() + "," + bedLocation.getBlockZ();
             UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
@@ -93,7 +93,6 @@ public class BedExplosionListener implements PacketListener, Listener {
             Object pktPlayer = event.getPlayer();
             if (!(pktPlayer instanceof Player)) return;
             Player player = (Player) pktPlayer;
-
             Vector3d position = explosionPacket.getPosition();
             Location explosionLocation = new Location(
                 player.getWorld(),
