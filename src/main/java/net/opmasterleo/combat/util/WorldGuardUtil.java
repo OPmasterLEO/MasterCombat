@@ -158,7 +158,6 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 Player player = (Player) event.getPlayer();
                 if (!player.isOnline()) return;
                 if (shouldBypass(player)) return;
-
                 Vector3d newPos;
                 if (type == Client.PLAYER_POSITION) {
                     WrapperPlayClientPlayerPosition wrapper = new WrapperPlayClientPlayerPosition(event);
@@ -169,11 +168,15 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 }
 
                 Vector3d lastPos = lastPositions.get(player.getUniqueId());
-                lastPositions.put(player.getUniqueId(), newPos);
-                if (lastPos != null && lastPos.getX() == newPos.getX() && lastPos.getZ() == newPos.getZ()) {
-                    return;
+                if (lastPos != null) {
+                    double deltaX = Math.abs(newPos.getX() - lastPos.getX());
+                    double deltaZ = Math.abs(newPos.getZ() - lastPos.getZ());
+                    if (deltaX < 0.01 && deltaZ < 0.01) {
+                        return;
+                    }
                 }
-
+                
+                lastPositions.put(player.getUniqueId(), newPos);
                 Location to = new Location(player.getWorld(), newPos.getX(), newPos.getY(), newPos.getZ());
                 Location from = lastPos != null
                     ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
