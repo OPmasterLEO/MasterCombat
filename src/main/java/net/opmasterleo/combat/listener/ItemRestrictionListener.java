@@ -45,6 +45,7 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private boolean enderpearlCombatOnly;
     private boolean tridentCooldownEnabled;
     private boolean tridentCombatOnly;
+    private boolean tridentGloballyEnabled;
     private final Map<UUID, Long> enderpearlCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> tridentCooldowns = new ConcurrentHashMap<>();
     private final Map<String, Boolean> worldTridentBans = new ConcurrentHashMap<>();
@@ -89,18 +90,25 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             }
         }
 
-        enderpearlCooldownEnabled = plugin.getConfig().getBoolean("enderpearl_cooldown.enabled", true);
-        enderpearlCombatOnly = plugin.getConfig().getBoolean("enderpearl_cooldown.in_combat_only", true);
-        String cooldownString = plugin.getConfig().getString("enderpearl_cooldown.duration", "10s");
+        boolean enderpearlEnabledGlobal = plugin.getConfig().getBoolean("enderpearl.enabled",
+            plugin.getConfig().getBoolean("enderpearl_cooldown.enabled", true));
+        enderpearlCooldownEnabled = enderpearlEnabledGlobal;
+        enderpearlCombatOnly = plugin.getConfig().getBoolean("enderpearl.in_combat_only",
+            plugin.getConfig().getBoolean("enderpearl_cooldown.in_combat_only", true));
+        String cooldownString = plugin.getConfig().getString("enderpearl.duration",
+            plugin.getConfig().getString("enderpearl_cooldown.duration", "10s"));
         enderpearlCooldownDuration = TimeUtil.parseTimeToMillis(cooldownString);
-
-        tridentCooldownEnabled = plugin.getConfig().getBoolean("trident_cooldown.enabled", true);
-        tridentCombatOnly = plugin.getConfig().getBoolean("trident_cooldown.in_combat_only", true);
-        String tridentCooldownString = plugin.getConfig().getString("trident_cooldown.duration", "10s");
+        tridentGloballyEnabled = plugin.getConfig().getBoolean("trident.enabled",
+            plugin.getConfig().getBoolean("trident_cooldown.enabled", true));
+        tridentCooldownEnabled = tridentGloballyEnabled;
+        tridentCombatOnly = plugin.getConfig().getBoolean("trident.in_combat_only",
+            plugin.getConfig().getBoolean("trident_cooldown.in_combat_only", true));
+        String tridentCooldownString = plugin.getConfig().getString("trident.duration",
+            plugin.getConfig().getString("trident_cooldown.duration", "10s"));
         tridentCooldownDuration = TimeUtil.parseTimeToMillis(tridentCooldownString);
         
         enderpearlBlockInCombat = plugin.getConfig().getBoolean("enderpearl.block_in_combat", false);
-        tridentBlockInCombat = plugin.getConfig().getBoolean("trident.block_in_combat", false);
+        tridentBlockInCombat = tridentGloballyEnabled && plugin.getConfig().getBoolean("trident.block_in_combat", false);
         
         enderpearlCooldownMessage = plugin.getConfig().getString("Messages.Prefix", "") +
                 "&cYou cannot use Ender Pearls for another &e%time%&c!";
@@ -115,27 +123,45 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         itemRestrictedType = plugin.getConfig().getString("item_restrictions.type", "actionbar");
 
         worldTridentBans.clear();
-        ConfigurationSection tridentBanned = plugin.getConfig().getConfigurationSection("trident.banned_worlds");
-        if (tridentBanned != null) {
-            for (String world : tridentBanned.getKeys(false)) {
-                worldTridentBans.put(world, plugin.getConfig().getBoolean("trident.banned_worlds." + world));
+        if (tridentGloballyEnabled) {
+            ConfigurationSection tridentBanned = plugin.getConfig().getConfigurationSection("trident.banned_worlds");
+            if (tridentBanned != null) {
+                for (String world : tridentBanned.getKeys(false)) {
+                    worldTridentBans.put(world, plugin.getConfig().getBoolean("trident.banned_worlds." + world));
+                }
             }
         }
 
         worldEnderpearlCooldowns.clear();
-        ConfigurationSection enderWorlds = plugin.getConfig().getConfigurationSection("enderpearl_cooldown.worlds");
+        ConfigurationSection enderWorlds = plugin.getConfig().getConfigurationSection("enderpearl.worlds");
+        if (enderWorlds == null) {
+            enderWorlds = plugin.getConfig().getConfigurationSection("enderpearl_cooldown.worlds");
+        }
         if (enderWorlds != null) {
             for (String world : enderWorlds.getKeys(false)) {
-                worldEnderpearlCooldowns.put(world, plugin.getConfig().getBoolean("enderpearl_cooldown.worlds." + world));
+                Boolean enabled = plugin.getConfig().getBoolean("enderpearl.worlds." + world,
+                    plugin.getConfig().getBoolean("enderpearl_cooldown.worlds." + world, true));
+                worldEnderpearlCooldowns.put(world, enabled);
             }
         }
 
         worldTridentCooldowns.clear();
-        ConfigurationSection tridentCooldownWorlds = plugin.getConfig().getConfigurationSection("trident_cooldown.worlds");
-        if (tridentCooldownWorlds != null) {
-            for (String world : tridentCooldownWorlds.getKeys(false)) {
-                worldTridentCooldowns.put(world, plugin.getConfig().getBoolean("trident_cooldown.worlds." + world));
+        if (tridentGloballyEnabled) {
+            ConfigurationSection tridentCooldownWorlds = plugin.getConfig().getConfigurationSection("trident.worlds");
+            if (tridentCooldownWorlds == null) {
+                tridentCooldownWorlds = plugin.getConfig().getConfigurationSection("trident_cooldown.worlds");
             }
+            if (tridentCooldownWorlds != null) {
+                for (String world : tridentCooldownWorlds.getKeys(false)) {
+                    Boolean enabled = plugin.getConfig().getBoolean("trident.worlds." + world,
+                        plugin.getConfig().getBoolean("trident_cooldown.worlds." + world, true));
+                    worldTridentCooldowns.put(world, enabled);
+                }
+            }
+        }
+
+        if (!tridentGloballyEnabled) {
+            tridentCooldowns.clear();
         }
     }
 
