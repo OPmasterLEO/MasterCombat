@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -267,6 +268,21 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             } else if (shouldApplyTridentCooldown(player)) {
                 tridentCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + tridentCooldownDuration);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onProjectileHit(ProjectileHitEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.Trident)) return;
+        ProjectileSource src = event.getEntity().getShooter();
+        if (!(src instanceof Player player)) return;
+
+        if (!tridentGloballyEnabled) return;
+        boolean refreshOnLand = plugin.getConfig().getBoolean("trident.refresh_combat_on_land", false);
+        if (!refreshOnLand) return;
+
+        if (plugin.isInCombat(player)) {
+            plugin.keepPlayerInCombat(player);
         }
     }
 
