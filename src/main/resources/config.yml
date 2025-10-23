@@ -333,15 +333,20 @@ link-bed-explosions: true     # Link bed explosions in nether/end
 #   🔧 Valid types:
 #   Full list: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html
 #
-#   💡 Examples to add:
-#   - TRIDENT (if you want tridents to not tag)
-#   - ARROW (NOT recommended - would break bow combat)
-#   - SPLASH_POTION (would prevent potion pvp tagging)
+#   💡 Examples:
+#   Blacklist: EGG, SNOWBALL, ENDER_PEARL (blocks these, allows ARROW/TRIDENT)
+#   Whitelist: ARROW, TRIDENT (allows only these, blocks EGG/SNOWBALL/etc.)
+#
+#   ⚙️ Mode Options:
+#   - blacklist: Allow ALL projectiles to tag EXCEPT those listed
+#   - whitelist: Block ALL projectiles from tagging EXCEPT those listed
 #
 ignored-projectiles:
-  - EGG
-  - ENDER_PEARL
-  - SNOWBALL
-  - THROWN_EXP_BOTTLE
+  mode: blacklist  # [blacklist/whitelist]
+  list:
+    - EGG
+    - ENDER_PEARL
+    - SNOWBALL
+    - EXPERIENCE_BOTTLE
 
 # ============================= END OF CONFIG =============================

@@ -85,6 +85,7 @@ public class Combat extends JavaPlugin implements Listener {
     private String disableElytraMsg;
     private String disableElytraType;
     private final Set<String> ignoredProjectiles = ConcurrentHashMap.newKeySet();
+    private String projectileMode;
     private RespawnAnchorListener respawnAnchorListener;
     private BedExplosionListener bedExplosionListener;
     private ItemRestrictionListener itemRestrictionListener;
@@ -170,7 +171,8 @@ public class Combat extends JavaPlugin implements Listener {
         }
 
         ignoredProjectiles.clear();
-        List<String> projectileList = getConfig().getStringList("ignored-projectiles");
+        projectileMode = getConfig().getString("ignored-projectiles.mode", "blacklist");
+        List<String> projectileList = getConfig().getStringList("ignored-projectiles.list");
         for (String projectile : projectileList) {
             ignoredProjectiles.add(projectile.toUpperCase());
         }
@@ -1142,6 +1144,7 @@ public class Combat extends JavaPlugin implements Listener {
     public boolean isEnderPearlEnabled() { return enderPearlEnabled; }
     public long getEnderPearlDistance() { return enderPearlDistance; }
     public Set<String> getIgnoredProjectiles() { return ignoredProjectiles; }
+    public String getProjectileMode() { return projectileMode; }
 
     public void setCombatVisibility(Player player, boolean visible) {
         if (player == null) return;

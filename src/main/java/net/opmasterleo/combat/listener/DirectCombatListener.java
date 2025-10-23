@@ -112,8 +112,10 @@ public class DirectCombatListener implements PacketListener, Listener {
                 if (projectile.getShooter() instanceof Player shooter) {
                     attacker = shooter;
                     String projectileType = damager.getType().name().toUpperCase();
-                    if (combat.getIgnoredProjectiles().contains(projectileType)) {
-                        combat.debug("Skipping combat - projectile type is ignored: " + projectileType);
+                    boolean isInList = combat.getIgnoredProjectiles().contains(projectileType);
+                    boolean shouldSkip = "blacklist".equalsIgnoreCase(combat.getProjectileMode()) ? isInList : !isInList;
+                    if (shouldSkip) {
+                        combat.debug("Skipping combat - projectile " + projectileType + " filtered by " + combat.getProjectileMode() + " mode");
                         return;
                     }
                 }
@@ -148,8 +150,10 @@ public class DirectCombatListener implements PacketListener, Listener {
         Projectile projectile = event.getEntity();
         String projectileType = projectile.getType().name().toUpperCase();
         
-        if (combat.getIgnoredProjectiles().contains(projectileType)) {
-            combat.debug("Ignoring projectile: " + projectileType);
+        boolean isInList = combat.getIgnoredProjectiles().contains(projectileType);
+        boolean shouldSkip = "blacklist".equalsIgnoreCase(combat.getProjectileMode()) ? isInList : !isInList;
+        if (shouldSkip) {
+            combat.debug("Ignoring projectile " + projectileType + " (filtered by " + combat.getProjectileMode() + " mode)");
             return;
         }
         
@@ -164,8 +168,10 @@ public class DirectCombatListener implements PacketListener, Listener {
         Combat combat = Combat.getInstance();
         String projectileType = event.getEntity().getType().name().toUpperCase();
         
-        if (combat.getIgnoredProjectiles().contains(projectileType)) {
-            combat.debug("Ignoring projectile hit: " + projectileType);
+        boolean isInList = combat.getIgnoredProjectiles().contains(projectileType);
+        boolean shouldSkip = "blacklist".equalsIgnoreCase(combat.getProjectileMode()) ? isInList : !isInList;
+        if (shouldSkip) {
+            combat.debug("Ignoring projectile hit " + projectileType + " (filtered by " + combat.getProjectileMode() + " mode)");
             return;
         }
         
