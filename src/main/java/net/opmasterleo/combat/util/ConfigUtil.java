@@ -119,16 +119,9 @@ public class ConfigUtil {
                 defaultText = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
 
-            String userText;
-            try (FileInputStream fis = new FileInputStream(userConfigFile)) {
-                userText = new String(fis.readAllBytes(), StandardCharsets.UTF_8);
-            }
-
             Yaml yaml = createYamlParser();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> defaultMap = (Map<String, Object>) yaml.load(defaultText);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> userMap = (Map<String, Object>) yaml.load(userText);
+            Map<String, Object> defaultMap = loadConfigFromResource(plugin.getResource("config.yml"), yaml);
+            Map<String, Object> userMap = loadConfigFromFile(userConfigFile, yaml);
             if (defaultMap == null || userMap == null) return false;
             Map<String, Object> mergedMap = mergeConfigs(defaultMap, userMap);
             mergedMap.put("generated-by-version", "v" + plugin.getPluginMeta().getVersion());
