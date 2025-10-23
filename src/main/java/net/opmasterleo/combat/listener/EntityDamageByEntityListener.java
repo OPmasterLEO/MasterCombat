@@ -1,24 +1,31 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.bukkit.GameMode;
+import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.FishHook;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Tameable;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
+
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
-
-import org.bukkit.GameMode;
-import org.bukkit.entity.*;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.Listener;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public final class EntityDamageByEntityListener implements PacketListener, Listener {
     private static final long ATTACK_TIMEOUT = 5000;
@@ -193,7 +200,15 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     public void handleFishingRodDamage(Player victim, FishHook hook, double damage) {
         if (!combatInstance.getConfig().getBoolean("link-fishing-rod", true)) return;
         if (!(hook.getShooter() instanceof Player shooter)) return;
-        if (shooter.getUniqueId().equals(victim.getUniqueId())) return;
+        if (shooter.getUniqueId().equals(victim.getUniqueId())) {
+            if (combatInstance.getConfig().getBoolean("self-combat", false)) {
+                combatInstance.directSetCombat(victim, victim);
+            }
+            return;
+        }
+        
+        if (isCreativeOrSpectator(shooter) || isCreativeOrSpectator(victim)) return;
+        if (isProtectedInteraction(shooter, victim)) return;
         
         combatInstance.directSetCombat(victim, shooter);
         combatInstance.directSetCombat(shooter, victim);

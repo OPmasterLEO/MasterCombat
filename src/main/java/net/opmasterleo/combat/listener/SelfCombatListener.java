@@ -1,15 +1,16 @@
 package net.opmasterleo.combat.listener;
 
+import java.util.Set;
+
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.entity.EntityType;
 
-import java.util.Set;
 import net.opmasterleo.combat.Combat;
 
 public class SelfCombatListener implements Listener {
@@ -72,7 +73,6 @@ public class SelfCombatListener implements Listener {
                     if (selfCombatEnabled) {
                         combat.directSetCombat(player, player);
                     }
-                    return;
                 }
             }
         }
@@ -84,15 +84,6 @@ public class SelfCombatListener implements Listener {
                     if (selfCombatEnabled) {
                         combat.directSetCombat(player, player);
                     }
-                    return;
-                }
-            }
-        }
-
-        if (combat.getConfig().getBoolean("link-fishing-rod", true) && damager instanceof Projectile projectile) {
-            if (projectile.getShooter() instanceof Player shooter && shooter.getUniqueId().equals(player.getUniqueId())) {
-                if (selfCombatEnabled) {
-                    combat.directSetCombat(player, player);
                 }
             }
         }

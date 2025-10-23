@@ -306,7 +306,7 @@ lightning-on-kill: true       # Lightning effect on PvP kill
 #
 link-pets: true               # Link tamed animals to owners
 link-projectiles: true        # Link projectiles to shooters
-link-fishing-rod: true        # EXPERIMENTAL: Link fishing rods
+link-fishing-rod: true        # Link fishing rods to players
 link-tnt: true                # Link TNT to igniters
 link-end-crystals: true       # Link end crystals to placers
 link-respawn-anchor: true     # Link respawn anchor explosions
