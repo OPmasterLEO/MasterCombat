@@ -1098,13 +1098,24 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void keepPlayerInCombat(Player player) {
-        if (player != null) {
-            CombatRecord record = combatRecords.get(player.getUniqueId());
-            if (record != null) {
-                combatRecords.put(player.getUniqueId(), new CombatRecord(
-                    System.currentTimeMillis() + 1000 * getConfig().getLong("General.duration", 0),
-                    record.opponent
-                ));
+        if (player == null) return;
+        UUID playerId = player.getUniqueId();
+        CombatRecord record = combatRecords.get(playerId);
+        if (record == null) return;
+
+        long expiry = System.currentTimeMillis() + 1000L * getConfig().getLong("General.duration", 0);
+        combatRecords.put(playerId, new CombatRecord(expiry, record.opponent));
+        lastActionBarUpdates.put(playerId, 0L);
+        updateActionBar(player, expiry, System.currentTimeMillis());
+        if (record.opponent != null) {
+            Player opponent = Bukkit.getPlayer(record.opponent);
+            if (opponent != null) {
+                combatRecords.put(record.opponent, new CombatRecord(expiry, playerId));
+                lastActionBarUpdates.put(record.opponent, 0L);
+                updateActionBar(opponent, expiry, System.currentTimeMillis());
+            } else {
+                combatRecords.put(record.opponent, new CombatRecord(expiry, playerId));
+                lastActionBarUpdates.put(record.opponent, 0L);
             }
         }
     }
