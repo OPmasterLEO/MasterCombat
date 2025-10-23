@@ -272,11 +272,15 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerTeleport(PlayerTeleportEvent event) {
-        if (event.getCause() == TeleportCause.ENDER_PEARL) {
-            Player player = event.getPlayer();
-            if (plugin.isInCombat(player)) {
-                plugin.keepPlayerInCombat(player);
-            }
+        if (event.getCause() != TeleportCause.ENDER_PEARL) return;
+        Player player = event.getPlayer();
+        boolean enderpearlEnabled = plugin.getConfig().getBoolean("enderpearl.enabled",
+            plugin.getConfig().getBoolean("enderpearl_cooldown.enabled", true));
+        boolean refreshOnLand = plugin.getConfig().getBoolean("enderpearl.refresh_combat_on_land", false);
+        if (!enderpearlEnabled || !refreshOnLand) return;
+
+        if (plugin.isInCombat(player)) {
+            plugin.keepPlayerInCombat(player);
         }
     }
 
