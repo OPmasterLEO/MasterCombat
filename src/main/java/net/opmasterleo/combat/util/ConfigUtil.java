@@ -115,25 +115,49 @@ public class ConfigUtil {
         try {
             String defaultText;
             try (InputStream in = plugin.getResource("config.yml")) {
-                if (in == null) return false;
+                if (in == null) {
+                    plugin.getLogger().warning("Could not load default config.yml resource");
+                    return false;
+                }
                 defaultText = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
 
             Yaml yaml = createYamlParser();
             Map<String, Object> defaultMap = loadConfigFromResource(plugin.getResource("config.yml"), yaml);
             Map<String, Object> userMap = loadConfigFromFile(userConfigFile, yaml);
-            if (defaultMap == null || userMap == null) return false;
+            if (defaultMap == null) {
+                plugin.getLogger().warning("Failed to parse default config");
+                return false;
+            }
+            if (userMap == null) {
+                plugin.getLogger().warning("Failed to parse user config, using defaults");
+                userMap = new ConcurrentHashMap<>();
+            }
+            
             Map<String, Object> mergedMap = mergeConfigs(defaultMap, userMap);
             mergedMap.put("generated-by-version", "v" + plugin.getPluginMeta().getVersion());
+            
             String result = mergeYamlWithComments(defaultText, mergedMap, yaml);
-            try (FileOutputStream fos = new FileOutputStream(userConfigFile);
+            File tempFile = new File(userConfigFile.getParentFile(), "config_temp.yml");
+            try (FileOutputStream fos = new FileOutputStream(tempFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
                 writer.write(result);
+                writer.flush();
+                fos.getFD().sync();
+            }
+
+            if (!tempFile.renameTo(userConfigFile)) {
+                if (userConfigFile.exists() && !userConfigFile.delete()) {
+                    throw new IOException("Could not delete old config file");
+                }
+                if (!tempFile.renameTo(userConfigFile)) {
+                    throw new IOException("Could not rename temp config file");
+                }
             }
             
             return true;
         } catch (IOException | IllegalArgumentException e) {
-            plugin.getLogger().fine(() -> "Comment-preserving merge failed, falling back to SnakeYAML: " + e.getMessage());
+            plugin.getLogger().warning(() -> "Comment-preserving merge failed, falling back to SnakeYAML: " + e.getMessage());
             return false;
         }
     }
@@ -184,12 +208,16 @@ public class ConfigUtil {
                 Object newValue = getValueAtPath(newValues, currentPath);
                 if (newValue != null && !(newValue instanceof Map) && !(newValue instanceof List)) {
                     String inlineComment = "";
-                    int commentIdx = rest.indexOf('#');
-                    if (commentIdx > 0) {
+                    int commentIdx = findCommentIndex(rest);
+                    if (commentIdx >= 0) {
                         inlineComment = " " + rest.substring(commentIdx);
                     }
                     
                     String valueStr = yaml.dump(newValue).trim();
+                    if (newValue instanceof String && ((String) newValue).isEmpty()) {
+                        valueStr = "''";
+                    }
+                    
                     result.append(line.substring(0, colonIndex + 1))
                           .append(" ")
                           .append(valueStr)
@@ -273,6 +301,44 @@ public class ConfigUtil {
         }
         
         return current;
+    }
+
+    private static int findCommentIndex(String str) {
+        if (str == null || str.isEmpty()) return -1;
+        
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean escapeNext = false;
+        
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+            
+            if (c == '\\') {
+                escapeNext = true;
+                continue;
+            }
+            
+            if (c == '\'' && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+                continue;
+            }
+            
+            if (c == '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+                continue;
+            }
+
+            if (c == '#' && !inSingleQuote && !inDoubleQuote) {
+                return i;
+            }
+        }
+        
+        return -1;
     }
 
     
