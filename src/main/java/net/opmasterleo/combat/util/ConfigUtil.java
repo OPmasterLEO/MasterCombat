@@ -165,6 +165,7 @@ public class ConfigUtil {
     }
 
     private static String mergeYamlWithComments(String template, Map<String, Object> newValues, Yaml yaml) {
+        final String lineSep = template.contains("\r\n") ? "\r\n" : "\n";
         String[] lines = template.split("\r?\n");
         StringBuilder result = new StringBuilder();
         String currentPath = "";
@@ -174,7 +175,7 @@ public class ConfigUtil {
             String line = lines[lineIndex];
             String trimmed = line.trim();
             if (trimmed.startsWith("#") || trimmed.isEmpty()) {
-                result.append(line).append("\n");
+                result.append(line).append(lineSep);
                 lineIndex++;
                 continue;
             }
@@ -220,16 +221,16 @@ public class ConfigUtil {
                         valueStr = "\"\"";
                     }
                     
-                    result.append(line.substring(0, colonIndex + 1))
-                          .append(" ")
-                          .append(valueStr)
-                          .append(inlineComment)
-                          .append("\n");
+              result.append(line.substring(0, colonIndex + 1))
+                  .append(" ")
+                  .append(valueStr)
+                  .append(inlineComment)
+                  .append(lineSep);
                     lineIndex++;
                 }
                 else if (newValue instanceof List) {
                     List<?> newList = (List<?>) newValue;
-                    result.append(line).append("\n");
+              result.append(line).append(lineSep);
                     lineIndex++;
                     int listIndent = indent + 2;
                     while (lineIndex < lines.length) {
@@ -270,15 +271,15 @@ public class ConfigUtil {
 
                     for (Object item : newList) {
                         String itemStr = yaml.dump(item).trim();
-                        result.append(" ".repeat(listIndent)).append("- ").append(itemStr).append("\n");
+                        result.append(" ".repeat(listIndent)).append("- ").append(itemStr).append(lineSep);
                     }
                 }
                 else {
-                    result.append(line).append("\n");
+                    result.append(line).append(lineSep);
                     lineIndex++;
                 }
             } else {
-                result.append(line).append("\n");
+                result.append(line).append(lineSep);
                 lineIndex++;
             }
         }
@@ -350,6 +351,7 @@ public class ConfigUtil {
         options.setPrettyFlow(true);
         options.setIndent(2);
         options.setSplitLines(true);
+        options.setLineBreak(DumperOptions.LineBreak.WIN);
         Representer representer = new Representer(options) {
             @Override
             protected org.yaml.snakeyaml.nodes.Node representScalar(Tag tag, String value, DumperOptions.ScalarStyle style) {
