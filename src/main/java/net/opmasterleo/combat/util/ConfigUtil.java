@@ -19,6 +19,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.representer.Representer;
 
 public class ConfigUtil {
     private static final ConcurrentHashMap<JavaPlugin, AtomicBoolean> updateLocks = new ConcurrentHashMap<>();
@@ -348,8 +350,17 @@ public class ConfigUtil {
         options.setPrettyFlow(true);
         options.setIndent(2);
         options.setSplitLines(true);
-        options.setDefaultScalarStyle(DumperOptions.ScalarStyle.DOUBLE_QUOTED);
-        return new Yaml(options);
+        Representer representer = new Representer(options) {
+            @Override
+            protected org.yaml.snakeyaml.nodes.Node representScalar(Tag tag, String value, DumperOptions.ScalarStyle style) {
+                if (Tag.STR.equals(tag)) {
+                    return super.representScalar(tag, value, DumperOptions.ScalarStyle.DOUBLE_QUOTED);
+                }
+                return super.representScalar(tag, value, style);
+            }
+        };
+
+        return new Yaml(representer, options);
     }
     
     private static Map<String, Object> loadConfigFromResource(InputStream is, Yaml yaml) {
