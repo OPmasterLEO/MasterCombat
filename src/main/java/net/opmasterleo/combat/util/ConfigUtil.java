@@ -215,7 +215,7 @@ public class ConfigUtil {
                     
                     String valueStr = yaml.dump(newValue).trim();
                     if (newValue instanceof String && ((String) newValue).isEmpty()) {
-                        valueStr = "''";
+                        valueStr = "\"\"";
                     }
                     
                     result.append(line.substring(0, colonIndex + 1))
@@ -348,6 +348,7 @@ public class ConfigUtil {
         options.setPrettyFlow(true);
         options.setIndent(2);
         options.setSplitLines(true);
+        options.setDefaultScalarStyle(DumperOptions.ScalarStyle.DOUBLE_QUOTED);
         return new Yaml(options);
     }
     
