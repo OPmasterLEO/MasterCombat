@@ -1159,7 +1159,23 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void setCombatVisibility(Player player, boolean visible) {
         if (player == null) return;
-        combatVisibility.put(player.getUniqueId(), visible);
+        UUID playerId = player.getUniqueId();
+        combatVisibility.put(playerId, visible);
+        if (visible) {
+            CombatRecord record = combatRecords.get(playerId);
+            if (record != null && record.expiry > System.currentTimeMillis()) {
+                long now = System.currentTimeMillis();
+                lastActionBarUpdates.put(playerId, now);
+                updateActionBar(player, record.expiry, now);
+                if (record.opponent != null) {
+                    Player opponent = Bukkit.getPlayer(record.opponent);
+                    if (opponent != null) {
+                        lastActionBarUpdates.put(record.opponent, now);
+                        updateActionBar(opponent, record.expiry, now);
+                    }
+                }
+            }
+        }
     }
 
     public boolean isCombatVisible(Player player) {
