@@ -225,6 +225,10 @@ public class Combat extends JavaPlugin implements Listener {
         CombatCommand combatCommand = new CombatCommand();
         Objects.requireNonNull(getCommand("combat")).setExecutor(combatCommand);
         Objects.requireNonNull(getCommand("combat")).setTabCompleter(combatCommand);
+        if (getCommand("visibility") != null) {
+            getCommand("visibility").setExecutor(combatCommand);
+            getCommand("visibility").setTabCompleter(combatCommand);
+        }
         Objects.requireNonNull(getCommand("protection")).setExecutor(combatCommand);
         Objects.requireNonNull(getCommand("protection")).setTabCompleter(combatCommand);
         String disableCmdRaw = getConfig().getString("NewbieProtection.settings.disableCommand");
