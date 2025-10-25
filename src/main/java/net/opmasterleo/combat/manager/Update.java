@@ -21,6 +21,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import net.opmasterleo.combat.Combat;
+import net.opmasterleo.combat.util.ChatUtil;
 import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class Update {
@@ -74,15 +75,15 @@ public class Update {
         if (updateCheckInProgress || (System.currentTimeMillis() - lastCheckTime) < CHECK_CACHE_DURATION) {
             if (latestVersion != null && sender != null) {
                 String currentVersion = plugin.getPluginMeta().getVersion();
-                String pluginName = plugin.getName();
                 String prefix = plugin.getConfig().getString("Messages.Prefix", "");
-                handleVersionNotification(sender, pluginName, currentVersion, prefix);
+                handleVersionNotification(sender, currentVersion, prefix);
             }
             return;
         }
 
         updateCheckInProgress = true;
-        sendMessage(sender, "§b[MasterCombat] §eChecking for updates…");
+        final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
+        sendMessage(sender, prefix + "§eChecking for updates…");
 
         BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
             try {
@@ -90,9 +91,7 @@ public class Update {
                 SchedulerUtil.runTask(plugin, () -> {
                     if (!isShuttingDown && sender != null) {
                         String currentVersion = plugin.getPluginMeta().getVersion();
-                        String pluginName = plugin.getName();
-                        String prefix = plugin.getConfig().getString("Messages.Prefix", "");
-                        handleVersionNotification(sender, pluginName, currentVersion, prefix);
+                        handleVersionNotification(sender, currentVersion, prefix);
                     }
                 });
             } finally {
@@ -110,7 +109,6 @@ public class Update {
         if (isShuttingDown) return;
         final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
         BukkitTask task = SchedulerUtil.runTaskLater(plugin, () -> {
-            String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
             if (latestVersion == null && !updateCheckInProgress && !isShuttingDown 
                 && (System.currentTimeMillis() - lastCheckTime) >= CHECK_CACHE_DURATION) {
@@ -118,7 +116,7 @@ public class Update {
                 performUpdateCheck(plugin);
                 updateCheckInProgress = false;
             }
-            handleVersionNotification(null, pluginName, currentVersion, prefix);
+            handleVersionNotification(null, currentVersion, prefix);
         }, 20L * 3);
         if (task != null) updateTasks.add(task);
     }
@@ -126,14 +124,12 @@ public class Update {
     public static void notifyOnPlayerJoin(Player player, Plugin plugin) {
         if (isShuttingDown || !player.isOp() || !plugin.getConfig().getBoolean("update-notify-chat", false)) return;
         if (latestVersion != null && (System.currentTimeMillis() - lastCheckTime) < CHECK_CACHE_DURATION) {
-            String pluginName = plugin.getName();
             String currentVersion = plugin.getPluginMeta().getVersion();
             String prefix = plugin.getConfig().getString("Messages.Prefix", "");
-            handleVersionNotification(player, pluginName, currentVersion, prefix);
+            handleVersionNotification(player, currentVersion, prefix);
             return;
         }
         
-        String pluginName = plugin.getName();
         String currentVersion = plugin.getPluginMeta().getVersion();
         final String prefix = plugin.getConfig().getString("Messages.Prefix", "");
         
@@ -146,24 +142,21 @@ public class Update {
                     updateCheckInProgress = false;
                     SchedulerUtil.runTask(plugin, () -> {
                         if (!isShuttingDown) {
-                            handleVersionNotification(player, pluginName, currentVersion, prefix);
+                            handleVersionNotification(player, currentVersion, prefix);
                         }
                     });
                 }
             });
             if (task != null) updateTasks.add(task);
         } else {
-            handleVersionNotification(player, pluginName, currentVersion, prefix);
+            handleVersionNotification(player, currentVersion, prefix);
         }
     }
     
-    private static void handleVersionNotification(CommandSender sender, String pluginName, String currentVersion, String prefix) {
+    private static void handleVersionNotification(CommandSender sender, String currentVersion, String prefix) {
         CommandSender target = (sender != null) ? sender : Bukkit.getConsoleSender();
         if (latestVersion == null) {
-            StringBuilder sb = stringBuilderCache.get();
-            sb.setLength(0);
-            sb.append(prefix).append("§c[").append(pluginName).append("]» Unable to fetch update information.");
-            sendMessage(target, sb.toString());
+            sendMessage(target, prefix + "§cUnable to fetch update information.");
             return;
         }
         
@@ -182,24 +175,24 @@ public class Update {
 
         if (comparison == 0) {
             sb.setLength(0);
-            sb.append("§a[").append(pluginName).append("]» Running latest version §7(")
+            sb.append(prefix).append("§aRunning latest version §7(")
               .append(currentVersion.replaceFirst("^v", "")).append(")");
             sendMessage(target, sb.toString());
         } else if (comparison < 0) {
             sb.setLength(0);
-            sb.append("§e[").append(pluginName).append("]» Update required! §7(Installed: ")
+            sb.append(prefix).append("§eUpdate required! §7(Installed: ")
               .append(currentVersion.replaceFirst("^v", "")).append(", Latest: ")
               .append(latestVersion.replaceFirst("^v", "")).append(")");
             sendMessage(target, sb.toString());
-            sendMessage(target, "§eUse §6/combat update §eto install the update");
+            sendMessage(target, prefix + "§eUse §6/combat update §eto install the update");
         } else {
             sb.setLength(0);
-            sb.append("§a[").append(pluginName).append("]» Development build detected §7(")
+            sb.append(prefix).append("§aDevelopment build detected §7(")
               .append(currentVersion.replaceFirst("^v", "")).append(")");
             sendMessage(target, sb.toString());
             
             sb.setLength(0);
-            sb.append("§aLatest public version: §7").append(latestVersion.replaceFirst("^v", ""));
+            sb.append(prefix).append("§aLatest public version: §7").append(latestVersion.replaceFirst("^v", ""));
             sendMessage(target, sb.toString());
         }
     }
@@ -207,7 +200,7 @@ public class Update {
     public static void downloadAndReplaceJar(Plugin plugin, CommandSender sender) {
         if (isShuttingDown || updateDownloadInProgress) return;
         updateDownloadInProgress = true;
-        
+        String prefix = plugin.getConfig().getString("Messages.Prefix", "");
         BukkitTask task = SchedulerUtil.runTaskAsync(plugin, () -> {
             try {
                 String currentVersion = plugin.getPluginMeta().getVersion();
@@ -218,7 +211,7 @@ public class Update {
                 }
                 
                 if (latestVersion == null) {
-                    sendMessage(sender, "§cUpdate failed: Could not fetch version information");
+                    sendMessage(sender, prefix + "§cUpdate failed: Could not fetch version information");
                     return;
                 }
                 
@@ -226,21 +219,21 @@ public class Update {
                 int comparison = compareVersions(normalizedCurrent, normalizedLatest);
                 
                 if (comparison > 0) {
-                    sendMessage(sender, "§aYou're running a development build §7(v" + currentVersion + ")");
-                    sendMessage(sender, "§aUpdate skipped to prevent downgrading");
+                    sendMessage(sender, prefix + "§aYou're running a development build §7(v" + currentVersion + ")");
+                    sendMessage(sender, prefix + "§aUpdate skipped to prevent downgrading");
                     return;
                 }
                 
                 if (comparison == 0) {
-                    sendMessage(sender, "§aYou're already on the latest version §7(v" + currentVersion + ")");
+                    sendMessage(sender, prefix + "§aYou're already on the latest version §7(v" + currentVersion + ")");
                     return;
                 }
                 
-                sendMessage(sender, "§b[MasterCombat] §eDownloading update...");
-                performJarReplacement(plugin, sender);
+                sendMessage(sender, prefix + "§eDownloading update...");
+                performJarReplacement(plugin, sender, prefix);
             } catch (Exception e) {
                 if (!isShuttingDown) {
-                    sendMessage(sender, "§cUpdate error: " + e.getMessage());
+                    sendMessage(sender, prefix + "§cUpdate error: " + e.getMessage());
                 }
             } finally {
                 updateDownloadInProgress = false;
@@ -302,13 +295,13 @@ public class Update {
         }
     }
 
-    private static void performJarReplacement(Plugin plugin, CommandSender sender) {
+    private static void performJarReplacement(Plugin plugin, CommandSender sender, String prefix) {
         if (isShuttingDown) return;
         
         try {
             File updateFolder = resolveUpdateFolder(plugin);
             if (updateFolder == null) {
-                sendMessage(sender, "§cFailed to create update folder");
+                sendMessage(sender, prefix + "§cFailed to create update folder");
                 return;
             }
 
@@ -325,16 +318,16 @@ public class Update {
             }
 
             if (tempFile.exists() && tempFile.length() > 0) {
-                sendMessage(sender, "§aUpdate downloaded successfully!");
-                sendMessage(sender, "§aFile saved to: §7" + updateFolder.getName());
-                sendMessage(sender, "§aRestart server to apply update");
-                sendMessage(sender, "§7Note: Config will be automatically updated on restart");
+                sendMessage(sender, prefix + "§aUpdate downloaded successfully!");
+                sendMessage(sender, prefix + "§aFile saved to: §7" + updateFolder.getName());
+                sendMessage(sender, prefix + "§aRestart server to apply update");
+                sendMessage(sender, prefix + "§7Note: Config will be automatically updated on restart");
             } else {
-                sendMessage(sender, "§cDownload failed: Empty file created");
+                sendMessage(sender, prefix + "§cDownload failed: Empty file created");
             }
         } catch (IOException | IllegalArgumentException ignored) {
             if (!isShuttingDown) {
-                sendMessage(sender, "§cDownload error: " + ignored.getMessage());
+                sendMessage(sender, prefix + "§cDownload error: " + ignored.getMessage());
             }
         } finally {
             activeConnections.forEach(conn -> {
@@ -363,9 +356,9 @@ public class Update {
 
     private static void sendMessage(CommandSender sender, String message) {
         if (sender == null) {
-            Bukkit.getConsoleSender().sendMessage(message);
+            Bukkit.getConsoleSender().sendMessage(ChatUtil.parse(message));
         } else {
-            sender.sendMessage(message);
+            sender.sendMessage(ChatUtil.parse(message));
             if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
                 Combat combat = Combat.getInstance();
                 if (combat != null && combat.isDebugEnabled()) {
