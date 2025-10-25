@@ -50,7 +50,7 @@ General:
   # ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
   CustomDeathMessage:        # Custom death messages
     enabled: false
-    prefix: '&c☠ '
+    prefix: "&c☠ "
 
 # ________________________________________________________________________
 #                     ITEM & ABILITY RESTRICTIONS
@@ -75,11 +75,11 @@ enderpearl:
   # Maximum allowed throw distance while in combat (horizontal distance in blocks)
   distance: 25
   # Message shown when a pearl throw is cancelled for exceeding distance
-  message: '&cYou cannot teleport that far away in combat!'
+  message: "&cYou cannot teleport that far away in combat!"
   # Block ender pearl usage during combat
   block_in_combat: false
   # Message shown when ender pearl is blocked during combat
-  combat_message: '&cYou cannot use ender pearls while in combat!'
+  combat_message: "&cYou cannot use ender pearls while in combat!"
   # Refresh combat timer when player lands an ender pearl
   refresh_combat_on_land: false
   # Cooldown duration (supports: s, m, h, d for seconds, minutes, hours, days)
@@ -96,7 +96,7 @@ trident:
   # Block trident usage during combat
   block_in_combat: false
   # Message shown when trident is blocked during combat
-  combat_message: '&cYou cannot use tridents while in combat!'
+  combat_message: "&cYou cannot use tridents while in combat!"
   # Refresh combat timer when trident lands (similar to enderpearl)
   refresh_combat_on_land: false
   # Worlds where tridents are completely banned
@@ -225,22 +225,22 @@ NewbieProtection:
 #                           COMBAT MESSAGES
 # ========================================================================
 Messages:
-  Prefix: '&#37bff9&lMasterCombat &8» &#C7CEDC'
+  Prefix: "&#37bff9&lMasterCombat &8» &#C7CEDC"
   
   NowInCombat:
-    text: '&7You are now in combat!'
+    text: "&7You are now in combat!"
     type: both  # [chat/actionbar/both]
   
   NoLongerInCombat:
-    text: '&7You are no longer in combat!'
+    text: "&7You are no longer in combat!"
     type: both
   
   LogoutInCombat:
-    text: '&c%player% has logged out while in combat!'
+    text: "&c%player% has logged out while in combat!"
     type: chat
     
   CombatLogged:
-    text: '&c%player% has logged out while fighting you!' # Sent only to the attacker
+    text: "&c%player% has logged out while fighting you!" # Sent only to the attacker
     type: chat
 
 # ________________________________________________________________________
@@ -257,8 +257,8 @@ Commands:
     - afk 
     - warp
     - warps
-  Format: '&7You cannot use &c%command% &7while in combat!'
-  Sound: 'entity.villager.no'  # Set to "none" to disable sounds
+  Format: "&7You cannot use &c%command% &7while in combat!"
+  Sound: "entity.villager.no"  # Set to "none" to disable sounds
 
 # ________________________________________________________________________
 #                      COMBAT MECHANICS & LOGIC
