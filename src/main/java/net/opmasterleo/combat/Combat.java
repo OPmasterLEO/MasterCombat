@@ -1130,9 +1130,41 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public void reloadCombatConfig() {
+        boolean wasGlowingEnabled = this.glowingEnabled;
         ConfigUtil.reloadConfigSafely(this);
         ConfigUtil.updateConfig(this);
         loadConfigValues();
+        if (wasGlowingEnabled && !this.glowingEnabled) {
+            if (glowManager != null) {
+                try {
+                    try { glowManager.setEnabled(false); } catch (Throwable ignored) {}
+                    glowManager.cleanup();
+                } catch (Exception e) {
+                    debug("Error during GlowManager cleanup on reload: " + e.getMessage());
+                } finally {
+                    glowManager = null;
+                }
+            }
+        } else if (!wasGlowingEnabled && this.glowingEnabled) {
+            if (glowManager == null) {
+                if (isPacketEventsAvailable()) {
+                    try {
+                        glowManager = new net.opmasterleo.combat.manager.GlowManager();
+                        glowManager.initialize(this);
+                        try { glowManager.setEnabled(true); } catch (Throwable ignored) {}
+                        debug("Glowing effect system enabled (via reload)");
+                    } catch (Exception e) {
+                        this.glowingEnabled = false;
+                        getLogger().warning(() -> "Failed to initialize glowing system on reload: " + e.getMessage());
+                    }
+                } else {
+                    this.glowingEnabled = false;
+                    getLogger().warning("PacketEvents not found, glowing effect system disabled");
+                }
+            } else {
+                try { glowManager.setEnabled(true); } catch (Throwable ignored) {}
+            }
+        }
         if (newbieProtectionListener != null) {
             newbieProtectionListener.reloadConfig();
         }

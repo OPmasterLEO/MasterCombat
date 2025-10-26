@@ -30,6 +30,7 @@ public class GlowManager {
     private Combat plugin;
     private static final long PACKET_THROTTLE_MS = 50;
     private static final int CLEANUP_THRESHOLD = 100;
+    private volatile boolean enabled = true;
     
     private static class GlowState {
         final boolean isGlowing;
@@ -45,6 +46,10 @@ public class GlowManager {
         this.plugin = plugin;
         schedulePeriodicCleanup();
         schedulePeriodicSync();
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
     
     private void schedulePeriodicCleanup() {
@@ -78,6 +83,9 @@ public class GlowManager {
     private void schedulePeriodicSync() {
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             try {
+                if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+                    return;
+                }
                 for (UUID uuid : new ArrayList<>(plugin.getCombatRecords().keySet())) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null && p.isOnline()) {
@@ -117,6 +125,12 @@ public class GlowManager {
         if (currentState != null && currentState.isGlowing == glowing) {
             return;
         }
+
+        if (glowing && (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false))) {
+            glowingPlayers.remove(playerId);
+            SchedulerUtil.runEntityTask(plugin, player, () -> removeGlowEffect(player));
+            return;
+        }
         
         glowingPlayers.put(playerId, new GlowState(glowing, opponentId));
         
@@ -131,6 +145,14 @@ public class GlowManager {
     
     public boolean syncWithCombat(Player player) {
         if (player == null) return false;
+        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+            GlowState current = glowingPlayers.get(player.getUniqueId());
+            if (current != null && current.isGlowing) {
+                setGlowing(player, false, null);
+                return true;
+            }
+            return false;
+        }
         
         UUID playerId = player.getUniqueId();
         Combat.CombatRecord record = plugin.getCombatRecords().get(playerId);
@@ -198,6 +220,7 @@ public class GlowManager {
     
     private void applyGlowEffect(Player player, UUID opponentId) {
         if (player == null) return;
+        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) return;
         
         try {
             setGlowingWithPacketEvents(player, true, opponentId);
@@ -273,6 +296,9 @@ public class GlowManager {
     
     private void setGlowingWithPacketEvents(Player player, boolean glowing, UUID opponentId) {
         if (player == null) return;
+        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+            if (glowing) return;
+        }
         
         UUID playerId = player.getUniqueId();
         long now = System.currentTimeMillis();
