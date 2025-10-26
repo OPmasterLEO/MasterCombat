@@ -80,7 +80,6 @@ public class ElytraDisableListener implements Listener {
         sendBlocked(player);
     }
 
-    @SuppressWarnings("ConstantConditions")
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -112,7 +111,6 @@ public class ElytraDisableListener implements Listener {
         }
     }
 
-    @SuppressWarnings("ConstantConditions")
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;

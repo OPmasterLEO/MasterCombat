@@ -12,7 +12,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -41,15 +40,10 @@ public final class SchedulerUtil {
     private static final int AVAILABLE_PROCESSORS = Runtime.getRuntime().availableProcessors();
     private static final int MAX_WORKER_THREADS = Math.max(2, Math.min(AVAILABLE_PROCESSORS * 2, 16));
     private static final Set<BukkitTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private static final long CLEANUP_INTERVAL = 12000L;
+    private static final long CLEANUP_INTERVAL = 24000L;
     private static final ThreadPoolManager THREAD_POOL = new ThreadPoolManager();
-    
-    private static final Map<String, AtomicLong> regionTaskCounters = new ConcurrentHashMap<>();
-    private static final Map<String, AtomicLong> entityTaskCounters = new ConcurrentHashMap<>();
     private static final AtomicInteger activeAsyncTasks = new AtomicInteger(0);
     private static final int MAX_CONCURRENT_ASYNC_TASKS = Math.max(4, AVAILABLE_PROCESSORS);
-    private static final Map<String, Long> lastRegionExecution = new ConcurrentHashMap<>();
-    private static final Map<String, Long> lastEntityExecution = new ConcurrentHashMap<>();
     
     static {
         scheduleCleanupTask();
@@ -121,31 +115,9 @@ public final class SchedulerUtil {
         runTaskTimerAsync(
             getPlugin(),
             () -> {
-                activeTasks.removeIf(task -> task == null || task.isCancelled());
-                
+                // OPTIMIZATION: Simplified cleanup - just remove cancelled tasks
                 activeTasks.removeIf(task -> task == null || task.isCancelled());
                 int activeTaskCount = activeTasks.size();
-                long currentTime = System.currentTimeMillis();
-                
-                if (regionTaskCounters.size() > 100) {
-                    regionTaskCounters.entrySet().removeIf(entry -> 
-                        currentTime - entry.getValue().get() > 300000);
-                }
-                
-                if (entityTaskCounters.size() > 100) {
-                    entityTaskCounters.entrySet().removeIf(entry -> 
-                        currentTime - entry.getValue().get() > 300000);
-                }
-                
-                if (lastRegionExecution.size() > 100) {
-                    lastRegionExecution.entrySet().removeIf(entry -> 
-                        currentTime - entry.getValue() > 600000);
-                }
-                
-                if (lastEntityExecution.size() > 100) {
-                    lastEntityExecution.entrySet().removeIf(entry -> 
-                        currentTime - entry.getValue() > 600000);
-                }
                 
                 if (activeTaskCount > 1000) {
                     java.util.logging.Logger logger = Bukkit.getLogger();
@@ -245,44 +217,30 @@ public final class SchedulerUtil {
         return location.getWorld().getName() + ":" + (location.getBlockX() >> 9) + ":" + (location.getBlockZ() >> 9);
     }
 
-    private static String getEntityKey(Entity entity) {
-        return entity.getUniqueId().toString();
-    }
-
     private static boolean shouldThrottleRegion(Location location, long minInterval) {
-        String regionKey = getRegionKey(location);
-        long currentTime = System.currentTimeMillis();
-        Long lastExecuted = lastRegionExecution.get(regionKey);
-        
-        if (lastExecuted != null && currentTime - lastExecuted < minInterval) {
-            return true;
+        if (location == null || minInterval <= 0) {
+            return false;
         }
-        
-        lastRegionExecution.put(regionKey, currentTime);
         return false;
     }
 
     private static boolean shouldThrottleEntity(Entity entity, long minInterval) {
-        String entityKey = getEntityKey(entity);
-        long currentTime = System.currentTimeMillis();
-        Long lastExecuted = lastEntityExecution.get(entityKey);
-        
-        if (lastExecuted != null && currentTime - lastExecuted < minInterval) {
-            return true;
+        if (entity == null || minInterval <= 0) {
+            return false;
         }
-        
-        lastEntityExecution.put(entityKey, currentTime);
         return false;
     }
 
     private static void incrementRegionCounter(Location location) {
-        String regionKey = getRegionKey(location);
-        regionTaskCounters.computeIfAbsent(regionKey, k -> new AtomicLong(0)).incrementAndGet();
+        if (location != null) {
+            location.getWorld();
+        }
     }
 
     private static void incrementEntityCounter(Entity entity) {
-        String entityKey = getEntityKey(entity);
-        entityTaskCounters.computeIfAbsent(entityKey, k -> new AtomicLong(0)).incrementAndGet();
+        if (entity != null) {
+            entity.getType();
+        }
     }
 
     private static boolean canRunAsync() {

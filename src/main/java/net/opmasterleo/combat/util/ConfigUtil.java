@@ -287,7 +287,6 @@ public class ConfigUtil {
         return result.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private static Object getValueAtPath(Map<String, Object> map, String path) {
         if (map == null || path == null) return null;
         
@@ -295,8 +294,8 @@ public class ConfigUtil {
         Object current = map;
         
         for (String part : parts) {
-            if (current instanceof Map) {
-                current = ((Map<String, Object>) current).get(part);
+            if (current instanceof Map<?, ?> currentMap) {
+                current = currentMap.get(part);
                 if (current == null) return null;
             } else {
                 return null;
@@ -384,19 +383,17 @@ public class ConfigUtil {
             return new ConcurrentHashMap<>();
         }
     }
-    
-    @SuppressWarnings("unchecked")
+
     private static Map<String, Object> convertToConcurrentMap(Object object) {
-        if (object instanceof Map) {
-            Map<Object, Object> originalMap = (Map<Object, Object>) object;
+        if (object instanceof Map<?, ?> originalMap) {
             Map<String, Object> concurrentMap = new ConcurrentHashMap<>();
-            for (Map.Entry<Object, Object> entry : originalMap.entrySet()) {
-                String key = entry.getKey().toString();
+            for (Map.Entry<?, ?> entry : originalMap.entrySet()) {
+                String key = String.valueOf(entry.getKey());
                 Object value = entry.getValue();
                 if (value instanceof Map) {
                     concurrentMap.put(key, convertToConcurrentMap(value));
-                } else if (value instanceof List) {
-                    concurrentMap.put(key, convertToConcurrentList((List<Object>) value));
+                } else if (value instanceof List<?> listVal) {
+                    concurrentMap.put(key, convertToConcurrentList(listVal));
                 } else {
                     concurrentMap.put(key, value);
                 }
@@ -405,15 +402,14 @@ public class ConfigUtil {
         }
         return new ConcurrentHashMap<>();
     }
-    
-    @SuppressWarnings("unchecked")
-    private static List<Object> convertToConcurrentList(List<Object> originalList) {
+
+    private static List<Object> convertToConcurrentList(List<?> originalList) {
         List<Object> concurrentList = new CopyOnWriteArrayList<>();
         for (Object item : originalList) {
             if (item instanceof Map) {
                 concurrentList.add(convertToConcurrentMap(item));
-            } else if (item instanceof List) {
-                concurrentList.add(convertToConcurrentList((List<Object>) item));
+            } else if (item instanceof List<?> list2) {
+                concurrentList.add(convertToConcurrentList(list2));
             } else {
                 concurrentList.add(item);
             }
@@ -425,7 +421,6 @@ public class ConfigUtil {
         return mergeConfigs(defaultConfig, userConfig, "");
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> mergeConfigs(Map<String, Object> defaultConfig, Map<String, Object> userConfig, String path) {
         Map<String, Object> merged = new ConcurrentHashMap<>();
         if (userConfig != null) {
@@ -448,34 +443,55 @@ public class ConfigUtil {
                     continue;
                 }
 
-                if (defVal instanceof Map && usrVal instanceof Map) {
-                    merged.put(key, mergeConfigs((Map<String, Object>) defVal, (Map<String, Object>) usrVal, childPath));
+                if (defVal instanceof Map<?, ?> defMap && usrVal instanceof Map<?, ?> usrMap) {
+                    merged.put(key, mergeTwoMaps(defMap, usrMap, childPath));
                 }
             }
         }
 
         return merged;
     }
-    
-    @SuppressWarnings("unchecked")
+
     private static Object deepCopyConcurrent(Object object) {
-        if (object instanceof Map) {
-            Map<Object, Object> originalMap = (Map<Object, Object>) object;
-            Map<Object, Object> copiedMap = new ConcurrentHashMap<>();
-            for (Map.Entry<Object, Object> entry : originalMap.entrySet()) {
-                copiedMap.put(entry.getKey(), deepCopyConcurrent(entry.getValue()));
+        return switch (object) {
+            case Map<?, ?> originalMap -> {
+                Map<Object, Object> copiedMap = new ConcurrentHashMap<>();
+                for (Map.Entry<?, ?> entry : originalMap.entrySet()) {
+                    copiedMap.put(entry.getKey(), deepCopyConcurrent(entry.getValue()));
+                }
+                yield copiedMap;
             }
-            return copiedMap;
-        } else if (object instanceof List) {
-            List<Object> originalList = (List<Object>) object;
-            List<Object> copiedList = new CopyOnWriteArrayList<>();
-            for (Object item : originalList) {
-                copiedList.add(deepCopyConcurrent(item));
+            case List<?> originalList -> {
+                List<Object> copiedList = new CopyOnWriteArrayList<>();
+                for (Object item : originalList) {
+                    copiedList.add(deepCopyConcurrent(item));
+                }
+                yield copiedList;
             }
-            return copiedList;
-        } else {
-            return object;
+            default -> object;
+        };
+    }
+
+    private static Map<String, Object> mergeTwoMaps(Map<?, ?> defMap, Map<?, ?> usrMap, String path) {
+        Map<String, Object> merged = new ConcurrentHashMap<>();
+        for (Map.Entry<?, ?> entry : usrMap.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            merged.put(key, deepCopyConcurrent(entry.getValue()));
         }
+        for (Map.Entry<?, ?> entry : defMap.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object defVal = entry.getValue();
+            Object usrVal = merged.get(key);
+            if (usrVal == null) {
+                merged.put(key, deepCopyConcurrent(defVal));
+                continue;
+            }
+            if (defVal instanceof Map<?, ?> defChild && usrVal instanceof Map<?, ?> usrChild) {
+                String childPath = path == null || path.isEmpty() ? key : path + "." + key;
+                merged.put(key, mergeTwoMaps(defChild, usrChild, childPath));
+            }
+        }
+        return merged;
     }
     
     private static void saveMergedConfig(File configFile, Map<String, Object> mergedConfig, JavaPlugin plugin, Yaml yaml) {
@@ -562,17 +578,10 @@ public class ConfigUtil {
     private static String normalize(String s) {
         return s == null ? "" : s.replace("\r\n", "\n").replace("\r", "\n").trim();
     }
-    
-    @SuppressWarnings("unchecked")
+
     private static void updateVersionInConfig(Map<String, Object> config, JavaPlugin plugin) {
-        if (config.containsKey("generated-by-version")) {
+        if (config != null && config.containsKey("generated-by-version")) {
             config.put("generated-by-version", "v" + plugin.getPluginMeta().getVersion());
-        }
-        
-        for (Object value : config.values()) {
-            if (value instanceof Map) {
-                updateVersionInConfig((Map<String, Object>) value, plugin);
-            }
         }
     }
     

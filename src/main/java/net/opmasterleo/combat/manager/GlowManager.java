@@ -243,8 +243,8 @@ public class GlowManager {
         
         try {
             setGlowingWithPacketEvents(player, true, opponentId);
-            
-            if (plugin.getConfig().getBoolean("General.ColoredGlowing", false)) {
+            Combat combatPlugin = (Combat) plugin;
+            if (combatPlugin.getCachedColoredGlowing()) {
                 final String teamName = "combat_" + player.getName().substring(0, Math.min(player.getName().length(), 10));
                 
                 SchedulerUtil.runTask(plugin, () -> {
@@ -286,8 +286,8 @@ public class GlowManager {
         
         try {
             setGlowingWithPacketEvents(player, false, null);
-            
-            if (plugin.getConfig().getBoolean("General.ColoredGlowing", false)) {
+            Combat combatPlugin = (Combat) plugin;
+            if (combatPlugin.getCachedColoredGlowing()) {
                 final String teamName = "combat_" + player.getName().substring(0, Math.min(player.getName().length(), 10));
                 SchedulerUtil.runTask(plugin, () -> {
                     Team team = teamCache.remove(teamName);
@@ -336,15 +336,10 @@ public class GlowManager {
                 for (int i = 0; i < metadata.size(); i++) {
                     EntityData<?> data = metadata.get(i);
                     if (data.getIndex() == 0 && data.getType() == EntityDataTypes.BYTE) {
-                        @SuppressWarnings("unchecked")
-                        EntityData<Byte> byteData = (EntityData<Byte>) data;
-                        byte currentFlags = byteData.getValue();
-                        byte newFlags;
-                        if (glowing) {
-                            newFlags = (byte) (currentFlags | 0x40);
-                        } else {
-                            newFlags = (byte) (currentFlags & ~0x40);
-                        }
+                        Object valueObj = data.getValue();
+                        byte currentFlags = (valueObj instanceof Byte) ? (Byte) valueObj : 0x00;
+                        byte newFlags = glowing ? (byte) (currentFlags | 0x40)
+                                                : (byte) (currentFlags & ~0x40);
                         metadata.set(i, new EntityData<>(0, EntityDataTypes.BYTE, newFlags));
                         foundFlag = true;
                         break;
@@ -377,19 +372,10 @@ public class GlowManager {
             );
 
             List<Player> recipients = new ArrayList<>();
-            
             if (opponentId != null) {
                 Player opponent = Bukkit.getPlayer(opponentId);
                 if (opponent != null && opponent.isOnline() && !opponent.equals(player)) {
                     recipients.add(opponent);
-                }
-            }
-            
-            if (recipients.isEmpty()) {
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    if (!online.equals(player) && online.canSee(player)) {
-                        recipients.add(online);
-                    }
                 }
             }
             

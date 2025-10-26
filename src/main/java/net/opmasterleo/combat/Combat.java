@@ -73,6 +73,7 @@ public class Combat extends JavaPlugin implements Listener {
     private Set<String> enabledWorlds;
     private boolean combatEnabled;
     private boolean glowingEnabled;
+    private volatile boolean cachedColoredGlowing;
     private WorldGuardUtil worldGuardUtil;
     private EndCrystalListener endCrystalListener;
     private NewbieProtectionListener newbieProtectionListener;
@@ -100,6 +101,7 @@ public class Combat extends JavaPlugin implements Listener {
     private boolean packetEventsLoaded = false;
     private boolean pluginEnabled = true;
     private boolean folia = false;
+    private Metrics bstatsMetrics;
 
     private ThreadPoolExecutor combatWorkerPool;
     private int maxWorkerPoolSize;
@@ -132,13 +134,14 @@ public class Combat extends JavaPlugin implements Listener {
         reloadConfig();
         combatEnabled = getConfig().getBoolean("General.combat-enabled", true);
         glowingEnabled = getConfig().getBoolean("General.CombatTagGlowing", false);
+        cachedColoredGlowing = getConfig().getBoolean("General.ColoredGlowing", false);
         enableWorldsEnabled = getConfig().getBoolean("EnabledWorlds.enabled", false);
         enabledWorlds = ConcurrentHashMap.newKeySet();
         enabledWorlds.addAll(getConfig().getStringList("EnabledWorlds.worlds"));
-    enderPearlEnabled = getConfig().getBoolean("enderpearl.enabled",
-        getConfig().getBoolean("EnderPearl.Enabled", false));
-    enderPearlDistance = getConfig().getLong("enderpearl.distance",
-        getConfig().getLong("EnderPearl.Distance", 0));
+        enderPearlEnabled = getConfig().getBoolean("enderpearl.enabled",
+            getConfig().getBoolean("EnderPearl.Enabled", false));
+        enderPearlDistance = getConfig().getLong("enderpearl.distance",
+            getConfig().getLong("EnderPearl.Distance", 0));
         debugEnabled = getConfig().getBoolean("debug", false);
         combatFormat = getConfig().getString("General.Format", "");
         
@@ -1442,6 +1445,9 @@ public class Combat extends JavaPlugin implements Listener {
                 threadingMsg = "&eUsing single-threaded system - using " + maxWorkerPoolSize + " worker thread";
             }
             Bukkit.getConsoleSender().sendMessage(ChatUtil.parse(threadingMsg));
+            if (debugEnabled && bstatsMetrics != null) {
+                getLogger().fine(() -> "bStats initialized");
+            }
         } catch (Throwable ignored) {}
     }
 
@@ -1450,7 +1456,6 @@ public class Combat extends JavaPlugin implements Listener {
         instance = this;
         saveDefaultConfig();
         ConfigUtil.updateConfig(this);
-        
         int pluginId = 25701;
         @SuppressWarnings("unused")
         Metrics metrics = new Metrics(this, pluginId);
@@ -1611,8 +1616,16 @@ public class Combat extends JavaPlugin implements Listener {
 
     private final java.util.concurrent.atomic.AtomicBoolean postInitDone = new java.util.concurrent.atomic.AtomicBoolean(false);
 
-    @SuppressWarnings("unchecked")
     private void registerRegionInitListener(Class<?> regionInitClass, Listener listenerHolder, EventExecutor executor) {
-        Bukkit.getPluginManager().registerEvent((Class<? extends Event>) regionInitClass, listenerHolder, EventPriority.NORMAL, executor, this);
+        if (Event.class.isAssignableFrom(regionInitClass)) {
+            Class<? extends Event> eventClass = regionInitClass.asSubclass(Event.class);
+            Bukkit.getPluginManager().registerEvent(eventClass, listenerHolder, EventPriority.NORMAL, executor, this);
+        } else {
+            getLogger().warning(() -> String.format("Region init class is not an Event: %s", regionInitClass.getName()));
+        }
+    }
+
+    public boolean getCachedColoredGlowing() {
+        return cachedColoredGlowing;
     }
 }
