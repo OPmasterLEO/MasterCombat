@@ -44,8 +44,16 @@ public final class SchedulerUtil {
     private static final ThreadPoolManager THREAD_POOL = new ThreadPoolManager();
     private static final AtomicInteger activeAsyncTasks = new AtomicInteger(0);
     private static final int MAX_CONCURRENT_ASYNC_TASKS = Math.max(4, AVAILABLE_PROCESSORS);
+    private static final ConcurrentHashMap<String, BukkitTask> SYNC_DEBOUNCE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, java.util.concurrent.ScheduledFuture<?>> ASYNC_DEBOUNCE = new ConcurrentHashMap<>();
+    private static final java.util.concurrent.ScheduledThreadPoolExecutor SCHEDULED_EXECUTOR = new java.util.concurrent.ScheduledThreadPoolExecutor(1, r -> {
+        Thread t = new Thread(r, "MasterCombat-Scheduler");
+        t.setDaemon(true);
+        return t;
+    });
     
     static {
+        SCHEDULED_EXECUTOR.setRemoveOnCancelPolicy(true);
         scheduleCleanupTask();
     }
     
@@ -138,6 +146,11 @@ public final class SchedulerUtil {
         isShuttingDown.set(shuttingDown);
         if (shuttingDown) {
             THREAD_POOL.shutdown();
+            SCHEDULED_EXECUTOR.shutdownNow();
+            SYNC_DEBOUNCE.values().forEach(task -> { try { if (task != null && !task.isCancelled()) task.cancel(); } catch (Exception ignored) {} });
+            SYNC_DEBOUNCE.clear();
+            ASYNC_DEBOUNCE.values().forEach(f -> { try { if (f != null) f.cancel(false); } catch (Exception ignored) {} });
+            ASYNC_DEBOUNCE.clear();
         }
     }
 
@@ -150,6 +163,41 @@ public final class SchedulerUtil {
             }
             return true;
         });
+    }
+
+    public static void debounceSync(Plugin plugin, String key, Runnable task, long delayTicks) {
+        if (shouldSkip(plugin)) return;
+        BukkitTask existing = SYNC_DEBOUNCE.remove(key);
+        if (existing != null) {
+            try { existing.cancel(); } catch (Exception ignored) {}
+        }
+        Runnable wrapped = wrapTask(() -> {
+            try { task.run(); } finally { SYNC_DEBOUNCE.remove(key); }
+        }, plugin, "debounce-sync");
+        BukkitTask newTask;
+        if (IS_ARCLIGHT) {
+            newTask = Bukkit.getScheduler().runTaskLater(plugin, wrapArclightTask(wrapped), delayTicks);
+        } else {
+            newTask = Bukkit.getScheduler().runTaskLater(plugin, wrapped, delayTicks);
+        }
+        SYNC_DEBOUNCE.put(key, newTask);
+    }
+
+    public static void debounceAsync(Plugin plugin, String key, Runnable task, long delayTicks) {
+        if (shouldSkip(plugin)) return;
+        java.util.concurrent.ScheduledFuture<?> prev = ASYNC_DEBOUNCE.remove(key);
+        if (prev != null) {
+            try { prev.cancel(false); } catch (Exception ignored) {}
+        }
+        long delayMs = Math.max(0L, delayTicks * 50L);
+        java.util.concurrent.ScheduledFuture<?> future = SCHEDULED_EXECUTOR.schedule(() -> {
+            try {
+                runTaskAsync(plugin, task);
+            } finally {
+                ASYNC_DEBOUNCE.remove(key);
+            }
+        }, delayMs, TimeUnit.MILLISECONDS);
+        ASYNC_DEBOUNCE.put(key, future);
     }
 
     private static boolean shouldSkip(Plugin plugin) {
@@ -257,11 +305,9 @@ public final class SchedulerUtil {
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTask(plugin, wrapArclightTask(wrapped));
-            trackTask(bukkitTask);
             return bukkitTask;
         } else {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTask(plugin, wrapped);
-            trackTask(bukkitTask);
             return bukkitTask;
         }
     }
@@ -288,11 +334,9 @@ public final class SchedulerUtil {
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, wrapArclightAsyncTask(wrapped));
-            trackTask(bukkitTask);
             return bukkitTask;
         } else {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskAsynchronously(plugin, wrapped);
-            trackTask(bukkitTask);
             return bukkitTask;
         }
     }
@@ -307,11 +351,9 @@ public final class SchedulerUtil {
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, wrapArclightTask(wrapped), delay);
-            trackTask(bukkitTask);
             return bukkitTask;
         } else {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLater(plugin, wrapped, delay);
-            trackTask(bukkitTask);
             return bukkitTask;
         }
     }
@@ -349,11 +391,9 @@ public final class SchedulerUtil {
             return null;
         } else if (IS_ARCLIGHT) {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, wrapArclightAsyncTask(wrapped), delay);
-            trackTask(bukkitTask);
             return bukkitTask;
         } else {
             BukkitTask bukkitTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, wrapped, delay);
-            trackTask(bukkitTask);
             return bukkitTask;
         }
     }
