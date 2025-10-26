@@ -77,7 +77,7 @@ public class GlowManager {
                     return team == null || team.getEntries().isEmpty();
                 });
             }
-        }, 200L, 200L);
+        }, 400L, 400L);
     }
 
     private void schedulePeriodicSync() {
@@ -86,15 +86,26 @@ public class GlowManager {
                 if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
                     return;
                 }
-                for (UUID uuid : new ArrayList<>(plugin.getCombatRecords().keySet())) {
+                List<Player> playersToSync = new ArrayList<>();
+                for (UUID uuid : plugin.getCombatRecords().keySet()) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null && p.isOnline()) {
-                        syncWithCombat(p);
+                        playersToSync.add(p);
                     }
                 }
 
+                if (!playersToSync.isEmpty()) {
+                    SchedulerUtil.runTask(plugin, () -> {
+                        for (Player p : playersToSync) {
+                            syncWithCombat(p);
+                        }
+                    });
+                }
+
                 long now = System.currentTimeMillis();
-                for (Map.Entry<UUID, GlowState> entry : new ArrayList<>(glowingPlayers.entrySet())) {
+                List<Player> playersNeedingGlow = new ArrayList<>();
+                List<UUID> opponentIds = new ArrayList<>();
+                for (Map.Entry<UUID, GlowState> entry : glowingPlayers.entrySet()) {
                     UUID uuid = entry.getKey();
                     GlowState state = entry.getValue();
                     if (state == null || !state.isGlowing) continue;
@@ -103,13 +114,24 @@ public class GlowManager {
 
                     Long last = lastPacketSent.get(uuid);
                     if (last == null || now - last >= 500L) {
-                        SchedulerUtil.runEntityTask(plugin, p, () -> applyGlowEffect(p, state.opponentId));
+                        playersNeedingGlow.add(p);
+                        opponentIds.add(state.opponentId);
                     }
+                }
+
+                if (!playersNeedingGlow.isEmpty()) {
+                    final List<Player> finalPlayers = new ArrayList<>(playersNeedingGlow);
+                    final List<UUID> finalOpponents = new ArrayList<>(opponentIds);
+                    SchedulerUtil.runTask(plugin, () -> {
+                        for (int i = 0; i < finalPlayers.size(); i++) {
+                            applyGlowEffect(finalPlayers.get(i), finalOpponents.get(i));
+                        }
+                    });
                 }
             } catch (Exception e) {
                 plugin.debug("Glow sync tick error: " + e.getMessage());
             }
-        }, 10L, 10L);
+        }, 20L, 20L);
     }
 
     public void setGlowing(Player player, boolean glowing) {
@@ -128,19 +150,18 @@ public class GlowManager {
 
         if (glowing && (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false))) {
             glowingPlayers.remove(playerId);
-            SchedulerUtil.runEntityTask(plugin, player, () -> removeGlowEffect(player));
+            // Direct call instead of entity task
+            removeGlowEffect(player);
             return;
         }
         
         glowingPlayers.put(playerId, new GlowState(glowing, opponentId));
-        
-        SchedulerUtil.runEntityTask(plugin, player, () -> {
-            if (glowing) {
-                applyGlowEffect(player, opponentId);
-            } else {
-                removeGlowEffect(player);
-            }
-        });
+
+        if (glowing) {
+            applyGlowEffect(player, opponentId);
+        } else {
+            removeGlowEffect(player);
+        }
     }
     
     public boolean syncWithCombat(Player player) {
@@ -176,9 +197,7 @@ public class GlowManager {
         GlowState state = glowingPlayers.get(playerId);
         
         if (state != null && state.isGlowing) {
-            SchedulerUtil.runEntityTask(plugin, player, () -> {
-                applyGlowEffect(player, state.opponentId);
-            });
+            applyGlowEffect(player, state.opponentId);
         }
     }
 

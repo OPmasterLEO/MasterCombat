@@ -41,7 +41,7 @@ public final class SchedulerUtil {
     private static final int AVAILABLE_PROCESSORS = Runtime.getRuntime().availableProcessors();
     private static final int MAX_WORKER_THREADS = Math.max(2, Math.min(AVAILABLE_PROCESSORS * 2, 16));
     private static final Set<BukkitTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private static final long CLEANUP_INTERVAL = 6000L;
+    private static final long CLEANUP_INTERVAL = 12000L;
     private static final ThreadPoolManager THREAD_POOL = new ThreadPoolManager();
     
     private static final Map<String, AtomicLong> regionTaskCounters = new ConcurrentHashMap<>();
