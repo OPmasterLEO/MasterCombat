@@ -564,23 +564,27 @@ public class Combat extends JavaPlugin implements Listener {
             updateActionBar(opponent, expiry, currentTime);
         }
     }
-    
+
     public void forceCombatCleanup(UUID playerUUID) {
         if (playerUUID == null) return;
         CombatRecord record = combatRecords.remove(playerUUID);
         lastActionBarUpdates.remove(playerUUID);
-        Player player = Bukkit.getPlayer(playerUUID);
-        if (player != null && glowingEnabled && glowManager != null) {
-            glowManager.setGlowing(player, false, null);
+        if (glowingEnabled && glowManager != null) {
+            Player player = Bukkit.getPlayer(playerUUID);
+            if (player != null) {
+                glowManager.setGlowing(player, false, null);
+            }
         }
 
         if (record != null && record.opponent != null) {
-            CombatRecord opponentRecord = combatRecords.get(record.opponent);
+            UUID opponentUUID = record.opponent;
+            CombatRecord opponentRecord = combatRecords.get(opponentUUID);
             if (opponentRecord != null && playerUUID.equals(opponentRecord.opponent)) {
-                combatRecords.remove(record.opponent);
-                lastActionBarUpdates.remove(record.opponent);
+                combatRecords.remove(opponentUUID);
+                lastActionBarUpdates.remove(opponentUUID);
+                
                 if (glowingEnabled && glowManager != null) {
-                    Player opponent = Bukkit.getPlayer(record.opponent);
+                    Player opponent = Bukkit.getPlayer(opponentUUID);
                     if (opponent != null) {
                         glowManager.setGlowing(opponent, false, null);
                     }
@@ -927,22 +931,17 @@ public class Combat extends JavaPlugin implements Listener {
     private void handleCombatEnd(Player player) {
         UUID playerUUID = player.getUniqueId();
         CombatRecord record = combatRecords.remove(playerUUID);
-        
         if (record == null) return;
-        
         if (glowingEnabled && glowManager != null) {
             glowManager.setGlowing(player, false, null);
             if (record.opponent != null) {
                 Player opponent = Bukkit.getPlayer(record.opponent);
-                if (opponent != null) {
-                    boolean opponentStillInCombat = isInCombat(opponent);
-                    if (!opponentStillInCombat) {
-                        glowManager.setGlowing(opponent, false, null);
-                    }
+                if (opponent != null && !isInCombat(opponent)) {
+                    glowManager.setGlowing(opponent, false, null);
                 }
             }
         }
-        
+
         if (noLongerInCombatMsg != null && !noLongerInCombatMsg.isEmpty()) {
             sendNoLongerInCombatMessage(player, noLongerInCombatMsg, noLongerInCombatType);
         }
@@ -1273,6 +1272,10 @@ public class Combat extends JavaPlugin implements Listener {
 
     public Map<UUID, CombatRecord> getCombatRecords() {
         return combatRecords;
+    }
+
+    public ConcurrentHashMap<UUID, Long> getLastActionBarUpdates() {
+        return lastActionBarUpdates;
     }
 
     public CrystalManager getCrystalManager() {
