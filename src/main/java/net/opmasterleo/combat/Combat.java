@@ -1083,7 +1083,6 @@ public class Combat extends JavaPlugin implements Listener {
                 if (glowingEnabled && glowManager != null) {
                     glowManager.setGlowing(opponent, true, playerUUID);
                 }
-                updateActionBar(opponent, expiry, System.currentTimeMillis());
             }
             
             lastActionBarUpdates.put(oppUUID, 0L);
@@ -1132,19 +1131,18 @@ public class Combat extends JavaPlugin implements Listener {
         CombatRecord record = combatRecords.get(playerId);
         if (record == null) return;
 
-        long expiry = System.currentTimeMillis() + 1000L * getConfig().getLong("General.duration", 0);
+        long now = System.currentTimeMillis();
+        long expiry = now + 1000L * getConfig().getLong("General.duration", 0);
         combatRecords.put(playerId, new CombatRecord(expiry, record.opponent));
         lastActionBarUpdates.put(playerId, 0L);
-        updateActionBar(player, expiry, System.currentTimeMillis());
+        updateActionBar(player, expiry, now);
         if (record.opponent != null) {
-            Player opponent = Bukkit.getPlayer(record.opponent);
+            UUID oppId = record.opponent;
+            combatRecords.put(oppId, new CombatRecord(expiry, playerId));
+            lastActionBarUpdates.put(oppId, 0L);
+            Player opponent = Bukkit.getPlayer(oppId);
             if (opponent != null) {
-                combatRecords.put(record.opponent, new CombatRecord(expiry, playerId));
-                lastActionBarUpdates.put(record.opponent, 0L);
-                updateActionBar(opponent, expiry, System.currentTimeMillis());
-            } else {
-                combatRecords.put(record.opponent, new CombatRecord(expiry, playerId));
-                lastActionBarUpdates.put(record.opponent, 0L);
+                updateActionBar(opponent, expiry, now);
             }
         }
     }
