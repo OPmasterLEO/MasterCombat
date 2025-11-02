@@ -212,9 +212,10 @@ public final class SchedulerUtil {
         return () -> {
             try {
                 task.run();
-            } catch (Exception e) {
-                if (plugin.getLogger().isLoggable(java.util.logging.Level.SEVERE)) {
-                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error in {0} task", new Object[]{context, e});
+            } catch (Throwable t) {
+                java.util.logging.Logger logger = plugin.getLogger();
+                if (logger.isLoggable(java.util.logging.Level.SEVERE)) {
+                    logger.log(java.util.logging.Level.SEVERE, "Error in " + context + " task", t);
                 }
             }
         };
@@ -469,16 +470,20 @@ public final class SchedulerUtil {
     }
 
     public static void runEntityTaskLater(Plugin plugin, Entity entity, Runnable task, long delay) {
-        if (shouldSkip(plugin)) return;
+        if (shouldSkip(plugin) || entity == null || !entity.isValid()) return;
         
         Runnable wrapped = wrapTask(task, plugin, "entity");
         
         if (IS_FOLIA || IS_CANVAS) {
-            entity.getScheduler().runDelayed(plugin, t -> wrapped.run(), null, delay);
+            try {
+                entity.getScheduler().runDelayed(plugin, t -> wrapped.run(), null, delay);
+            } catch (Throwable ignored) {
+                runTaskLater(plugin, wrapped, delay);
+            }
         } else if (PAPER_ENTITY_SCHEDULER) {
             try {
                 entity.getScheduler().runDelayed(plugin, t -> wrapped.run(), null, delay);
-            } catch (Exception e) {
+            } catch (Throwable ignored) {
                 runTaskLater(plugin, wrapped, delay);
             }
         } else if (IS_ARCLIGHT) {
@@ -493,7 +498,7 @@ public final class SchedulerUtil {
     }
 
     public static void runEntityTaskTimer(Plugin plugin, Entity entity, Runnable task, long delay, long period, long minInterval) {
-        if (shouldSkip(plugin)) return;
+        if (shouldSkip(plugin) || entity == null || !entity.isValid()) return;
         
         if (minInterval > 0 && shouldThrottleEntity(entity, minInterval)) {
             return;
@@ -503,11 +508,15 @@ public final class SchedulerUtil {
         Runnable wrapped = wrapTask(task, plugin, "entity");
         
         if (IS_FOLIA || IS_CANVAS) {
-            entity.getScheduler().runAtFixedRate(plugin, t -> wrapped.run(), null, delay, period);
+            try {
+                entity.getScheduler().runAtFixedRate(plugin, t -> wrapped.run(), null, delay, period);
+            } catch (Throwable ignored) {
+                runTaskTimer(plugin, wrapped, delay, period);
+            }
         } else if (PAPER_ENTITY_SCHEDULER) {
             try {
                 entity.getScheduler().runAtFixedRate(plugin, t -> wrapped.run(), null, delay, period);
-            } catch (Exception e) {
+            } catch (Throwable ignored) {
                 runTaskTimer(plugin, wrapped, delay, period);
             }
         } else if (IS_ARCLIGHT) {

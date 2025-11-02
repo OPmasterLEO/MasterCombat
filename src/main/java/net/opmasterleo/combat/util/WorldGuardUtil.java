@@ -150,14 +150,15 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
             if (!plugin.isEnabled() || !plugin.isPluginEnabled()) return;
-
             if (!packetEventsEnabled || !barrierEnabled) return;
             var type = event.getPacketType();
 
             if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
                 Player player = (Player) event.getPlayer();
                 if (!player.isOnline()) return;
+                if (!plugin.isInCombat(player)) return;
                 if (shouldBypass(player)) return;
+                if (!plugin.isCombatEnabledInWorld(player)) return;
                 Vector3d newPos;
                 if (type == Client.PLAYER_POSITION) {
                     WrapperPlayClientPlayerPosition wrapper = new WrapperPlayClientPlayerPosition(event);
@@ -364,10 +365,11 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerMove(PlayerMoveEvent event) {
         if (!barrierEnabled) return;
-
         Player player = event.getPlayer();
         if (!player.isOnline()) return;
         if (shouldBypass(player)) return;
+        boolean inCombat = plugin.isInCombat(player);
+        if (!inCombat) return;
 
         Location from = event.getFrom();
         Location to = event.getTo();
@@ -375,11 +377,11 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             return;
         }
 
-        if (plugin.isInCombat(player) && isNearSafezone(to)) {
+        if (isNearSafezone(to)) {
             createVisualBarrier(player, to);
         }
 
-        if (plugin.isInCombat(player) && !shouldBypass(player)) {
+        if (!shouldBypass(player)) {
             boolean fromSafe = isPvpDenied(from);
             boolean toSafe = isPvpDenied(to);
             if (!fromSafe && toSafe) {

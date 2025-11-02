@@ -117,6 +117,9 @@ public class Combat extends JavaPlugin implements Listener {
     private final java.lang.management.OperatingSystemMXBean osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
     private static final long CPU_CHECK_INTERVAL = 5000;
     private static final long ADJUSTMENT_INTERVAL = 10000;
+    private volatile boolean cpuLoadAvailable = true;
+    private static final long FALLBACK_CPU_CHECK_INTERVAL = 15000;
+    private static final long FALLBACK_ADJUSTMENT_INTERVAL = 30000;
     private static final double HIGH_CPU_THRESHOLD = 0.75;
     private static final double LOW_CPU_THRESHOLD = 0.30;
 
@@ -595,32 +598,38 @@ public class Combat extends JavaPlugin implements Listener {
 
     private double getCpuUsage() {
         long now = System.currentTimeMillis();
-        if (now - lastCpuCheck < CPU_CHECK_INTERVAL) {
+        long effectiveInterval = cpuLoadAvailable ? CPU_CHECK_INTERVAL : FALLBACK_CPU_CHECK_INTERVAL;
+        if (now - lastCpuCheck < effectiveInterval) {
             return currentCpuUsage;
         }
-        
+
         lastCpuCheck = now;
         try {
-            if (osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
+            if (cpuLoadAvailable && osBean instanceof com.sun.management.OperatingSystemMXBean sunBean) {
                 double usage = sunBean.getProcessCpuLoad();
                 if (usage >= 0.0) {
                     currentCpuUsage = usage;
                     return usage;
                 }
+
+                cpuLoadAvailable = false;
             }
 
-            int currentActive = combatWorkerPool.getActiveCount();
+            int currentActive = (combatWorkerPool != null) ? combatWorkerPool.getActiveCount() : 0;
             int availableProcessors = Runtime.getRuntime().availableProcessors();
-            currentCpuUsage = Math.min(1.0, (double) currentActive / availableProcessors);
+            currentCpuUsage = Math.min(1.0, (double) currentActive / Math.max(1, availableProcessors));
             return currentCpuUsage;
-        } catch (Exception e) {
-            return Math.min(0.5, (double) combatWorkerPool.getActiveCount() / maxWorkerPoolSize);
+        } catch (Throwable t) {
+            cpuLoadAvailable = false;
+            int active = (combatWorkerPool != null) ? combatWorkerPool.getActiveCount() : 0;
+            return Math.min(0.5, (double) active / Math.max(1, maxWorkerPoolSize));
         }
     }
     
     private void adjustThreadPoolDynamically() {
         long now = System.currentTimeMillis();
-        if (now - lastAdjustment < ADJUSTMENT_INTERVAL) {
+        long effectiveAdjustment = cpuLoadAvailable ? ADJUSTMENT_INTERVAL : FALLBACK_ADJUSTMENT_INTERVAL;
+        if (now - lastAdjustment < effectiveAdjustment) {
             return;
         }
         
