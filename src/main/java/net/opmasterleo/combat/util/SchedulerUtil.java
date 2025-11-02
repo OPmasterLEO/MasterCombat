@@ -123,7 +123,6 @@ public final class SchedulerUtil {
         runTaskTimerAsync(
             getPlugin(),
             () -> {
-                // OPTIMIZATION: Simplified cleanup - just remove cancelled tasks
                 activeTasks.removeIf(task -> task == null || task.isCancelled());
                 int activeTaskCount = activeTasks.size();
                 

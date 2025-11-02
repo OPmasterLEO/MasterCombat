@@ -1475,7 +1475,6 @@ public class Combat extends JavaPlugin implements Listener {
         if (!folia) {
             maxWorkerPoolSize = Math.max(2, Math.min(cpus, 8));
         } else {
-            // For Folia, be more conservative
             maxWorkerPoolSize = Math.max(1, Math.min(2, cpus - 1));
         }
         int corePoolSize = Math.max(1, Math.min(maxWorkerPoolSize / 3, 2));

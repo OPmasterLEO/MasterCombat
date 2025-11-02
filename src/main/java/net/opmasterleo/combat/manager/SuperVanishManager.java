@@ -1,11 +1,11 @@
 package net.opmasterleo.combat.manager;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 public class SuperVanishManager {
 
@@ -15,7 +15,6 @@ public class SuperVanishManager {
 
     public SuperVanishManager() {
         try {
-            // Add support for PremiumVanish as well
             Plugin superVanish = Bukkit.getPluginManager().getPlugin("SuperVanish");
             Plugin premiumVanish = Bukkit.getPluginManager().getPlugin("PremiumVanish");
             if (superVanish != null && superVanish.isEnabled()) {

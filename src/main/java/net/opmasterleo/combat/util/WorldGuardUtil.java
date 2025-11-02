@@ -54,6 +54,12 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private final Map<UUID, Vector3d> lastPositions = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastBarrierRender = new ConcurrentHashMap<>();
     private static final long BARRIER_RENDER_INTERVAL_MS = 150L;
+    private final java.util.concurrent.atomic.AtomicLong wgPackets = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong exitNotInCombat = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong exitBypass = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong exitWorldDisabled = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong exitSmallDelta = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong processedPackets = new java.util.concurrent.atomic.AtomicLong();
     private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
         private final int maxSize;
 
@@ -154,11 +160,13 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             var type = event.getPacketType();
 
             if (type == Client.PLAYER_POSITION || type == Client.PLAYER_POSITION_AND_ROTATION) {
+                boolean dbg = plugin.isDebugEnabled();
+                if (dbg) wgPackets.incrementAndGet();
                 Player player = (Player) event.getPlayer();
                 if (!player.isOnline()) return;
-                if (!plugin.isInCombat(player)) return;
-                if (shouldBypass(player)) return;
-                if (!plugin.isCombatEnabledInWorld(player)) return;
+                if (!plugin.isInCombat(player)) { if (dbg) exitNotInCombat.incrementAndGet(); return; }
+                if (shouldBypass(player)) { if (dbg) exitBypass.incrementAndGet(); return; }
+                if (!plugin.isCombatEnabledInWorld(player)) { if (dbg) exitWorldDisabled.incrementAndGet(); return; }
                 Vector3d newPos;
                 if (type == Client.PLAYER_POSITION) {
                     WrapperPlayClientPlayerPosition wrapper = new WrapperPlayClientPlayerPosition(event);
@@ -172,9 +180,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 if (lastPos != null) {
                     double deltaX = Math.abs(newPos.getX() - lastPos.getX());
                     double deltaZ = Math.abs(newPos.getZ() - lastPos.getZ());
-                    if (deltaX < 0.01 && deltaZ < 0.01) {
-                        return;
-                    }
+                    if (deltaX < 0.01 && deltaZ < 0.01) { if (dbg) exitSmallDelta.incrementAndGet(); return; }
                 }
                 
                 lastPositions.put(player.getUniqueId(), newPos);
@@ -182,7 +188,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 Location from = lastPos != null
                     ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
                     : player.getLocation();
-
+                if (dbg) processedPackets.incrementAndGet();
                 SchedulerUtil.runEntityTask(plugin, player, () -> handlePlayerMovement(player, from, to));
             }
         } catch (IllegalStateException e) {
@@ -239,6 +245,19 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             if (System.currentTimeMillis() - lastCleanupTime > 60000) {
                 pvpCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
                 lastCleanupTime = System.currentTimeMillis();
+                if (plugin.isDebugEnabled()) {
+                    long total = wgPackets.getAndSet(0);
+                    long notCombat = exitNotInCombat.getAndSet(0);
+                    long bypass = exitBypass.getAndSet(0);
+                    long worldOff = exitWorldDisabled.getAndSet(0);
+                    long small = exitSmallDelta.getAndSet(0);
+                    long processed = processedPackets.getAndSet(0);
+                    long exits = notCombat + bypass + worldOff + small;
+                    double exitRate = total > 0 ? (exits * 100.0 / total) : 0.0;
+                    plugin.debug(String.format(
+                        "WG packets: total=%d, exits={notCombat=%d, bypass=%d, worldDisabled=%d, smallDelta=%d} processed=%d, exitRate=%.1f%%",
+                        total, notCombat, bypass, worldOff, small, processed, exitRate));
+                }
             }
         }, 1200L, 1200L);
     }
@@ -309,10 +328,14 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         Location south = findBorder(location, 0, 1, base);
         Location north = findBorder(location, 0, -1, base);
 
-        if (east != null) createBarrierLine(player, east);
-        if (west != null) createBarrierLine(player, west);
-        if (south != null) createBarrierLine(player, south);
-        if (north != null) createBarrierLine(player, north);
+        java.util.List<Location> starts = new java.util.ArrayList<>(4);
+        if (east != null) starts.add(east);
+        if (west != null) starts.add(west);
+        if (south != null) starts.add(south);
+        if (north != null) starts.add(north);
+        if (!starts.isEmpty()) {
+            createBarrierGroup(player, starts);
+        }
     }
 
     private Location findBorder(Location origin, int dx, int dz, boolean base) {
@@ -331,22 +354,34 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         }
         return null;
     }
-    
-    private void createBarrierLine(Player player, Location start) {
-         int maxHeight = Math.min(barrierHeight, 5);
-         Location blockLoc = start.clone();
-         for (int y = 0; y < maxHeight; y++) {
-             blockLoc.setY(start.getY() + y);
-             sendBlockChange(player, blockLoc, barrierMaterial);
-             
-             final Location finalLoc = blockLoc.clone();
-             SchedulerUtil.runRegionTaskLater(plugin, finalLoc, () -> {
-                 if (player.isOnline()) {
-                     resetBlockChange(player, finalLoc);
-                 }
-             }, 100L);
-         }
-     }
+
+    private void createBarrierGroup(Player player, java.util.List<Location> starts) {
+        if (starts == null || starts.isEmpty()) return;
+        final int maxHeight = Math.min(barrierHeight, 5);
+        for (Location base : starts) {
+            if (base == null) continue;
+            final double baseY = base.getY();
+            Location temp = base.clone();
+            for (int y = 0; y < maxHeight; y++) {
+                temp.setY(baseY + y);
+                sendBlockChange(player, temp, barrierMaterial);
+            }
+        }
+
+        Location anchor = starts.get(0);
+        SchedulerUtil.runRegionTaskLater(plugin, anchor, () -> {
+            if (!player.isOnline()) return;
+            for (Location base : starts) {
+                if (base == null) continue;
+                final double baseY = base.getY();
+                Location temp = base.clone();
+                for (int y = 0; y < maxHeight; y++) {
+                    temp.setY(baseY + y);
+                    resetBlockChange(player, temp);
+                }
+            }
+        }, 100L);
+    }
     
     private void sendBlockChange(Player player, Location loc, Material material) {
         try {

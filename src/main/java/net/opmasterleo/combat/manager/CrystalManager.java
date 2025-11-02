@@ -1,17 +1,20 @@
 package net.opmasterleo.combat.manager;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class CrystalManager {
     private static final long CLEANUP_INTERVAL = TimeUnit.MINUTES.toMillis(1);
@@ -106,7 +109,6 @@ public class CrystalManager {
             worldCache.put(world.getName(), world);
         }
 
-        // Schedule the cleanup task on the main thread
         Bukkit.getScheduler().runTask(plugin, () -> {
             crystalData.keySet().removeIf(crystalId -> {
                 CrystalData data = crystalData.get(crystalId);

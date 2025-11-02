@@ -150,7 +150,6 @@ public class GlowManager {
 
         if (glowing && (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false))) {
             glowingPlayers.remove(playerId);
-            // Direct call instead of entity task
             removeGlowEffect(player);
             return;
         }
