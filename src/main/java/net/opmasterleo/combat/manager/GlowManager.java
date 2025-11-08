@@ -31,6 +31,7 @@ public class GlowManager {
     private static final long PACKET_THROTTLE_MS = 50;
     private static final int CLEANUP_THRESHOLD = 100;
     private volatile boolean enabled = true;
+    private volatile boolean glowingConfigEnabled = true;
     
     private static class GlowState {
         final boolean isGlowing;
@@ -44,12 +45,17 @@ public class GlowManager {
 
     public void initialize(Combat plugin) {
         this.plugin = plugin;
+        this.glowingConfigEnabled = plugin.getConfig().getBoolean("General.CombatTagGlowing", false);
         schedulePeriodicCleanup();
         schedulePeriodicSync();
     }
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+    
+    public void reloadConfig() {
+        this.glowingConfigEnabled = plugin.getConfig().getBoolean("General.CombatTagGlowing", false);
     }
     
     private void schedulePeriodicCleanup() {
@@ -83,7 +89,7 @@ public class GlowManager {
     private void schedulePeriodicSync() {
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             try {
-                if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+                if (!enabled || !glowingConfigEnabled) {
                     return;
                 }
                 List<Player> playersToSync = new ArrayList<>();
@@ -148,7 +154,7 @@ public class GlowManager {
             return;
         }
 
-        if (glowing && (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false))) {
+        if (glowing && (!enabled || !glowingConfigEnabled)) {
             glowingPlayers.remove(playerId);
             removeGlowEffect(player);
             return;
@@ -165,7 +171,7 @@ public class GlowManager {
     
     public boolean syncWithCombat(Player player) {
         if (player == null) return false;
-        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+        if (!enabled || !glowingConfigEnabled) {
             GlowState current = glowingPlayers.get(player.getUniqueId());
             if (current != null && current.isGlowing) {
                 setGlowing(player, false, null);
@@ -238,7 +244,7 @@ public class GlowManager {
     
     private void applyGlowEffect(Player player, UUID opponentId) {
         if (player == null) return;
-        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) return;
+        if (!enabled || !glowingConfigEnabled) return;
         
         try {
             setGlowingWithPacketEvents(player, true, opponentId);
@@ -314,7 +320,7 @@ public class GlowManager {
     
     private void setGlowingWithPacketEvents(Player player, boolean glowing, UUID opponentId) {
         if (player == null) return;
-        if (!enabled || !plugin.getConfig().getBoolean("General.CombatTagGlowing", false)) {
+        if (!enabled || !glowingConfigEnabled) {
             if (glowing) return;
         }
         

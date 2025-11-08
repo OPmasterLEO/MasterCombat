@@ -1,5 +1,8 @@
 package net.opmasterleo.combat.util;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -8,9 +11,6 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ChatUtil {
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
@@ -29,6 +29,10 @@ public class ChatUtil {
             return Component.empty();
         }
 
+        if (message.indexOf('&') == -1 && message.indexOf('<') == -1 && message.indexOf('§') == -1) {
+            return Component.text(message);
+        }
+
         if (message.indexOf('<') != -1 && message.indexOf('>') != -1) {
             try {
                 return MINI_MESSAGE.deserialize(message);
@@ -37,6 +41,14 @@ public class ChatUtil {
         }
 
         String processed = message.replace('&', '§');
+        if (processed.indexOf('#') == -1) {
+            try {
+                return LegacyComponentSerializer.legacySection().deserialize(processed);
+            } catch (Exception e) {
+                return Component.text(message).color(NamedTextColor.WHITE);
+            }
+        }
+
         Matcher matcher = HEX_COLOR_PATTERN.matcher(processed);
         if (!matcher.find()) {
             try {
@@ -45,8 +57,9 @@ public class ChatUtil {
                 return Component.text(message).color(NamedTextColor.WHITE);
             }
         }
+        
         matcher.reset();
-        StringBuilder sb = new StringBuilder(processed.length() + 32);
+        StringBuilder sb = new StringBuilder(processed.length() + (matcher.groupCount() * 14));
         int lastEnd = 0;
         while (matcher.find()) {
             sb.append(processed, lastEnd, matcher.start());

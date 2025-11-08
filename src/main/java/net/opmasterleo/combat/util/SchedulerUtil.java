@@ -265,32 +265,6 @@ public final class SchedulerUtil {
         return location.getWorld().getName() + ":" + (location.getBlockX() >> 9) + ":" + (location.getBlockZ() >> 9);
     }
 
-    private static boolean shouldThrottleRegion(Location location, long minInterval) {
-        if (location == null || minInterval <= 0) {
-            return false;
-        }
-        return false;
-    }
-
-    private static boolean shouldThrottleEntity(Entity entity, long minInterval) {
-        if (entity == null || minInterval <= 0) {
-            return false;
-        }
-        return false;
-    }
-
-    private static void incrementRegionCounter(Location location) {
-        if (location != null) {
-            location.getWorld();
-        }
-    }
-
-    private static void incrementEntityCounter(Entity entity) {
-        if (entity != null) {
-            entity.getType();
-        }
-    }
-
     private static boolean canRunAsync() {
         return activeAsyncTasks.get() < MAX_CONCURRENT_ASYNC_TASKS;
     }
@@ -499,11 +473,6 @@ public final class SchedulerUtil {
     public static void runEntityTaskTimer(Plugin plugin, Entity entity, Runnable task, long delay, long period, long minInterval) {
         if (shouldSkip(plugin) || entity == null || !entity.isValid()) return;
         
-        if (minInterval > 0 && shouldThrottleEntity(entity, minInterval)) {
-            return;
-        }
-        
-        incrementEntityCounter(entity);
         Runnable wrapped = wrapTask(task, plugin, "entity");
         
         if (IS_FOLIA || IS_CANVAS) {
@@ -550,11 +519,6 @@ public final class SchedulerUtil {
     public static void runRegionTaskTimer(Plugin plugin, Location location, Runnable task, long delay, long period, long minInterval) {
         if (shouldSkip(plugin)) return;
         
-        if (minInterval > 0 && shouldThrottleRegion(location, minInterval)) {
-            return;
-        }
-        
-        incrementRegionCounter(location);
         Runnable wrapped = wrapTask(task, plugin, "region");
         
         if (IS_FOLIA || IS_CANVAS) {

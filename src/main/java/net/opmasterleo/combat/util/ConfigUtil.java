@@ -1,5 +1,6 @@
 package net.opmasterleo.combat.util;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -554,15 +555,15 @@ public class ConfigUtil {
 
     private static String readSansHeader(File configFile) {
         if (configFile == null || !configFile.exists()) return null;
-        try (FileInputStream fis = new FileInputStream(configFile)) {
-            byte[] bytes = fis.readAllBytes();
-            String content = new String(bytes, StandardCharsets.UTF_8);
-            String[] lines = content.split("\r?\n", -1);
-            StringBuilder body = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(configFile), StandardCharsets.UTF_8))) {
+            StringBuilder body = new StringBuilder(1024);
+            String line;
             boolean started = false;
-            for (String line : lines) {
+            while ((line = reader.readLine()) != null) {
                 if (!started) {
-                    if (line.trim().startsWith("#") || line.trim().isEmpty()) {
+                    String trimmed = line.trim();
+                    if (trimmed.isEmpty() || trimmed.startsWith("#")) {
                         continue;
                     }
                     started = true;

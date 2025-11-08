@@ -61,8 +61,16 @@ public class CrystalManager {
         UUID crystalId = crystal.getUniqueId();
         UUID placerId = placer.getUniqueId();
 
-        crystalData.computeIfAbsent(crystalId, k -> new CrystalData(placerId, crystal.getWorld().getName()));
-        playerCrystals.computeIfAbsent(placerId, k -> ConcurrentHashMap.newKeySet()).add(crystalId);
+        crystalData.putIfAbsent(crystalId, new CrystalData(placerId, crystal.getWorld().getName()));
+        Set<UUID> crystals = playerCrystals.get(placerId);
+        if (crystals == null) {
+            crystals = ConcurrentHashMap.newKeySet();
+            Set<UUID> existing = playerCrystals.putIfAbsent(placerId, crystals);
+            if (existing != null) {
+                crystals = existing;
+            }
+        }
+        crystals.add(crystalId);
 
         if (System.currentTimeMillis() - lastCleanup > CLEANUP_INTERVAL) {
             plugin.getCombatWorkerPool().execute(this::cleanupExpiredEntries);

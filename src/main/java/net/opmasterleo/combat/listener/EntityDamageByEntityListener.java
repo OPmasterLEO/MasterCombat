@@ -26,6 +26,7 @@ import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUs
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
+import net.opmasterleo.combat.util.WorldGuardUtil;
 
 public final class EntityDamageByEntityListener implements PacketListener, Listener {
     private static final long ATTACK_TIMEOUT = 5000;
@@ -35,12 +36,18 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     private final Map<UUID, Long> attackTimestamps = new ConcurrentHashMap<>();
     private final Combat combatInstance = Combat.getInstance();
     private boolean initialized = false;
+    private NewbieProtectionListener protectionListener;
+    private WorldGuardUtil worldGuardUtil;
+    private SuperVanishManager vanishManager;
 
     public EntityDamageByEntityListener() {
     }
     
     public void initialize() {
         if (initialized) return;
+        protectionListener = combatInstance.getNewbieProtectionListener();
+        worldGuardUtil = combatInstance.getWorldGuardUtil();
+        vanishManager = combatInstance.getSuperVanishManager();
         
         combatInstance.getServer().getPluginManager().registerEvents(this, combatInstance);
         if (combatInstance.isPacketEventsAvailable()) {
@@ -113,19 +120,17 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     }
 
     private boolean isProtectedInteraction(Player attacker, Player victim) {
-        NewbieProtectionListener protectionListener = combatInstance.getNewbieProtectionListener();
         if (protectionListener != null) {
             boolean attackerProtected = protectionListener.isActuallyProtected(attacker);
             boolean victimProtected = protectionListener.isActuallyProtected(victim);
             if (attackerProtected != victimProtected) return true;
         }
 
-        if (combatInstance.getWorldGuardUtil() != null && combatInstance.getWorldGuardUtil().isPvpDenied(victim.getLocation())) {
+        if (worldGuardUtil != null && worldGuardUtil.isPvpDenied(victim.getLocation())) {
             return true;
         }
 
-        SuperVanishManager vanish = combatInstance.getSuperVanishManager();
-        return vanish != null && (vanish.isVanished(attacker) || vanish.isVanished(victim));
+        return vanishManager != null && (vanishManager.isVanished(attacker) || vanishManager.isVanished(victim));
     }
 
     private boolean isSelfAttack(Player attacker, Player victim) {
