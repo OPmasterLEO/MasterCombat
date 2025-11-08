@@ -92,8 +92,9 @@ public class GlowManager {
                 if (!enabled || !glowingConfigEnabled) {
                     return;
                 }
+                final Map<UUID, Combat.CombatRecord> combatRecordsLocal = plugin.getCombatRecords();
                 List<Player> playersToSync = new ArrayList<>();
-                for (UUID uuid : plugin.getCombatRecords().keySet()) {
+                for (UUID uuid : combatRecordsLocal.keySet()) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null && p.isOnline()) {
                         playersToSync.add(p);
@@ -111,14 +112,16 @@ public class GlowManager {
                 long now = System.currentTimeMillis();
                 List<Player> playersNeedingGlow = new ArrayList<>();
                 List<UUID> opponentIds = new ArrayList<>();
-                for (Map.Entry<UUID, GlowState> entry : glowingPlayers.entrySet()) {
+                final Map<UUID, GlowState> glowingPlayersLocal = glowingPlayers;
+                final Map<UUID, Long> lastPacketLocal = lastPacketSent;
+                for (Map.Entry<UUID, GlowState> entry : glowingPlayersLocal.entrySet()) {
                     UUID uuid = entry.getKey();
                     GlowState state = entry.getValue();
                     if (state == null || !state.isGlowing) continue;
                     Player p = Bukkit.getPlayer(uuid);
                     if (p == null || !p.isOnline()) continue;
 
-                    Long last = lastPacketSent.get(uuid);
+                    Long last = lastPacketLocal.get(uuid);
                     if (last == null || now - last >= 500L) {
                         playersNeedingGlow.add(p);
                         opponentIds.add(state.opponentId);

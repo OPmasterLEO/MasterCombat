@@ -159,10 +159,10 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
         
         Player latestAttacker = null;
         long latestTimestamp = 0;
-        
+        final Map<UUID, Long> attackTimestampsLocal = attackTimestamps;
         for (Map.Entry<UUID, Player> entry : projectileOwners.entrySet()) {
             UUID playerId = entry.getKey();
-            Long timestamp = attackTimestamps.get(playerId);
+            Long timestamp = attackTimestampsLocal.get(playerId);
             if (timestamp != null && timestamp > latestTimestamp) {
                 latestTimestamp = timestamp;
                 latestAttacker = entry.getValue();
