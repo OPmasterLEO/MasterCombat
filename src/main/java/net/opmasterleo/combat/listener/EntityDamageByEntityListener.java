@@ -30,7 +30,7 @@ import net.opmasterleo.combat.util.WorldGuardUtil;
 
 public final class EntityDamageByEntityListener implements PacketListener, Listener {
     private static final long ATTACK_TIMEOUT = 5000;
-    private static final long CLEANUP_DELAY = 100L;
+    private static final long CLEANUP_DELAY = 60L;
     
     private final Map<UUID, Player> projectileOwners = new ConcurrentHashMap<>();
     private final Map<UUID, Long> attackTimestamps = new ConcurrentHashMap<>();

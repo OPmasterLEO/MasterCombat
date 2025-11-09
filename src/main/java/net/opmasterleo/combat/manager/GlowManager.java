@@ -28,7 +28,7 @@ public class GlowManager {
     private final Map<UUID, Long> lastPacketSent = new ConcurrentHashMap<>();
     private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
     private Combat plugin;
-    private static final long PACKET_THROTTLE_MS = 50;
+    private static final long PACKET_THROTTLE_MS = 25;
     private static final int CLEANUP_THRESHOLD = 100;
     private volatile boolean enabled = true;
     private volatile boolean glowingConfigEnabled = true;
@@ -83,7 +83,7 @@ public class GlowManager {
                     return team == null || team.getEntries().isEmpty();
                 });
             }
-        }, 400L, 400L);
+        }, 200L, 200L);
     }
 
     private void schedulePeriodicSync() {
@@ -122,7 +122,7 @@ public class GlowManager {
                     if (p == null || !p.isOnline()) continue;
 
                     Long last = lastPacketLocal.get(uuid);
-                    if (last == null || now - last >= 500L) {
+                    if (last == null || now - last >= 300L) {
                         playersNeedingGlow.add(p);
                         opponentIds.add(state.opponentId);
                     }

@@ -725,9 +725,9 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     private void startCombatTimer() {
-        final long timerInterval = isPacketEventsAvailable() ? 20L : 30L;
+        final long timerInterval = isPacketEventsAvailable() ? 20L : 25L;
         final boolean useWorkers = !folia;
-        final int BATCH_SIZE = 50;
+        final int BATCH_SIZE = 100;
         Runnable timerTask = () -> {
             synchronized (reusablePlayerList) {
                 reusablePlayerList.clear();
@@ -737,8 +737,8 @@ public class Combat extends JavaPlugin implements Listener {
                 final int currentPoolSize = combatWorkerPool.getPoolSize();
                 final int activeThreads = combatWorkerPool.getActiveCount();
                 final double loadRatio = currentPoolSize > 0 ? (double) activeThreads / currentPoolSize : 0.0;
-                final int baseBatchSize = loadRatio > 0.7 ? 15 : (loadRatio > 0.4 ? 30 : BATCH_SIZE);
-                final int dynamicBatchSize = Math.min(baseBatchSize, Math.max(5, total / Math.max(1, currentPoolSize)));
+                final int baseBatchSize = loadRatio > 0.7 ? 25 : (loadRatio > 0.4 ? 50 : BATCH_SIZE);
+                final int dynamicBatchSize = Math.min(baseBatchSize, Math.max(10, total / Math.max(1, currentPoolSize)));
 
                 for (int start = 0; start < total; start += dynamicBatchSize) {
                     final int s = start;
@@ -776,7 +776,7 @@ public class Combat extends JavaPlugin implements Listener {
                                         toEnd.add(uuid);
                                     } else {
                                         Long lastUpdate = lastActionBarUpdates.get(uuid);
-                                        if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                        if (lastUpdate == null || currentTime - lastUpdate >= 150) {
                                             toActionbar.add(uuid);
                                             actionbarExpiry.put(uuid, record.expiry);
                                         }
@@ -873,7 +873,7 @@ public class Combat extends JavaPlugin implements Listener {
                                 reusableToEnd.add(uuid);
                             } else {
                                 Long lastUpdate = lastActionBarUpdates.get(uuid);
-                                if (lastUpdate == null || currentTime - lastUpdate >= 250) {
+                                if (lastUpdate == null || currentTime - lastUpdate >= 150) {
                                     reusableToActionbar.add(uuid);
                                     reusableActionbarExpiry.put(uuid, record.expiry);
                                 }

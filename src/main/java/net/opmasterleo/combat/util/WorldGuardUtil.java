@@ -53,7 +53,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private final Map<UUID, Location> lastBarrierLocations = new ConcurrentHashMap<>();
     private final Map<UUID, Vector3d> lastPositions = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastBarrierRender = new ConcurrentHashMap<>();
-    private static final long BARRIER_RENDER_INTERVAL_MS = 150L;
+    private static final long BARRIER_RENDER_INTERVAL_MS = 100L;
     private final java.util.concurrent.atomic.AtomicLong wgPackets = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong exitNotInCombat = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong exitBypass = new java.util.concurrent.atomic.AtomicLong();
@@ -145,7 +145,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                 return p == null || !plugin.isInCombat(p);
             });
             lastBarrierRender.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
-        }, 100L, 100L);
+        }, 60L, 60L);
     }
     
     public static void disablePacketEventsIntegration() {
@@ -259,7 +259,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                         total, notCombat, bypass, worldOff, small, processed, exitRate));
                 }
             }
-        }, 1200L, 1200L);
+        }, 600L, 600L);
     }
     
     public boolean isPvpDenied(Location location) {
@@ -380,7 +380,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                     resetBlockChange(player, temp);
                 }
             }
-        }, 100L);
+        }, 60L);
     }
     
     private void sendBlockChange(Player player, Location loc, Material material) {
