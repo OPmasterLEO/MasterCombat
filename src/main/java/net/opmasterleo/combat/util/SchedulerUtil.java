@@ -577,9 +577,15 @@ public final class SchedulerUtil {
             
             for (Set<Entity> regionGroup : regionEntities.values()) {
                 if (regionGroup.isEmpty()) continue;
+                Entity firstEntity = null;
+                for (Entity e : regionGroup) {
+                    firstEntity = e;
+                    break;
+                }
+                if (firstEntity == null) continue;
                 
-                Entity firstEntity = regionGroup.iterator().next();
-                runEntityTask(plugin, firstEntity, () -> {
+                final Entity anchor = firstEntity;
+                runEntityTask(plugin, anchor, () -> {
                     for (Entity entity : regionGroup) {
                         if (entity.isValid()) {
                             try {
@@ -617,9 +623,15 @@ public final class SchedulerUtil {
             
             for (Set<Location> regionGroup : regionGroups.values()) {
                 if (regionGroup.isEmpty()) continue;
+                Location firstLocation = null;
+                for (Location loc : regionGroup) {
+                    firstLocation = loc;
+                    break;
+                }
+                if (firstLocation == null) continue;
                 
-                Location firstLocation = regionGroup.iterator().next();
-                runRegionTask(plugin, firstLocation, () -> {
+                final Location anchor = firstLocation;
+                runRegionTask(plugin, anchor, () -> {
                     for (Location location : regionGroup) {
                         try {
                             task.accept(location);

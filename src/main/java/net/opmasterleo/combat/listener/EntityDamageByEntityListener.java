@@ -95,8 +95,15 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
         
         SchedulerUtil.runTaskLater(combatInstance, () -> {
             long now = System.currentTimeMillis();
-            attackTimestamps.entrySet().removeIf(entry -> now - entry.getValue() > ATTACK_TIMEOUT);
-            projectileOwners.keySet().retainAll(attackTimestamps.keySet());
+            java.util.Iterator<Map.Entry<UUID, Long>> iter = attackTimestamps.entrySet().iterator();
+            while (iter.hasNext()) {
+                Map.Entry<UUID, Long> entry = iter.next();
+                if (now - entry.getValue() > ATTACK_TIMEOUT) {
+                    UUID uuid = entry.getKey();
+                    iter.remove();
+                    projectileOwners.remove(uuid);
+                }
+            }
         }, CLEANUP_DELAY);
     }
 

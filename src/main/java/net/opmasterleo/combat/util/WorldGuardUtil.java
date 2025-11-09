@@ -139,12 +139,28 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     bypassPermission = (cfgPerm == null || cfgPerm.isBlank()) ? defPerm : cfgPerm;
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long currentTime = System.currentTimeMillis();
-            lastBarrierWarning.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
-            lastBarrierLocations.entrySet().removeIf(entry -> {
-                Player p = plugin.getServer().getPlayer(entry.getKey());
-                return p == null || !plugin.isInCombat(p);
-            });
-            lastBarrierRender.entrySet().removeIf(entry -> currentTime - entry.getValue() > 10000);
+            java.util.Iterator<Map.Entry<UUID, Long>> warningIter = lastBarrierWarning.entrySet().iterator();
+            while (warningIter.hasNext()) {
+                if (currentTime - warningIter.next().getValue() > 10000) {
+                    warningIter.remove();
+                }
+            }
+            
+            java.util.Iterator<Map.Entry<UUID, Location>> locationIter = lastBarrierLocations.entrySet().iterator();
+            while (locationIter.hasNext()) {
+                UUID uuid = locationIter.next().getKey();
+                Player p = plugin.getServer().getPlayer(uuid);
+                if (p == null || !plugin.isInCombat(p)) {
+                    locationIter.remove();
+                }
+            }
+            
+            java.util.Iterator<Map.Entry<UUID, Long>> renderIter = lastBarrierRender.entrySet().iterator();
+            while (renderIter.hasNext()) {
+                if (currentTime - renderIter.next().getValue() > 10000) {
+                    renderIter.remove();
+                }
+            }
         }, 60L, 60L);
     }
     

@@ -118,17 +118,30 @@ public class CrystalManager {
         }
 
         Bukkit.getScheduler().runTask(plugin, () -> {
-            crystalData.keySet().removeIf(crystalId -> {
-                CrystalData data = crystalData.get(crystalId);
-                if (data == null || data.isExpired()) return true;
+            java.util.Iterator<Map.Entry<UUID, CrystalData>> iter = crystalData.entrySet().iterator();
+            while (iter.hasNext()) {
+                Map.Entry<UUID, CrystalData> entry = iter.next();
+                UUID crystalId = entry.getKey();
+                CrystalData data = entry.getValue();
+                if (data == null || data.isExpired()) {
+                    iter.remove();
+                    continue;
+                }
                 World world = worldCache.get(data.worldName);
-                if (world == null) return true;
+                if (world == null) {
+                    iter.remove();
+                    continue;
+                }
                 Entity entity = world.getEntity(crystalId);
-                return entity == null || !entity.isValid() || entity.isDead();
-            });
+                if (entity == null || !entity.isValid() || entity.isDead()) {
+                    iter.remove();
+                }
+            }
 
-            playerCrystals.forEach((placerId, playerSet) -> playerSet.removeIf(crystalId -> !crystalData.containsKey(crystalId)));
-            playerCrystals.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+            playerCrystals.entrySet().removeIf(entry -> {
+                entry.getValue().removeIf(crystalId -> !crystalData.containsKey(crystalId));
+                return entry.getValue().isEmpty();
+            });
             if (plugin.isDebugEnabled()) {
                 plugin.debug("Cleaned up expired crystal entries");
             }

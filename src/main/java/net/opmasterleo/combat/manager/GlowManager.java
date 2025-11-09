@@ -1,7 +1,6 @@
 package net.opmasterleo.combat.manager;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -61,27 +60,34 @@ public class GlowManager {
     private void schedulePeriodicCleanup() {
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long now = System.currentTimeMillis();
-            
             if (lastPacketSent.size() > CLEANUP_THRESHOLD) {
-                lastPacketSent.entrySet().removeIf(entry -> now - entry.getValue() > 60000);
+                java.util.Iterator<Map.Entry<UUID, Long>> iter = lastPacketSent.entrySet().iterator();
+                while (iter.hasNext()) {
+                    if (now - iter.next().getValue() > 60000) {
+                        iter.remove();
+                    }
+                }
             }
             
             if (glowingPlayers.size() > CLEANUP_THRESHOLD) {
-                List<UUID> toRemove = new ArrayList<>();
-                for (Map.Entry<UUID, GlowState> entry : glowingPlayers.entrySet()) {
-                    Player player = Bukkit.getPlayer(entry.getKey());
+                java.util.Iterator<Map.Entry<UUID, GlowState>> iter = glowingPlayers.entrySet().iterator();
+                while (iter.hasNext()) {
+                    UUID uuid = iter.next().getKey();
+                    Player player = Bukkit.getPlayer(uuid);
                     if (player == null || !player.isOnline()) {
-                        toRemove.add(entry.getKey());
+                        iter.remove();
                     }
                 }
-                toRemove.forEach(glowingPlayers::remove);
             }
             
             if (teamCache.size() > CLEANUP_THRESHOLD) {
-                teamCache.entrySet().removeIf(entry -> {
-                    Team team = entry.getValue();
-                    return team == null || team.getEntries().isEmpty();
-                });
+                java.util.Iterator<Map.Entry<String, Team>> iter = teamCache.entrySet().iterator();
+                while (iter.hasNext()) {
+                    Team team = iter.next().getValue();
+                    if (team == null || team.getEntries().isEmpty()) {
+                        iter.remove();
+                    }
+                }
             }
         }, 200L, 200L);
     }
@@ -94,8 +100,8 @@ public class GlowManager {
                 }
                 final Map<UUID, Combat.CombatRecord> combatRecordsLocal = plugin.getCombatRecords();
                 List<Player> playersToSync = new ArrayList<>();
-                for (UUID uuid : combatRecordsLocal.keySet()) {
-                    Player p = Bukkit.getPlayer(uuid);
+                for (Map.Entry<UUID, Combat.CombatRecord> entry : combatRecordsLocal.entrySet()) {
+                    Player p = Bukkit.getPlayer(entry.getKey());
                     if (p != null && p.isOnline()) {
                         playersToSync.add(p);
                     }
@@ -217,13 +223,10 @@ public class GlowManager {
 
     public void cleanup() {
         if (glowingPlayers.isEmpty()) return;
-        
-        Collection<UUID> playerIds = new ArrayList<>(glowingPlayers.keySet());
-        
-        for (UUID playerId : playerIds) {
-            Player player = Bukkit.getPlayer(playerId);
+        for (Map.Entry<UUID, GlowState> entry : glowingPlayers.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
             if (player != null && player.isOnline()) {
-                GlowState state = glowingPlayers.get(playerId);
+                GlowState state = entry.getValue();
                 if (state != null && state.isGlowing) {
                     removeGlowEffect(player);
                 }

@@ -712,7 +712,12 @@ public class Combat extends JavaPlugin implements Listener {
                     }
                 }
                 lastMetricsLog = now;
-                pendingTasks.entrySet().removeIf(entry -> now - entry.getValue() > 10000);
+                java.util.Iterator<Map.Entry<String, Long>> iter = pendingTasks.entrySet().iterator();
+                while (iter.hasNext()) {
+                    if (now - iter.next().getValue() > 10000) {
+                        iter.remove();
+                    }
+                }
                 if (taskMetrics.size() > 100) {
                     taskMetrics.clear();
                 }
