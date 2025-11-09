@@ -16,7 +16,6 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 
-import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
@@ -25,12 +24,14 @@ import net.opmasterleo.combat.util.SchedulerUtil;
 public class GlowManager {
     private final Map<UUID, GlowState> glowingPlayers = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastPacketSent = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> entityIdCache = new ConcurrentHashMap<>();
     private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
     private Combat plugin;
     private static final long PACKET_THROTTLE_MS = 25;
     private static final int CLEANUP_THRESHOLD = 100;
     private volatile boolean enabled = true;
     private volatile boolean glowingConfigEnabled = true;
+    private volatile com.github.retrooper.packetevents.manager.player.PlayerManager packetPlayerManager;
     
     private static class GlowState {
         final boolean isGlowing;
@@ -45,6 +46,11 @@ public class GlowManager {
     public void initialize(Combat plugin) {
         this.plugin = plugin;
         this.glowingConfigEnabled = plugin.getConfig().getBoolean("General.CombatTagGlowing", false);
+        try {
+            this.packetPlayerManager = PacketEvents.getAPI().getPlayerManager();
+        } catch (Exception e) {
+            plugin.debug("Failed to cache PacketEvents PlayerManager: " + e.getMessage());
+        }
         schedulePeriodicCleanup();
         schedulePeriodicSync();
     }
@@ -69,18 +75,17 @@ public class GlowManager {
                 }
             }
             
-            if (glowingPlayers.size() > CLEANUP_THRESHOLD) {
+                if (glowingPlayers.size() > CLEANUP_THRESHOLD) {
                 java.util.Iterator<Map.Entry<UUID, GlowState>> iter = glowingPlayers.entrySet().iterator();
                 while (iter.hasNext()) {
                     UUID uuid = iter.next().getKey();
                     Player player = Bukkit.getPlayer(uuid);
                     if (player == null || !player.isOnline()) {
                         iter.remove();
+                        entityIdCache.remove(uuid);
                     }
                 }
-            }
-            
-            if (teamCache.size() > CLEANUP_THRESHOLD) {
+            }            if (teamCache.size() > CLEANUP_THRESHOLD) {
                 java.util.Iterator<Map.Entry<String, Team>> iter = teamCache.entrySet().iterator();
                 while (iter.hasNext()) {
                     Team team = iter.next().getValue();
@@ -217,8 +222,10 @@ public class GlowManager {
 
     public void untrackPlayer(Player player) {
         if (player == null) return;
-        glowingPlayers.remove(player.getUniqueId());
-        lastPacketSent.remove(player.getUniqueId());
+        UUID uuid = player.getUniqueId();
+        glowingPlayers.remove(uuid);
+        lastPacketSent.remove(uuid);
+        entityIdCache.remove(uuid);
     }
 
     public void cleanup() {
@@ -235,6 +242,7 @@ public class GlowManager {
         
         glowingPlayers.clear();
         lastPacketSent.clear();
+        entityIdCache.clear();
         
         SchedulerUtil.runTask(plugin, () -> {
             for (Team team : teamCache.values()) {
@@ -339,61 +347,27 @@ public class GlowManager {
         }
         
         try {
-            int entityId = player.getEntityId();
-            List<EntityData<?>> metadata;
-            try {
-                metadata = new ArrayList<>(SpigotConversionUtil.getEntityMetadata(player));
-                boolean foundFlag = false;
-                for (int i = 0; i < metadata.size(); i++) {
-                    EntityData<?> data = metadata.get(i);
-                    if (data.getIndex() == 0 && data.getType() == EntityDataTypes.BYTE) {
-                        Object valueObj = data.getValue();
-                        byte currentFlags = (valueObj instanceof Byte) ? (Byte) valueObj : 0x00;
-                        byte newFlags = glowing ? (byte) (currentFlags | 0x40)
-                                                : (byte) (currentFlags & ~0x40);
-                        metadata.set(i, new EntityData<>(0, EntityDataTypes.BYTE, newFlags));
-                        foundFlag = true;
-                        break;
-                    }
-                }
-
-                if (!foundFlag) {
-                    byte flags = 0x00;
-                    if (glowing) flags |= 0x40;
-                    if (player.isSneaking()) flags |= 0x02;
-                    if (player.isSprinting()) flags |= 0x08;
-                    if (player.isInvisible()) flags |= 0x20;
-                    metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, flags));
-                }
-            } catch (Exception e) {
-                plugin.debug("SpigotConversionUtil fallback for " + player.getName() + ": " + e.getMessage());
-                byte flags = 0x00;
-                if (glowing) flags |= 0x40;
-                if (player.isSneaking()) flags |= 0x02;
-                if (player.isSprinting()) flags |= 0x08;
-                if (player.isInvisible()) flags |= 0x20;
-                
-                metadata = new ArrayList<>();
-                metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, flags));
-            }
+            int entityId = entityIdCache.computeIfAbsent(playerId, k -> player.getEntityId());
+            List<EntityData<?>> metadata = new ArrayList<>(2);
+            byte flags = 0x00;
+            if (glowing) flags |= 0x40;
+            if (player.isSneaking()) flags |= 0x02;
+            if (player.isSprinting()) flags |= 0x08;
+            if (player.isInvisible()) flags |= 0x20;
+            metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, flags));
             
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                 entityId, 
                 metadata
             );
 
-            List<Player> recipients = new ArrayList<>();
-            if (opponentId != null) {
+            if (opponentId != null && packetPlayerManager != null) {
                 Player opponent = Bukkit.getPlayer(opponentId);
                 if (opponent != null && opponent.isOnline() && !opponent.equals(player)) {
-                    recipients.add(opponent);
+                    try {
+                        packetPlayerManager.sendPacket(opponent, metadataPacket);
+                    } catch (Exception ignored) {}
                 }
-            }
-            
-            for (Player recipient : recipients) {
-                try {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(recipient, metadataPacket);
-                } catch (Exception ignored) {}
             }
             
             lastPacketSent.put(playerId, now);
