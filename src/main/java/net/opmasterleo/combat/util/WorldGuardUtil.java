@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -309,9 +310,10 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     
     private boolean isNearSafezone(Location location) {
         boolean base = isPvpDenied(location);
-        Location checkLoc = location.clone();
+        Location checkLoc = new Location(location.getWorld(), 0, location.getY(), 0);
         for (int i = 1; i <= detectionRadius; i++) {
             checkLoc.setX(location.getX() + i);
+            checkLoc.setZ(location.getZ());
             if (isPvpDenied(checkLoc) != base) return true;
             checkLoc.setX(location.getX() - i);
             if (isPvpDenied(checkLoc) != base) return true;
@@ -320,7 +322,6 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
             if (isPvpDenied(checkLoc) != base) return true;
             checkLoc.setZ(location.getZ() - i);
             if (isPvpDenied(checkLoc) != base) return true;
-            checkLoc.setZ(location.getZ());
         }
         return false;
     }
@@ -336,7 +337,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         }
 
         lastBarrierRender.put(id, now);
-        lastBarrierLocations.put(id, location.clone());
+        lastBarrierLocations.put(id, new Location(location.getWorld(), location.getX(), location.getY(), location.getZ()));
 
         boolean base = isPvpDenied(location);
         Location east = findBorder(location, 1, 0, base);
@@ -355,17 +356,17 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
 
     private Location findBorder(Location origin, int dx, int dz, boolean base) {
-        Location cursor = origin.clone();
+        World world = origin.getWorld();
         double startX = origin.getX();
+        double startY = origin.getY();
         double startZ = origin.getZ();
+        Location cursor = new Location(world, startX, startY, startZ);
         for (int i = 1; i <= detectionRadius; i++) {
             cursor.setX(startX + dx * i);
             cursor.setZ(startZ + dz * i);
             boolean state = isPvpDenied(cursor);
             if (state != base) {
-                cursor.setX(startX + dx * (i - 1));
-                cursor.setZ(startZ + dz * (i - 1));
-                return cursor.clone();
+                return new Location(world, startX + dx * (i - 1), startY, startZ + dz * (i - 1));
             }
         }
         return null;
@@ -374,10 +375,13 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private void createBarrierGroup(Player player, java.util.List<Location> starts) {
         if (starts == null || starts.isEmpty()) return;
         final int maxHeight = Math.min(barrierHeight, 5);
+        Location temp = new Location(null, 0, 0, 0);
         for (Location base : starts) {
             if (base == null) continue;
             final double baseY = base.getY();
-            Location temp = base.clone();
+            temp.setWorld(base.getWorld());
+            temp.setX(base.getX());
+            temp.setZ(base.getZ());
             for (int y = 0; y < maxHeight; y++) {
                 temp.setY(baseY + y);
                 sendBlockChange(player, temp, barrierMaterial);
@@ -387,13 +391,16 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         Location anchor = starts.get(0);
         SchedulerUtil.runRegionTaskLater(plugin, anchor, () -> {
             if (!player.isOnline()) return;
+            Location clearLoc = new Location(null, 0, 0, 0);
             for (Location base : starts) {
                 if (base == null) continue;
                 final double baseY = base.getY();
-                Location temp = base.clone();
+                clearLoc.setWorld(base.getWorld());
+                clearLoc.setX(base.getX());
+                clearLoc.setZ(base.getZ());
                 for (int y = 0; y < maxHeight; y++) {
-                    temp.setY(baseY + y);
-                    resetBlockChange(player, temp);
+                    clearLoc.setY(baseY + y);
+                    resetBlockChange(player, clearLoc);
                 }
             }
         }, 60L);
@@ -478,7 +485,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
     
     private Vector findEscapeDirection(Location playerLoc) {
-        Location check = playerLoc.clone();
+        Location check = new Location(playerLoc.getWorld(), 0, playerLoc.getY(), 0);
         int maxRadius = detectionRadius * 2;
         for (int radius = 1; radius <= maxRadius; radius++) {
             for (int x = -radius; x <= radius; x++) {

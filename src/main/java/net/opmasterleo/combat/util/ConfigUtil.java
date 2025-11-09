@@ -168,7 +168,8 @@ public class ConfigUtil {
     private static String mergeYamlWithComments(String template, Map<String, Object> newValues, Yaml yaml) {
         final String lineSep = template.contains("\r\n") ? "\r\n" : "\n";
         String[] lines = template.split("\r?\n");
-        StringBuilder result = new StringBuilder();
+        StringBuilder result = new StringBuilder(template.length() + 512);
+        StringBuilder pathBuilder = new StringBuilder(128);
         String currentPath = "";
         int indentLevel = 0;
         int lineIndex = 0;
@@ -199,12 +200,21 @@ public class ConfigUtil {
                     if (levels <= indentLevel) {
                         String[] parts = currentPath.split("\\.");
                         if (levels < parts.length) {
-                            currentPath = String.join(".", java.util.Arrays.copyOf(parts, levels)) + (levels > 0 ? "." : "") + key;
+                            pathBuilder.setLength(0);
+                            for (int i = 0; i < levels; i++) {
+                                if (i > 0) pathBuilder.append('.');
+                                pathBuilder.append(parts[i]);
+                            }
+                            if (levels > 0) pathBuilder.append('.');
+                            pathBuilder.append(key);
+                            currentPath = pathBuilder.toString();
                         } else {
                             currentPath = key;
                         }
                     } else {
-                        currentPath = currentPath + "." + key;
+                        pathBuilder.setLength(0);
+                        pathBuilder.append(currentPath).append('.').append(key);
+                        currentPath = pathBuilder.toString();
                     }
                     indentLevel = levels;
                 }
@@ -418,6 +428,9 @@ public class ConfigUtil {
         return concurrentList;
     }
     
+    private static final ThreadLocal<StringBuilder> pathBuilderCache = 
+        ThreadLocal.withInitial(() -> new StringBuilder(128));
+    
     private static Map<String, Object> mergeConfigs(Map<String, Object> defaultConfig, Map<String, Object> userConfig) {
         return mergeConfigs(defaultConfig, userConfig, "");
     }
@@ -433,9 +446,17 @@ public class ConfigUtil {
         }
 
         if (defaultConfig != null) {
+            StringBuilder sb = pathBuilderCache.get();
             for (Map.Entry<String, Object> entry : defaultConfig.entrySet()) {
                 String key = entry.getKey();
-                String childPath = path.isEmpty() ? key : path + "." + key;
+                String childPath;
+                if (path.isEmpty()) {
+                    childPath = key;
+                } else {
+                    sb.setLength(0);
+                    sb.append(path).append('.').append(key);
+                    childPath = sb.toString();
+                }
                 Object defVal = entry.getValue();
                 Object usrVal = merged.get(key);
 
@@ -479,6 +500,7 @@ public class ConfigUtil {
             String key = String.valueOf(entry.getKey());
             merged.put(key, deepCopyConcurrent(entry.getValue()));
         }
+        StringBuilder sb = pathBuilderCache.get();
         for (Map.Entry<?, ?> entry : defMap.entrySet()) {
             String key = String.valueOf(entry.getKey());
             Object defVal = entry.getValue();
@@ -488,7 +510,14 @@ public class ConfigUtil {
                 continue;
             }
             if (defVal instanceof Map<?, ?> defChild && usrVal instanceof Map<?, ?> usrChild) {
-                String childPath = path == null || path.isEmpty() ? key : path + "." + key;
+                String childPath;
+                if (path == null || path.isEmpty()) {
+                    childPath = key;
+                } else {
+                    sb.setLength(0);
+                    sb.append(path).append('.').append(key);
+                    childPath = sb.toString();
+                }
                 merged.put(key, mergeTwoMaps(defChild, usrChild, childPath));
             }
         }

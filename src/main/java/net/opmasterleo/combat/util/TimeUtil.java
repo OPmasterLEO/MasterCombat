@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 public class TimeUtil {
     
     private static final Pattern TIME_PATTERN = Pattern.compile("(\\d+)([smhd])");
+    private static final ThreadLocal<StringBuilder> formatBuilder = 
+        ThreadLocal.withInitial(() -> new StringBuilder(32));
     
     public static long parseTimeToMillis(String timeString) {
         if (timeString == null || timeString.isEmpty()) {
@@ -51,7 +53,8 @@ public class TimeUtil {
         long hours = TimeUnit.MILLISECONDS.toHours(millis) % 24;
         long days = TimeUnit.MILLISECONDS.toDays(millis);
         
-        StringBuilder builder = new StringBuilder();
+        StringBuilder builder = formatBuilder.get();
+        builder.setLength(0);
         
         if (days > 0) {
             builder.append(days).append("d ");

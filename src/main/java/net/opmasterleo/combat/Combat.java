@@ -526,10 +526,11 @@ public class Combat extends JavaPlugin implements Listener {
             }
         }
 
-        long expiry = System.currentTimeMillis() + (getConfig().getLong("General.duration", 0) * 1000L);
+        long now = System.currentTimeMillis();
+        long expiry = now + (getConfig().getLong("General.duration", 0) * 1000L);
 
         CombatRecord playerRecord = combatRecords.get(playerUUID);
-        boolean playerWasInCombat = playerRecord != null && playerRecord.expiry > System.currentTimeMillis();
+        boolean playerWasInCombat = playerRecord != null && playerRecord.expiry > now;
         boolean isSamePlayer = playerUUID.equals(opponentUUID);
 
         combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
@@ -537,7 +538,7 @@ public class Combat extends JavaPlugin implements Listener {
         boolean opponentWasInCombat = false;
         if (!isSamePlayer) {
             CombatRecord opponentRecord = combatRecords.put(opponentUUID, new CombatRecord(expiry, playerUUID));
-            opponentWasInCombat = opponentRecord != null && opponentRecord.expiry > System.currentTimeMillis();
+            opponentWasInCombat = opponentRecord != null && opponentRecord.expiry > now;
         }
 
         if (!playerWasInCombat) {
@@ -568,10 +569,9 @@ public class Combat extends JavaPlugin implements Listener {
             lastActionBarUpdates.put(opponentUUID, 0L);
         }
 
-        long currentTime = System.currentTimeMillis();
-        updateActionBar(player, expiry, currentTime);
+        updateActionBar(player, expiry, now);
         if (!isSamePlayer) {
-            updateActionBar(opponent, expiry, currentTime);
+            updateActionBar(opponent, expiry, now);
         }
     }
 
@@ -751,32 +751,28 @@ public class Combat extends JavaPlugin implements Listener {
                     
                     final String batchKey = "combat-batch-" + s + "-" + e;
                     
+                    long batchCheckTime = System.currentTimeMillis();
                     if (pendingTasks.containsKey(batchKey) && 
-                        System.currentTimeMillis() - pendingTasks.get(batchKey) < 500) {
+                        batchCheckTime - pendingTasks.get(batchKey) < 500) {
                         continue;
                     }
                     
-                    pendingTasks.put(batchKey, System.currentTimeMillis());
-                    
+                    pendingTasks.put(batchKey, batchCheckTime);
                     if (useWorkers && combatWorkerPool != null && !combatWorkerPool.isShutdown()) {
                         combatWorkerPool.submit(() -> {
                             long startTime = System.currentTimeMillis();
                             activeTaskCount.incrementAndGet();
-                            
                             try {
                                 final int batchSize = e - s;
                                 final List<UUID> toEnd = new ArrayList<>(batchSize);
                                 final List<UUID> toActionbar = new ArrayList<>(batchSize);
                                 final Map<UUID, Long> actionbarExpiry = new HashMap<>(batchSize);
-
-                                long currentTime = System.currentTimeMillis();
-
+                                long currentTime = startTime;
                                 for (int i = s; i < e; i++) {
                                     if (i >= reusablePlayerList.size()) break;
                                     UUID uuid = reusablePlayerList.get(i);
                                     CombatRecord record = combatRecords.get(uuid);
                                     if (record == null) continue;
-
                                     if (currentTime >= record.expiry) {
                                         toEnd.add(uuid);
                                     } else {
@@ -790,12 +786,12 @@ public class Combat extends JavaPlugin implements Listener {
 
                                 if (!toEnd.isEmpty() || !toActionbar.isEmpty()) {
                                     if (SchedulerUtil.isFolia()) {
-                                        long syncNow = System.currentTimeMillis();
                                         final List<UUID> finalToEnd = new ArrayList<>(toEnd);
                                         final List<UUID> finalToActionbar = new ArrayList<>(toActionbar);
                                         final Map<UUID, Long> finalActionbarExpiry = new HashMap<>(actionbarExpiry);
                                         
                                         SchedulerUtil.runTask(Combat.this, () -> {
+                                            long syncNow = System.currentTimeMillis();
                                             for (UUID uuid : finalToEnd) {
                                                 Player player = Bukkit.getPlayer(uuid);
                                                 if (player != null) {
@@ -853,12 +849,11 @@ public class Combat extends JavaPlugin implements Listener {
                             } finally {
                                 pendingTasks.remove(batchKey);
                                 activeTaskCount.decrementAndGet();
-                                long execTime = System.currentTimeMillis() - startTime;
+                                long execTime = startTime - batchCheckTime;
                                 taskMetrics.put(batchKey + "-" + execTime, execTime);
                             }
                         });
                     } else {
-                        long currentTime = System.currentTimeMillis();
                         reusableToEnd.clear();
                         reusableToActionbar.clear();
                         reusableActionbarExpiry.clear();
@@ -874,11 +869,11 @@ public class Combat extends JavaPlugin implements Listener {
                                 continue;
                             }
 
-                            if (currentTime >= record.expiry) {
+                            if (batchCheckTime >= record.expiry) {
                                 reusableToEnd.add(uuid);
                             } else {
                                 Long lastUpdate = lastActionBarUpdates.get(uuid);
-                                if (lastUpdate == null || currentTime - lastUpdate >= 150) {
+                                if (lastUpdate == null || batchCheckTime - lastUpdate >= 150) {
                                     reusableToActionbar.add(uuid);
                                     reusableActionbarExpiry.put(uuid, record.expiry);
                                 }
@@ -929,8 +924,8 @@ public class Combat extends JavaPlugin implements Listener {
                                     if (player != null) {
                                         Long expiry = reusableActionbarExpiry.get(uuid);
                                         if (expiry != null) {
-                                            updateActionBar(player, expiry, currentTime);
-                                            lastActionBarUpdates.put(uuid, currentTime);
+                                            updateActionBar(player, expiry, batchCheckTime);
+                                            lastActionBarUpdates.put(uuid, batchCheckTime);
                                         }
                                     }
                                 }
@@ -1071,13 +1066,13 @@ public class Combat extends JavaPlugin implements Listener {
     
     public void forceSetCombat(Player player, Player opponent) {
         if (!combatEnabled || player == null || !isCombatEnabledInWorld(player) || shouldBypass(player)) return;
-        long currentTime = System.currentTimeMillis();
-        long expiry = currentTime + (getConfig().getLong("General.duration", 0) * 1000L);
+        long now = System.currentTimeMillis();
+        long expiry = now + (getConfig().getLong("General.duration", 0) * 1000L);
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent != null ? opponent.getUniqueId() : null;
         
         CombatRecord existing = combatRecords.get(playerUUID);
-        boolean wasInCombat = existing != null && existing.expiry > currentTime;
+        boolean wasInCombat = existing != null && existing.expiry > now;
         
         combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
         
@@ -1098,12 +1093,12 @@ public class Combat extends JavaPlugin implements Listener {
         }
         
         lastActionBarUpdates.put(playerUUID, 0L);
-        updateActionBar(player, expiry, currentTime);
+        updateActionBar(player, expiry, now);
         
         if (opponent != null && !opponent.equals(player)) {
             UUID oppUUID = opponent.getUniqueId();
             CombatRecord oppRecord = combatRecords.get(oppUUID);
-            boolean oppWasInCombat = oppRecord != null && oppRecord.expiry > currentTime;
+            boolean oppWasInCombat = oppRecord != null && oppRecord.expiry > now;
             
             combatRecords.put(oppUUID, new CombatRecord(expiry, playerUUID));
             
@@ -1117,7 +1112,7 @@ public class Combat extends JavaPlugin implements Listener {
             }
             
             lastActionBarUpdates.put(oppUUID, 0L);
-            updateActionBar(opponent, expiry, currentTime);
+            updateActionBar(opponent, expiry, now);
         }
     }
 

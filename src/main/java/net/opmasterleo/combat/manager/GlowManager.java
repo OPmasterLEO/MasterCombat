@@ -121,8 +121,8 @@ public class GlowManager {
                 }
 
                 long now = System.currentTimeMillis();
-                List<Player> playersNeedingGlow = new ArrayList<>();
-                List<UUID> opponentIds = new ArrayList<>();
+                List<Player> playersNeedingGlow = new ArrayList<>(16);
+                List<UUID> opponentIds = new ArrayList<>(16);
                 final Map<UUID, GlowState> glowingPlayersLocal = glowingPlayers;
                 final Map<UUID, Long> lastPacketLocal = lastPacketSent;
                 for (Map.Entry<UUID, GlowState> entry : glowingPlayersLocal.entrySet()) {

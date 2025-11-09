@@ -194,14 +194,15 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             return;
         }
 
+        long now = System.currentTimeMillis();
         if (item.getType() == Material.ENDER_PEARL) {
             if (isEnderpearlOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = enderpearlCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
+                long timeLeft = enderpearlCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(enderpearlCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyEnderpearlCooldown(player)) {
-                enderpearlCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + enderpearlCooldownDuration);
+                enderpearlCooldowns.put(player.getUniqueId(), now + enderpearlCooldownDuration);
             }
         } else if (item.getType() == Material.TRIDENT) {
             if (worldTridentBans.getOrDefault(player.getWorld().getName(), false)) {
@@ -212,11 +213,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
+                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
-                tridentCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + tridentCooldownDuration);
+                tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
             }
         }
     }
@@ -235,13 +236,14 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             return;
         }
 
+        long now = System.currentTimeMillis();
         if (isTridentOnCooldown(player)) {
             event.setCancelled(true);
-            long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
+            long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
             String formattedTime = TimeUtil.formatTime(timeLeft);
             player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
         } else if (shouldApplyTridentCooldown(player)) {
-            tridentCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + tridentCooldownDuration);
+            tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
         }
     }
 
@@ -260,13 +262,14 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
                 return;
             }
 
+            long now = System.currentTimeMillis();
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), System.currentTimeMillis()) - System.currentTimeMillis();
+                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
-                tridentCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + tridentCooldownDuration);
+                tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
             }
         }
     }

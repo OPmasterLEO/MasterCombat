@@ -68,7 +68,9 @@ public final class SchedulerUtil {
                 30L, TimeUnit.SECONDS,
                 new java.util.concurrent.LinkedBlockingQueue<>(1000),
                 r -> {
-                    Thread thread = new Thread(r, "MasterCombat-Worker-" + threadNumber.getAndIncrement());
+                    StringBuilder nameBuilder = new StringBuilder(32);
+                    nameBuilder.append("MasterCombat-Worker-").append(threadNumber.getAndIncrement());
+                    Thread thread = new Thread(r, nameBuilder.toString());
                     thread.setDaemon(true);
                     thread.setPriority(Thread.NORM_PRIORITY - 1);
                     return thread;
@@ -261,8 +263,18 @@ public final class SchedulerUtil {
         return Bukkit.isPrimaryThread() || (!IS_FOLIA && !IS_CANVAS);
     }
 
+    private static final ThreadLocal<StringBuilder> regionKeyBuilder = 
+        ThreadLocal.withInitial(() -> new StringBuilder(64));
+
     private static String getRegionKey(Location location) {
-        return location.getWorld().getName() + ":" + (location.getBlockX() >> 9) + ":" + (location.getBlockZ() >> 9);
+        StringBuilder sb = regionKeyBuilder.get();
+        sb.setLength(0);
+        sb.append(location.getWorld().getName())
+          .append(':')
+          .append(location.getBlockX() >> 9)
+          .append(':')
+          .append(location.getBlockZ() >> 9);
+        return sb.toString();
     }
 
     private static boolean canRunAsync() {
@@ -342,7 +354,9 @@ public final class SchedulerUtil {
             return null;
         } else if (!SUPPORTS_ASYNC) {
             java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "MasterCombat-Delayed-" + System.nanoTime());
+                StringBuilder nameBuilder = new StringBuilder(32);
+                nameBuilder.append("MasterCombat-Delayed-").append(System.nanoTime());
+                Thread t = new Thread(r, nameBuilder.toString());
                 t.setDaemon(true);
                 return t;
             });
@@ -402,7 +416,9 @@ public final class SchedulerUtil {
             return null;
         } else if (!SUPPORTS_ASYNC) {
             java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "MasterCombat-Timer-" + System.nanoTime());
+                StringBuilder nameBuilder = new StringBuilder(32);
+                nameBuilder.append("MasterCombat-Timer-").append(System.nanoTime());
+                Thread t = new Thread(r, nameBuilder.toString());
                 t.setDaemon(true);
                 return t;
             });
