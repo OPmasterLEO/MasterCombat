@@ -6,7 +6,7 @@
 
     <groupId>net.opmasterleo.combat</groupId>
     <artifactId>MasterCombat</artifactId>
-    <version>5.2.6</version>
+    <version>5.2.5</version>
     <packaging>jar</packaging>
     <description>A super combat plugin that have identical system like DonutSMP and more.</description>
 
@@ -179,11 +179,17 @@
             <artifactId>snakeyaml</artifactId>
             <version>2.5</version>
         </dependency>
-        <!-- Added MiniMessage API support -->
         <dependency>
             <groupId>net.kyori</groupId>
             <artifactId>adventure-text-minimessage</artifactId>
             <version>4.25.0</version>
+        </dependency>
+        <!-- Folia's concurrent utilities for high-performance concurrent collections -->
+        <dependency>
+            <groupId>ca.spottedleaf</groupId>
+            <artifactId>concurrentutil</artifactId>
+            <version>0.0.7</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>

@@ -23,7 +23,7 @@ public class PlayerDeathListener implements Listener {
     public void onPlayerDeath(PlayerDeathEvent event) {
         final Player victim = event.getEntity();
         final UUID victimUUID = victim.getUniqueId();
-        final Combat.CombatRecord victimRecord = combat.getCombatRecords().get(victimUUID);
+        final Combat.CombatRecord victimRecord = combat.getCombatRecords().get(Combat.uuidToLong(victimUUID));
         final UUID opponentUUID = victimRecord != null ? victimRecord.opponent : null;
         Player killer = victim.getKiller();
         if (killer == null && opponentUUID != null) {
@@ -67,8 +67,8 @@ public class PlayerDeathListener implements Listener {
     }
 
     private void untagPlayer(UUID uuid, Player player, boolean sendMessage) {
-        combat.getCombatRecords().remove(uuid);
-        combat.getLastActionBarUpdates().remove(uuid);
+        combat.getCombatRecords().remove(Combat.uuidToLong(uuid));
+        combat.getLastActionBarUpdates().remove(Combat.uuidToLong(uuid));
         if (player != null && combat.getGlowManager() != null) {
             combat.getGlowManager().setGlowing(player, false, null);
         }

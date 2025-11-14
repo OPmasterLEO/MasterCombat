@@ -1,8 +1,6 @@
 package net.opmasterleo.combat.listener;
 
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
@@ -21,13 +19,18 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class DirectCombatListener implements PacketListener, Listener {
 
     private static final long PACKET_THROTTLE_MS = 50;
-    private final Map<UUID, Long> lastPacketTime = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> lastPacketTime = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(256);
+
+    private static long uuidToLong(UUID uuid) {
+        return uuid.getMostSignificantBits() ^ uuid.getLeastSignificantBits();
+    }
 
     public DirectCombatListener() {
     }
@@ -50,12 +53,12 @@ public class DirectCombatListener implements PacketListener, Listener {
             Player attacker = (Player) event.getPlayer();
             if (attacker == null) return;
             long currentTime = System.currentTimeMillis();
-            Long lastTime = lastPacketTime.get(attacker.getUniqueId());
+            Long lastTime = lastPacketTime.get(uuidToLong(attacker.getUniqueId()));
             if (lastTime != null && currentTime - lastTime < PACKET_THROTTLE_MS) {
                 event.setCancelled(true);
                 return;
             }
-            lastPacketTime.put(attacker.getUniqueId(), currentTime);
+            lastPacketTime.put(uuidToLong(attacker.getUniqueId()), currentTime);
 
             WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
             if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) {

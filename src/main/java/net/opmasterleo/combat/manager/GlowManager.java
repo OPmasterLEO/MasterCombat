@@ -103,11 +103,9 @@ public class GlowManager {
                 if (!enabled || !glowingConfigEnabled) {
                     return;
                 }
-                final Map<UUID, Combat.CombatRecord> combatRecordsLocal = plugin.getCombatRecords();
                 List<Player> playersToSync = new ArrayList<>();
-                for (Map.Entry<UUID, Combat.CombatRecord> entry : combatRecordsLocal.entrySet()) {
-                    Player p = Bukkit.getPlayer(entry.getKey());
-                    if (p != null && p.isOnline()) {
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (p != null && p.isOnline() && plugin.getCombatRecords().get(Combat.uuidToLong(p.getUniqueId())) != null) {
                         playersToSync.add(p);
                     }
                 }
@@ -195,7 +193,7 @@ public class GlowManager {
         }
         
         UUID playerId = player.getUniqueId();
-        Combat.CombatRecord record = plugin.getCombatRecords().get(playerId);
+        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(playerId));
         boolean shouldGlow = record != null && record.expiry > System.currentTimeMillis();
         
         GlowState currentState = glowingPlayers.get(playerId);

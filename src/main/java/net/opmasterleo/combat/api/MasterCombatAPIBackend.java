@@ -44,7 +44,7 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
         if (uuid == null) return;
         
         Player player = Bukkit.getPlayer(uuid);
-        Combat.CombatRecord record = plugin.getCombatRecords().remove(uuid);
+        Combat.CombatRecord record = plugin.getCombatRecords().remove(Combat.uuidToLong(uuid));
         
         if (player != null && plugin.getGlowManager() != null) {
             plugin.getGlowManager().setGlowing(player, false);
@@ -53,7 +53,7 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
         if (record != null && record.opponent != null) {
             Player opponent = Bukkit.getPlayer(record.opponent);
             if (opponent != null && plugin.getGlowManager() != null) {
-                boolean stillInCombat = plugin.getCombatRecords().containsKey(record.opponent);
+                boolean stillInCombat = plugin.getCombatRecords().get(Combat.uuidToLong(record.opponent)) != null;
                 if (!stillInCombat) {
                     plugin.getGlowManager().setGlowing(opponent, false);
                 }
@@ -118,7 +118,7 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
     @Override
     public int getRemainingCombatTime(UUID uuid) {
         if (uuid == null) return 0;
-        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(uuid));
         if (record == null) return 0;
         long remainingTime = (record.expiry - System.currentTimeMillis()) / 1000L;
         return Math.max(0, (int)remainingTime);
@@ -127,7 +127,7 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
     @Override
     public long getTotalCombatTime(UUID uuid) {
         if (uuid == null) return 0;
-        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(uuid));
         if (record == null) return 0;
         return (System.currentTimeMillis() - record.expiry + 
                 plugin.getConfig().getLong("General.duration", 0) * 1000L) / 1000L;
@@ -136,7 +136,7 @@ public class MasterCombatAPIBackend implements MasterCombatAPI {
     @Override
     public UUID getCombatOpponent(UUID uuid) {
         if (uuid == null) return null;
-        Combat.CombatRecord record = plugin.getCombatRecords().get(uuid);
+        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(uuid));
         return record != null ? record.opponent : null;
     }
 

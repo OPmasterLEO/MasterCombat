@@ -35,6 +35,7 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketListenerCommon;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import net.opmasterleo.combat.api.MasterCombatAPIBackend;
 import net.opmasterleo.combat.api.MasterCombatAPIProvider;
@@ -65,9 +66,9 @@ import net.opmasterleo.combat.util.WorldGuardUtil;
 public class Combat extends JavaPlugin implements Listener {
 
     private static Combat instance;
-    private final ConcurrentHashMap<UUID, CombatRecord> combatRecords = new ConcurrentHashMap<>(512, 0.75f, 64);
-    private final ConcurrentHashMap<UUID, Long> lastActionBarUpdates = new ConcurrentHashMap<>(512, 0.75f, 64);
-    private final ConcurrentHashMap<UUID, Boolean> combatVisibility = new ConcurrentHashMap<>(512, 0.75f, 64);
+    private final ConcurrentLong2ReferenceChainedHashTable<CombatRecord> combatRecords = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> lastActionBarUpdates = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Boolean> combatVisibility = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
     private final List<UUID> reusablePlayerList = new ArrayList<>(512);
     private final List<UUID> reusableToEnd = new ArrayList<>(64);
     private final List<UUID> reusableToActionbar = new ArrayList<>(64);
@@ -529,15 +530,15 @@ public class Combat extends JavaPlugin implements Listener {
         long now = System.currentTimeMillis();
         long expiry = now + (getConfig().getLong("General.duration", 0) * 1000L);
 
-        CombatRecord playerRecord = combatRecords.get(playerUUID);
+        CombatRecord playerRecord = combatRecords.get(uuidToLong(playerUUID));
         boolean playerWasInCombat = playerRecord != null && playerRecord.expiry > now;
         boolean isSamePlayer = playerUUID.equals(opponentUUID);
 
-        combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
+        combatRecords.put(uuidToLong(playerUUID), new CombatRecord(expiry, opponentUUID));
 
         boolean opponentWasInCombat = false;
         if (!isSamePlayer) {
-            CombatRecord opponentRecord = combatRecords.put(opponentUUID, new CombatRecord(expiry, playerUUID));
+            CombatRecord opponentRecord = combatRecords.put(uuidToLong(opponentUUID), new CombatRecord(expiry, playerUUID));
             opponentWasInCombat = opponentRecord != null && opponentRecord.expiry > now;
         }
 
@@ -564,9 +565,9 @@ public class Combat extends JavaPlugin implements Listener {
             if (!playerWasInCombat) glowManager.setGlowing(player, true, opponentUUID);
             if (!isSamePlayer && !opponentWasInCombat) glowManager.setGlowing(opponent, true, playerUUID);
         }
-        lastActionBarUpdates.put(playerUUID, 0L);
+        lastActionBarUpdates.put(uuidToLong(playerUUID), 0L);
         if (!isSamePlayer) {
-            lastActionBarUpdates.put(opponentUUID, 0L);
+            lastActionBarUpdates.put(uuidToLong(opponentUUID), 0L);
         }
 
         updateActionBar(player, expiry, now);
@@ -577,8 +578,8 @@ public class Combat extends JavaPlugin implements Listener {
 
     public void forceCombatCleanup(UUID playerUUID) {
         if (playerUUID == null) return;
-        CombatRecord record = combatRecords.remove(playerUUID);
-        lastActionBarUpdates.remove(playerUUID);
+        CombatRecord record = combatRecords.remove(uuidToLong(playerUUID));
+        lastActionBarUpdates.remove(uuidToLong(playerUUID));
         if (glowingEnabled && glowManager != null) {
             Player player = Bukkit.getPlayer(playerUUID);
             if (player != null) {
@@ -588,10 +589,10 @@ public class Combat extends JavaPlugin implements Listener {
 
         if (record != null && record.opponent != null) {
             UUID opponentUUID = record.opponent;
-            CombatRecord opponentRecord = combatRecords.get(opponentUUID);
+            CombatRecord opponentRecord = combatRecords.get(uuidToLong(opponentUUID));
             if (opponentRecord != null && playerUUID.equals(opponentRecord.opponent)) {
-                combatRecords.remove(opponentUUID);
-                lastActionBarUpdates.remove(opponentUUID);
+                combatRecords.remove(uuidToLong(opponentUUID));
+                lastActionBarUpdates.remove(uuidToLong(opponentUUID));
                 
                 if (glowingEnabled && glowManager != null) {
                     Player opponent = Bukkit.getPlayer(opponentUUID);
@@ -736,7 +737,12 @@ public class Combat extends JavaPlugin implements Listener {
         Runnable timerTask = () -> {
             synchronized (reusablePlayerList) {
                 reusablePlayerList.clear();
-                reusablePlayerList.addAll(combatRecords.keySet());
+                // Iterate through online players to find those in combat
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (combatRecords.get(uuidToLong(p.getUniqueId())) != null) {
+                        reusablePlayerList.add(p.getUniqueId());
+                    }
+                }
                 if (reusablePlayerList.isEmpty()) return;
                 final int total = reusablePlayerList.size();
                 final int currentPoolSize = combatWorkerPool.getPoolSize();
@@ -771,12 +777,12 @@ public class Combat extends JavaPlugin implements Listener {
                                 for (int i = s; i < e; i++) {
                                     if (i >= reusablePlayerList.size()) break;
                                     UUID uuid = reusablePlayerList.get(i);
-                                    CombatRecord record = combatRecords.get(uuid);
+                                    CombatRecord record = combatRecords.get(uuidToLong(uuid));
                                     if (record == null) continue;
                                     if (currentTime >= record.expiry) {
                                         toEnd.add(uuid);
                                     } else {
-                                        Long lastUpdate = lastActionBarUpdates.get(uuid);
+                                        Long lastUpdate = lastActionBarUpdates.get(uuidToLong(uuid));
                                         if (lastUpdate == null || currentTime - lastUpdate >= 150) {
                                             toActionbar.add(uuid);
                                             actionbarExpiry.put(uuid, record.expiry);
@@ -797,8 +803,8 @@ public class Combat extends JavaPlugin implements Listener {
                                                 if (player != null) {
                                                     handleCombatEnd(player);
                                                 }
-                                                combatRecords.remove(uuid);
-                                                lastActionBarUpdates.remove(uuid);
+                                                combatRecords.remove(uuidToLong(uuid));
+                                                lastActionBarUpdates.remove(uuidToLong(uuid));
                                             }
                                             for (UUID uuid : finalToActionbar) {
                                                 Player player = Bukkit.getPlayer(uuid);
@@ -806,7 +812,7 @@ public class Combat extends JavaPlugin implements Listener {
                                                     Long expiry = finalActionbarExpiry.get(uuid);
                                                     if (expiry != null) {
                                                         updateActionBar(player, expiry, syncNow);
-                                                        lastActionBarUpdates.put(uuid, syncNow);
+                                                        lastActionBarUpdates.put(uuidToLong(uuid), syncNow);
                                                     }
                                                 }
                                             }
@@ -819,8 +825,8 @@ public class Combat extends JavaPlugin implements Listener {
                                                 if (player != null) {
                                                     handleCombatEnd(player);
                                                 }
-                                                combatRecords.remove(uuid);
-                                                lastActionBarUpdates.remove(uuid);
+                                                combatRecords.remove(uuidToLong(uuid));
+                                                lastActionBarUpdates.remove(uuidToLong(uuid));
                                             }
                                             if (!toActionbar.isEmpty()) {
                                                 if (toActionbar.size() > 10) {
@@ -838,7 +844,7 @@ public class Combat extends JavaPlugin implements Listener {
                                                         Long expiry = actionbarExpiry.get(uuid);
                                                         if (expiry != null) {
                                                             updateActionBar(player, expiry, syncNow);
-                                                            lastActionBarUpdates.put(uuid, syncNow);
+                                                            lastActionBarUpdates.put(uuidToLong(uuid), syncNow);
                                                         }
                                                     }
                                                 }
@@ -859,20 +865,20 @@ public class Combat extends JavaPlugin implements Listener {
                         reusableActionbarExpiry.clear();
                         for (int i = s; i < e; i++) {
                             UUID uuid = reusablePlayerList.get(i);
-                            CombatRecord record = combatRecords.get(uuid);
+                            CombatRecord record = combatRecords.get(uuidToLong(uuid));
                             if (record == null) continue;
 
                             Player player = Bukkit.getPlayer(uuid);
                             if (player == null) {
-                                combatRecords.remove(uuid);
-                                lastActionBarUpdates.remove(uuid);
+                                combatRecords.remove(uuidToLong(uuid));
+                                lastActionBarUpdates.remove(uuidToLong(uuid));
                                 continue;
                             }
 
                             if (batchCheckTime >= record.expiry) {
                                 reusableToEnd.add(uuid);
                             } else {
-                                Long lastUpdate = lastActionBarUpdates.get(uuid);
+                                Long lastUpdate = lastActionBarUpdates.get(uuidToLong(uuid));
                                 if (lastUpdate == null || batchCheckTime - lastUpdate >= 150) {
                                     reusableToActionbar.add(uuid);
                                     reusableActionbarExpiry.put(uuid, record.expiry);
@@ -896,8 +902,8 @@ public class Combat extends JavaPlugin implements Listener {
                                         if (player != null) {
                                             handleCombatEnd(player);
                                         }
-                                        combatRecords.remove(uuid);
-                                        lastActionBarUpdates.remove(uuid);
+                                        combatRecords.remove(uuidToLong(uuid));
+                                        lastActionBarUpdates.remove(uuidToLong(uuid));
                                     }
                                     for (UUID uuid : finalBatchToActionbar) {
                                         Player player = Bukkit.getPlayer(uuid);
@@ -905,7 +911,7 @@ public class Combat extends JavaPlugin implements Listener {
                                             Long expiry = finalBatchExpiry.get(uuid);
                                             if (expiry != null) {
                                                 updateActionBar(player, expiry, syncNow);
-                                                lastActionBarUpdates.put(uuid, syncNow);
+                                                lastActionBarUpdates.put(uuidToLong(uuid), syncNow);
                                             }
                                         }
                                     }
@@ -916,8 +922,8 @@ public class Combat extends JavaPlugin implements Listener {
                                     if (player != null) {
                                         handleCombatEnd(player);
                                     }
-                                    combatRecords.remove(uuid);
-                                    lastActionBarUpdates.remove(uuid);
+                                    combatRecords.remove(uuidToLong(uuid));
+                                    lastActionBarUpdates.remove(uuidToLong(uuid));
                                 }
                                 for (UUID uuid : reusableToActionbar) {
                                     Player player = Bukkit.getPlayer(uuid);
@@ -925,7 +931,7 @@ public class Combat extends JavaPlugin implements Listener {
                                         Long expiry = reusableActionbarExpiry.get(uuid);
                                         if (expiry != null) {
                                             updateActionBar(player, expiry, batchCheckTime);
-                                            lastActionBarUpdates.put(uuid, batchCheckTime);
+                                            lastActionBarUpdates.put(uuidToLong(uuid), batchCheckTime);
                                         }
                                     }
                                 }
@@ -956,7 +962,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     private void handleCombatEnd(Player player) {
         UUID playerUUID = player.getUniqueId();
-        CombatRecord record = combatRecords.remove(playerUUID);
+        CombatRecord record = combatRecords.remove(uuidToLong(playerUUID));
         if (record == null) return;
         if (glowingEnabled && glowManager != null) {
             glowManager.setGlowing(player, false, null);
@@ -1045,7 +1051,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public boolean isInCombat(Player player) {
-        CombatRecord record = combatRecords.get(player.getUniqueId());
+        CombatRecord record = combatRecords.get(uuidToLong(player.getUniqueId()));
         return record != null && record.expiry > System.currentTimeMillis();
     }
 
@@ -1071,10 +1077,10 @@ public class Combat extends JavaPlugin implements Listener {
         UUID playerUUID = player.getUniqueId();
         UUID opponentUUID = opponent != null ? opponent.getUniqueId() : null;
         
-        CombatRecord existing = combatRecords.get(playerUUID);
+        CombatRecord existing = combatRecords.get(uuidToLong(playerUUID));
         boolean wasInCombat = existing != null && existing.expiry > now;
         
-        combatRecords.put(playerUUID, new CombatRecord(expiry, opponentUUID));
+        combatRecords.put(uuidToLong(playerUUID), new CombatRecord(expiry, opponentUUID));
         
         if (!wasInCombat) {
             if (nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
@@ -1092,15 +1098,15 @@ public class Combat extends JavaPlugin implements Listener {
             }
         }
         
-        lastActionBarUpdates.put(playerUUID, 0L);
+        lastActionBarUpdates.put(uuidToLong(playerUUID), 0L);
         updateActionBar(player, expiry, now);
         
         if (opponent != null && !opponent.equals(player)) {
             UUID oppUUID = opponent.getUniqueId();
-            CombatRecord oppRecord = combatRecords.get(oppUUID);
+            CombatRecord oppRecord = combatRecords.get(uuidToLong(oppUUID));
             boolean oppWasInCombat = oppRecord != null && oppRecord.expiry > now;
             
-            combatRecords.put(oppUUID, new CombatRecord(expiry, playerUUID));
+            combatRecords.put(uuidToLong(oppUUID), new CombatRecord(expiry, playerUUID));
             
             if (!oppWasInCombat) {
                 if (nowInCombatMsg != null && !nowInCombatMsg.isEmpty()) {
@@ -1111,7 +1117,7 @@ public class Combat extends JavaPlugin implements Listener {
                 }
             }
             
-            lastActionBarUpdates.put(oppUUID, 0L);
+            lastActionBarUpdates.put(uuidToLong(oppUUID), 0L);
             updateActionBar(opponent, expiry, now);
         }
     }
@@ -1144,7 +1150,7 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     public Player getCombatOpponent(Player player) {
-        CombatRecord record = combatRecords.get(player.getUniqueId());
+        CombatRecord record = combatRecords.get(uuidToLong(player.getUniqueId()));
         if (record == null || record.opponent == null) {
             return null;
         }
@@ -1154,18 +1160,18 @@ public class Combat extends JavaPlugin implements Listener {
     public void keepPlayerInCombat(Player player) {
         if (player == null) return;
         UUID playerId = player.getUniqueId();
-        CombatRecord record = combatRecords.get(playerId);
+        CombatRecord record = combatRecords.get(uuidToLong(playerId));
         if (record == null) return;
 
         long now = System.currentTimeMillis();
         long expiry = now + 1000L * getConfig().getLong("General.duration", 0);
-        combatRecords.put(playerId, new CombatRecord(expiry, record.opponent));
-        lastActionBarUpdates.put(playerId, 0L);
+        combatRecords.put(uuidToLong(playerId), new CombatRecord(expiry, record.opponent));
+        lastActionBarUpdates.put(uuidToLong(playerId), 0L);
         updateActionBar(player, expiry, now);
         if (record.opponent != null) {
             UUID oppId = record.opponent;
-            combatRecords.put(oppId, new CombatRecord(expiry, playerId));
-            lastActionBarUpdates.put(oppId, 0L);
+            combatRecords.put(uuidToLong(oppId), new CombatRecord(expiry, playerId));
+            lastActionBarUpdates.put(uuidToLong(oppId), 0L);
             Player opponent = Bukkit.getPlayer(oppId);
             if (opponent != null) {
                 updateActionBar(opponent, expiry, now);
@@ -1249,17 +1255,17 @@ public class Combat extends JavaPlugin implements Listener {
     public void setCombatVisibility(Player player, boolean visible) {
         if (player == null) return;
         UUID playerId = player.getUniqueId();
-        combatVisibility.put(playerId, visible);
+        combatVisibility.put(uuidToLong(playerId), visible);
         if (visible) {
-            CombatRecord record = combatRecords.get(playerId);
+            CombatRecord record = combatRecords.get(uuidToLong(playerId));
             if (record != null && record.expiry > System.currentTimeMillis()) {
                 long now = System.currentTimeMillis();
-                lastActionBarUpdates.put(playerId, now);
+                lastActionBarUpdates.put(uuidToLong(playerId), now);
                 updateActionBar(player, record.expiry, now);
                 if (record.opponent != null) {
                     Player opponent = Bukkit.getPlayer(record.opponent);
                     if (opponent != null) {
-                        lastActionBarUpdates.put(record.opponent, now);
+                        lastActionBarUpdates.put(uuidToLong(record.opponent), now);
                         updateActionBar(opponent, record.expiry, now);
                     }
                 }
@@ -1269,7 +1275,7 @@ public class Combat extends JavaPlugin implements Listener {
 
     public boolean isCombatVisible(Player player) {
         if (player == null) return true;
-        return combatVisibility.getOrDefault(player.getUniqueId(), true);
+        return combatVisibility.getOrDefault(uuidToLong(player.getUniqueId()), true);
     }
 
     public void setCombatEnabled(boolean enabled) {
@@ -1298,11 +1304,11 @@ public class Combat extends JavaPlugin implements Listener {
         return respawnAnchorListener;
     }
 
-    public Map<UUID, CombatRecord> getCombatRecords() {
+    public ConcurrentLong2ReferenceChainedHashTable<CombatRecord> getCombatRecords() {
         return combatRecords;
     }
 
-    public ConcurrentHashMap<UUID, Long> getLastActionBarUpdates() {
+    public ConcurrentLong2ReferenceChainedHashTable<Long> getLastActionBarUpdates() {
         return lastActionBarUpdates;
     }
 
@@ -1645,6 +1651,9 @@ public class Combat extends JavaPlugin implements Listener {
     }
 
     private final java.util.concurrent.atomic.AtomicBoolean postInitDone = new java.util.concurrent.atomic.AtomicBoolean(false);
+    public static long uuidToLong(UUID uuid) {
+        return uuid.getMostSignificantBits() ^ uuid.getLeastSignificantBits();
+    }
 
     private void registerRegionInitListener(Class<?> regionInitClass, Listener listenerHolder, EventExecutor executor) {
         if (Event.class.isAssignableFrom(regionInitClass)) {

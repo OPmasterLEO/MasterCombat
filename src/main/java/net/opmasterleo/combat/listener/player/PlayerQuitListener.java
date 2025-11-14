@@ -32,7 +32,7 @@ public class PlayerQuitListener implements Listener {
             return;
         }
 
-        Combat.CombatRecord record = plugin.getCombatRecords().get(playerUUID);
+        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(playerUUID));
         Player opponent = null;
         
         if (record != null && record.opponent != null) {

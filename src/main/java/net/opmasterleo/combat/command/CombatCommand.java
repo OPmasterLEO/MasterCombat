@@ -29,9 +29,9 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
         Combat combat = Combat.getInstance();
-        combat.getCombatRecords().remove(player.getUniqueId());
+        combat.getCombatRecords().remove(Combat.uuidToLong(player.getUniqueId()));
         Player opponent = combat.getCombatOpponent(player);
-        combat.getCombatRecords().remove(player.getUniqueId());
+        combat.getCombatRecords().remove(Combat.uuidToLong(player.getUniqueId()));
         if (combat.getGlowManager() != null) {
             combat.getGlowManager().setGlowing(player, false);
             if (opponent != null) {
@@ -39,8 +39,8 @@ public final class CombatCommand implements CommandExecutor, TabCompleter, Liste
             }
         }
         if (opponent != null) {
-            combat.getCombatRecords().remove(opponent.getUniqueId());
-            combat.getCombatRecords().remove(opponent.getUniqueId());
+            combat.getCombatRecords().remove(Combat.uuidToLong(opponent.getUniqueId()));
+            combat.getCombatRecords().remove(Combat.uuidToLong(opponent.getUniqueId()));
         }
     }
 

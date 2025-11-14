@@ -30,6 +30,7 @@ import com.github.retrooper.packetevents.protocol.player.InteractionHand;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
 import net.opmasterleo.combat.util.TimeUtil;
@@ -47,8 +48,8 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private boolean tridentCooldownEnabled;
     private boolean tridentCombatOnly;
     private boolean tridentGloballyEnabled;
-    private final Map<UUID, Long> enderpearlCooldowns = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> tridentCooldowns = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> enderpearlCooldowns = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> tridentCooldowns = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128);
     private final Map<String, Boolean> worldTridentBans = new ConcurrentHashMap<>();
     private final Map<String, Boolean> worldEnderpearlCooldowns = new ConcurrentHashMap<>();
     private final Map<String, Boolean> worldTridentCooldowns = new ConcurrentHashMap<>();
@@ -62,6 +63,10 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
     private boolean tridentBlockInCombat;
     private String enderpearlCombatMessage;
     private String tridentCombatMessage;
+
+    private static long uuidToLong(UUID uuid) {
+        return uuid.getMostSignificantBits() ^ uuid.getLeastSignificantBits();
+    }
 
     public ItemRestrictionListener() {
         this.plugin = Combat.getInstance();
@@ -198,11 +203,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         if (item.getType() == Material.ENDER_PEARL) {
             if (isEnderpearlOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = enderpearlCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
+                long timeLeft = enderpearlCooldowns.getOrDefault(uuidToLong(player.getUniqueId()), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(enderpearlCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyEnderpearlCooldown(player)) {
-                enderpearlCooldowns.put(player.getUniqueId(), now + enderpearlCooldownDuration);
+                enderpearlCooldowns.put(uuidToLong(player.getUniqueId()), now + enderpearlCooldownDuration);
             }
         } else if (item.getType() == Material.TRIDENT) {
             if (worldTridentBans.getOrDefault(player.getWorld().getName(), false)) {
@@ -213,11 +218,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
+                long timeLeft = tridentCooldowns.getOrDefault(uuidToLong(player.getUniqueId()), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
-                tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
+                tridentCooldowns.put(uuidToLong(player.getUniqueId()), now + tridentCooldownDuration);
             }
         }
     }
@@ -239,11 +244,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
         long now = System.currentTimeMillis();
         if (isTridentOnCooldown(player)) {
             event.setCancelled(true);
-            long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
+            long timeLeft = tridentCooldowns.getOrDefault(uuidToLong(player.getUniqueId()), 0L) - now;
             String formattedTime = TimeUtil.formatTime(timeLeft);
             player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
         } else if (shouldApplyTridentCooldown(player)) {
-            tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
+            tridentCooldowns.put(uuidToLong(player.getUniqueId()), now + tridentCooldownDuration);
         }
     }
 
@@ -265,11 +270,11 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
             long now = System.currentTimeMillis();
             if (isTridentOnCooldown(player)) {
                 event.setCancelled(true);
-                long timeLeft = tridentCooldowns.getOrDefault(player.getUniqueId(), 0L) - now;
+                long timeLeft = tridentCooldowns.getOrDefault(uuidToLong(player.getUniqueId()), 0L) - now;
                 String formattedTime = TimeUtil.formatTime(timeLeft);
                 player.sendActionBar(ChatUtil.parse(tridentCooldownMessage.replace("%time%", formattedTime)));
             } else if (shouldApplyTridentCooldown(player)) {
-                tridentCooldowns.put(player.getUniqueId(), now + tridentCooldownDuration);
+                tridentCooldowns.put(uuidToLong(player.getUniqueId()), now + tridentCooldownDuration);
             }
         }
     }
@@ -305,10 +310,10 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     private boolean isEnderpearlOnCooldown(Player player) {
         UUID playerId = player.getUniqueId();
-        Long cooldownEnd = enderpearlCooldowns.get(playerId);
+        Long cooldownEnd = enderpearlCooldowns.get(uuidToLong(playerId));
         if (cooldownEnd == null) return false;
         if (System.currentTimeMillis() >= cooldownEnd) {
-            enderpearlCooldowns.remove(playerId);
+            enderpearlCooldowns.remove(uuidToLong(playerId));
             return false;
         }
         return true;
@@ -316,10 +321,10 @@ public class ItemRestrictionListener extends PacketListenerAbstract implements L
 
     private boolean isTridentOnCooldown(Player player) {
         UUID playerId = player.getUniqueId();
-        Long cooldownEnd = tridentCooldowns.get(playerId);
+        Long cooldownEnd = tridentCooldowns.get(uuidToLong(playerId));
         if (cooldownEnd == null) return false;
         if (System.currentTimeMillis() >= cooldownEnd) {
-            tridentCooldowns.remove(playerId);
+            tridentCooldowns.remove(uuidToLong(playerId));
             return false;
         }
         return true;
