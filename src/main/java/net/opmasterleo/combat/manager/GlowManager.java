@@ -16,15 +16,16 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.ChatUtil;
 import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class GlowManager {
-    private final Map<UUID, GlowState> glowingPlayers = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> lastPacketSent = new ConcurrentHashMap<>();
-    private final Map<UUID, Integer> entityIdCache = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<GlowState> glowingPlayers = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(256, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> lastPacketSent = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(256, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Integer> entityIdCache = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(256, 0.75f);
     private final Map<String, Team> teamCache = new ConcurrentHashMap<>();
     private Combat plugin;
     private static final long PACKET_THROTTLE_MS = 25;
@@ -67,25 +68,29 @@ public class GlowManager {
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long now = System.currentTimeMillis();
             if (lastPacketSent.size() > CLEANUP_THRESHOLD) {
-                java.util.Iterator<Map.Entry<UUID, Long>> iter = lastPacketSent.entrySet().iterator();
-                while (iter.hasNext()) {
-                    if (now - iter.next().getValue() > 60000) {
-                        iter.remove();
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    long key = Combat.uuidToLong(p.getUniqueId());
+                    Long ts = lastPacketSent.get(key);
+                    if (ts != null && now - ts > 60000) {
+                        lastPacketSent.remove(key);
                     }
                 }
             }
-            
-                if (glowingPlayers.size() > CLEANUP_THRESHOLD) {
-                java.util.Iterator<Map.Entry<UUID, GlowState>> iter = glowingPlayers.entrySet().iterator();
-                while (iter.hasNext()) {
-                    UUID uuid = iter.next().getKey();
-                    Player player = Bukkit.getPlayer(uuid);
-                    if (player == null || !player.isOnline()) {
-                        iter.remove();
-                        entityIdCache.remove(uuid);
+
+            if (glowingPlayers.size() > CLEANUP_THRESHOLD) {
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    long key = Combat.uuidToLong(p.getUniqueId());
+                    GlowState state = glowingPlayers.get(key);
+                    if (state == null) {
+                        continue;
+                    }
+                    if (p == null || !p.isOnline()) {
+                        glowingPlayers.remove(key);
+                        entityIdCache.remove(key);
                     }
                 }
-            }            if (teamCache.size() > CLEANUP_THRESHOLD) {
+            }
+            if (teamCache.size() > CLEANUP_THRESHOLD) {
                 java.util.Iterator<Map.Entry<String, Team>> iter = teamCache.entrySet().iterator();
                 while (iter.hasNext()) {
                     Team team = iter.next().getValue();
@@ -121,18 +126,13 @@ public class GlowManager {
                 long now = System.currentTimeMillis();
                 List<Player> playersNeedingGlow = new ArrayList<>(16);
                 List<UUID> opponentIds = new ArrayList<>(16);
-                final Map<UUID, GlowState> glowingPlayersLocal = glowingPlayers;
-                final Map<UUID, Long> lastPacketLocal = lastPacketSent;
-                for (Map.Entry<UUID, GlowState> entry : glowingPlayersLocal.entrySet()) {
-                    UUID uuid = entry.getKey();
-                    GlowState state = entry.getValue();
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    long key = Combat.uuidToLong(online.getUniqueId());
+                    GlowState state = glowingPlayers.get(key);
                     if (state == null || !state.isGlowing) continue;
-                    Player p = Bukkit.getPlayer(uuid);
-                    if (p == null || !p.isOnline()) continue;
-
-                    Long last = lastPacketLocal.get(uuid);
+                    Long last = lastPacketSent.get(key);
                     if (last == null || now - last >= 300L) {
-                        playersNeedingGlow.add(p);
+                        playersNeedingGlow.add(online);
                         opponentIds.add(state.opponentId);
                     }
                 }
@@ -159,20 +159,19 @@ public class GlowManager {
     public void setGlowing(Player player, boolean glowing, UUID opponentId) {
         if (player == null) return;
         
-        UUID playerId = player.getUniqueId();
-        GlowState currentState = glowingPlayers.get(playerId);
+        long playerKey = Combat.uuidToLong(player.getUniqueId());
+        GlowState currentState = glowingPlayers.get(playerKey);
         
         if (currentState != null && currentState.isGlowing == glowing) {
             return;
         }
 
         if (glowing && (!enabled || !glowingConfigEnabled)) {
-            glowingPlayers.remove(playerId);
+            glowingPlayers.remove(playerKey);
             removeGlowEffect(player);
             return;
         }
-        
-        glowingPlayers.put(playerId, new GlowState(glowing, opponentId));
+        glowingPlayers.put(playerKey, new GlowState(glowing, opponentId));
 
         if (glowing) {
             applyGlowEffect(player, opponentId);
@@ -183,20 +182,19 @@ public class GlowManager {
     
     public boolean syncWithCombat(Player player) {
         if (player == null) return false;
+        long key = Combat.uuidToLong(player.getUniqueId());
         if (!enabled || !glowingConfigEnabled) {
-            GlowState current = glowingPlayers.get(player.getUniqueId());
+            GlowState current = glowingPlayers.get(key);
             if (current != null && current.isGlowing) {
                 setGlowing(player, false, null);
                 return true;
             }
             return false;
         }
-        
-        UUID playerId = player.getUniqueId();
-        Combat.CombatRecord record = plugin.getCombatRecords().get(Combat.uuidToLong(playerId));
+        Combat.CombatRecord record = plugin.getCombatRecords().get(key);
         boolean shouldGlow = record != null && record.expiry > System.currentTimeMillis();
         
-        GlowState currentState = glowingPlayers.get(playerId);
+        GlowState currentState = glowingPlayers.get(key);
         boolean isCurrentlyGlowing = currentState != null && currentState.isGlowing;
         
         if (shouldGlow != isCurrentlyGlowing) {
@@ -210,8 +208,8 @@ public class GlowManager {
     public void trackPlayer(Player player) {
         if (player == null) return;
         
-        UUID playerId = player.getUniqueId();
-        GlowState state = glowingPlayers.get(playerId);
+        long playerKey = Combat.uuidToLong(player.getUniqueId());
+        GlowState state = glowingPlayers.get(playerKey);
         
         if (state != null && state.isGlowing) {
             applyGlowEffect(player, state.opponentId);
@@ -220,24 +218,22 @@ public class GlowManager {
 
     public void untrackPlayer(Player player) {
         if (player == null) return;
-        UUID uuid = player.getUniqueId();
-        glowingPlayers.remove(uuid);
-        lastPacketSent.remove(uuid);
-        entityIdCache.remove(uuid);
+        long key = Combat.uuidToLong(player.getUniqueId());
+        glowingPlayers.remove(key);
+        lastPacketSent.remove(key);
+        entityIdCache.remove(key);
     }
 
     public void cleanup() {
         if (glowingPlayers.isEmpty()) return;
-        for (Map.Entry<UUID, GlowState> entry : glowingPlayers.entrySet()) {
-            Player player = Bukkit.getPlayer(entry.getKey());
-            if (player != null && player.isOnline()) {
-                GlowState state = entry.getValue();
-                if (state != null && state.isGlowing) {
-                    removeGlowEffect(player);
-                }
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            long k = Combat.uuidToLong(p.getUniqueId());
+            GlowState state = glowingPlayers.get(k);
+            if (state != null && state.isGlowing) {
+                removeGlowEffect(p);
             }
         }
-        
+
         glowingPlayers.clear();
         lastPacketSent.clear();
         entityIdCache.clear();
@@ -336,16 +332,23 @@ public class GlowManager {
             if (glowing) return;
         }
         
-        UUID playerId = player.getUniqueId();
+        long playerKey = Combat.uuidToLong(player.getUniqueId());
         long now = System.currentTimeMillis();
-        Long lastSent = lastPacketSent.get(playerId);
+        Long lastSent = lastPacketSent.get(playerKey);
         
         if (lastSent != null && now - lastSent < PACKET_THROTTLE_MS) {
             return;
         }
         
         try {
-            int entityId = entityIdCache.computeIfAbsent(playerId, k -> player.getEntityId());
+            Integer cachedId = entityIdCache.get(playerKey);
+            int entityId;
+            if (cachedId == null) {
+                entityId = player.getEntityId();
+                entityIdCache.put(playerKey, entityId);
+            } else {
+                entityId = cachedId;
+            }
             List<EntityData<?>> metadata = new ArrayList<>(2);
             byte flags = 0x00;
             if (glowing) flags |= 0x40;
@@ -368,7 +371,7 @@ public class GlowManager {
                 }
             }
             
-            lastPacketSent.put(playerId, now);
+            lastPacketSent.put(playerKey, now);
             
         } catch (Exception e) {
             plugin.debug("Failed to set glowing via PacketEvents for " + player.getName() + ": " + e.getMessage());
@@ -382,7 +385,7 @@ public class GlowManager {
 
     public boolean isGlowing(Player player) {
         if (player == null) return false;
-        GlowState state = glowingPlayers.get(player.getUniqueId());
+        GlowState state = glowingPlayers.get(Combat.uuidToLong(player.getUniqueId()));
         return state != null && state.isGlowing;
     }
 

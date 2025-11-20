@@ -1,8 +1,7 @@
 package net.opmasterleo.combat.listener;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.bukkit.GameMode;
 import org.bukkit.entity.EnderCrystal;
@@ -23,6 +22,7 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.manager.SuperVanishManager;
 import net.opmasterleo.combat.util.SchedulerUtil;
@@ -31,9 +31,28 @@ import net.opmasterleo.combat.util.WorldGuardUtil;
 public final class EntityDamageByEntityListener implements PacketListener, Listener {
     private static final long ATTACK_TIMEOUT = 5000;
     private static final long CLEANUP_DELAY = 60L;
+    private static final int CLEANUP_THRESHOLD = 100;
     
-    private final Map<UUID, Player> projectileOwners = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> attackTimestamps = new ConcurrentHashMap<>();
+    private static class AttackData {
+        final Player player;
+        long timestamp;
+        
+        AttackData(Player player) {
+            this.player = player;
+            this.timestamp = System.currentTimeMillis();
+        }
+        
+        void updateTimestamp() {
+            this.timestamp = System.currentTimeMillis();
+        }
+        
+        boolean isExpired(long now) {
+            return now - timestamp > ATTACK_TIMEOUT;
+        }
+    }
+    
+    private final ConcurrentLong2ReferenceChainedHashTable<AttackData> attackData = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
+    private final List<AttackData> attackDataList = new ArrayList<>(128);
     private final Combat combatInstance = Combat.getInstance();
     private boolean initialized = false;
     private NewbieProtectionListener protectionListener;
@@ -83,27 +102,31 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
         if (useItemPacket.getHand() != com.github.retrooper.packetevents.protocol.player.InteractionHand.MAIN_HAND) return;
         
         Player shooter = (Player) event.getPlayer();
-        UUID shooterId = shooter.getUniqueId();
-        projectileOwners.put(shooterId, shooter);
-        attackTimestamps.put(shooterId, System.currentTimeMillis());
-        
-        scheduleCleanup();
+        long shooterKey = Combat.uuidToLong(shooter.getUniqueId());
+        AttackData existing = attackData.get(shooterKey);
+        if (existing != null) {
+            existing.updateTimestamp();
+        } else {
+            AttackData data = new AttackData(shooter);
+            attackData.put(shooterKey, data);
+            attackDataList.add(data);
+        }
+        if (attackData.size() >= CLEANUP_THRESHOLD) {
+            scheduleCleanup();
+        }
     }
 
     private void scheduleCleanup() {
-        if (attackTimestamps.size() < 100) return;
-        
         SchedulerUtil.runTaskLater(combatInstance, () -> {
             long now = System.currentTimeMillis();
-            java.util.Iterator<Map.Entry<UUID, Long>> iter = attackTimestamps.entrySet().iterator();
-            while (iter.hasNext()) {
-                Map.Entry<UUID, Long> entry = iter.next();
-                if (now - entry.getValue() > ATTACK_TIMEOUT) {
-                    UUID uuid = entry.getKey();
-                    iter.remove();
-                    projectileOwners.remove(uuid);
+            attackDataList.removeIf(data -> {
+                boolean expired = data.isExpired(now) || data.player == null || !data.player.isOnline();
+                if (expired) {
+                    long key = Combat.uuidToLong(data.player.getUniqueId());
+                    attackData.remove(key);
                 }
-            }
+                return expired;
+            });
         }, CLEANUP_DELAY);
     }
 
@@ -162,20 +185,18 @@ public final class EntityDamageByEntityListener implements PacketListener, Liste
     }
 
     private Player findLatestAttacker() {
-        if (projectileOwners.isEmpty()) return null;
-        
-        Player latestAttacker = null;
-        long latestTimestamp = 0;
-        final Map<UUID, Long> attackTimestampsLocal = attackTimestamps;
-        for (Map.Entry<UUID, Player> entry : projectileOwners.entrySet()) {
-            UUID playerId = entry.getKey();
-            Long timestamp = attackTimestampsLocal.get(playerId);
-            if (timestamp != null && timestamp > latestTimestamp) {
-                latestTimestamp = timestamp;
-                latestAttacker = entry.getValue();
+        if (attackDataList.isEmpty()) return null;
+        AttackData latest = null;
+        long latestTimestamp = 0L;
+        for (int i = 0; i < attackDataList.size(); i++) {
+            AttackData data = attackDataList.get(i);
+            if (data == null) continue;
+            if (data.timestamp > latestTimestamp) {
+                latestTimestamp = data.timestamp;
+                latest = data;
             }
         }
-        return latestAttacker;
+        return latest != null ? latest.player : null;
     }
 
     private void setKillerIfLethal(Player victim, double damage, Player killer) {

@@ -17,8 +17,9 @@ import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class CrystalManager {
-    private static final long CLEANUP_INTERVAL = TimeUnit.MINUTES.toMillis(1);
+    private static final long CLEANUP_INTERVAL = TimeUnit.SECONDS.toMillis(30);
     private static final long CRYSTAL_EXPIRY = TimeUnit.MINUTES.toMillis(5);
+    private static final int CLEANUP_THRESHOLD = 500;
     private long lastCleanup = System.currentTimeMillis();
     private final Combat plugin;
 
@@ -33,8 +34,8 @@ public class CrystalManager {
             this.worldName = worldName;
         }
 
-        boolean isExpired() {
-            return System.currentTimeMillis() - timestamp > CRYSTAL_EXPIRY;
+        boolean isExpired(long now) {
+            return now - timestamp > CRYSTAL_EXPIRY;
         }
     }
 
@@ -62,17 +63,11 @@ public class CrystalManager {
         UUID placerId = placer.getUniqueId();
 
         crystalData.putIfAbsent(crystalId, new CrystalData(placerId, crystal.getWorld().getName()));
-        Set<UUID> crystals = playerCrystals.get(placerId);
-        if (crystals == null) {
-            crystals = ConcurrentHashMap.newKeySet();
-            Set<UUID> existing = playerCrystals.putIfAbsent(placerId, crystals);
-            if (existing != null) {
-                crystals = existing;
-            }
-        }
-        crystals.add(crystalId);
+        playerCrystals.computeIfAbsent(placerId, k -> ConcurrentHashMap.newKeySet()).add(crystalId);
 
-        if (System.currentTimeMillis() - lastCleanup > CLEANUP_INTERVAL) {
+        long now = System.currentTimeMillis();
+        if (crystalData.size() > CLEANUP_THRESHOLD && now - lastCleanup > CLEANUP_INTERVAL) {
+            lastCleanup = now;
             plugin.getCombatWorkerPool().execute(this::cleanupExpiredEntries);
         }
     }
@@ -83,7 +78,8 @@ public class CrystalManager {
         CrystalData data = crystalData.get(crystal.getUniqueId());
         if (data == null) return null;
 
-        if (data.isExpired()) {
+        long now = System.currentTimeMillis();
+        if (data.isExpired(now)) {
             removeCrystal(crystal);
             return null;
         }
@@ -110,41 +106,43 @@ public class CrystalManager {
 
     private void cleanupExpiredEntries() {
         if (crystalData.isEmpty()) return;
-        lastCleanup = System.currentTimeMillis();
 
-        final Map<String, World> worldCache = new HashMap<>();
+        final Map<String, World> worldCache = new HashMap<>(4);
         for (World world : Bukkit.getWorlds()) {
             worldCache.put(world.getName(), world);
         }
+        final long now = System.currentTimeMillis();
 
         Bukkit.getScheduler().runTask(plugin, () -> {
-            java.util.Iterator<Map.Entry<UUID, CrystalData>> iter = crystalData.entrySet().iterator();
-            while (iter.hasNext()) {
-                Map.Entry<UUID, CrystalData> entry = iter.next();
-                UUID crystalId = entry.getKey();
+            crystalData.entrySet().removeIf(entry -> {
                 CrystalData data = entry.getValue();
-                if (data == null || data.isExpired()) {
-                    iter.remove();
-                    continue;
-                }
+                if (data == null || data.isExpired(now)) return true;
+                
                 World world = worldCache.get(data.worldName);
-                if (world == null) {
-                    iter.remove();
-                    continue;
-                }
-                Entity entity = world.getEntity(crystalId);
-                if (entity == null || !entity.isValid() || entity.isDead()) {
-                    iter.remove();
-                }
-            }
-
-            playerCrystals.entrySet().removeIf(entry -> {
-                entry.getValue().removeIf(crystalId -> !crystalData.containsKey(crystalId));
-                return entry.getValue().isEmpty();
+                if (world == null) return true;
+                
+                Entity entity = world.getEntity(entry.getKey());
+                return entity == null || !entity.isValid() || entity.isDead();
             });
+
+            playerCrystals.values().forEach(crystals -> 
+                crystals.removeIf(crystalId -> !crystalData.containsKey(crystalId))
+            );
+            playerCrystals.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+            
             if (plugin.isDebugEnabled()) {
-                plugin.debug("Cleaned up expired crystal entries");
+                plugin.debug("Crystal cleanup: " + crystalData.size() + " tracked");
             }
         });
+    }
+
+    public void cleanup() {
+        try {
+            crystalData.clear();
+            playerCrystals.clear();
+            if (plugin.isDebugEnabled()) {
+                plugin.debug("CrystalManager cleanup complete.");
+            }
+        } catch (Exception ignored) {}
     }
 }

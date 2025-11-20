@@ -2,10 +2,6 @@ package net.opmasterleo.combat.listener;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -24,6 +20,7 @@ import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
 import net.opmasterleo.combat.util.SchedulerUtil;
 
@@ -35,9 +32,7 @@ public class EndCrystalListener implements PacketListener, Listener {
         packetEventsEnabled = false;
     }
 
-    private final Map<UUID, Long> recentExplosions = new ConcurrentHashMap<>(256);
-    private final AtomicInteger pendingTasks = new AtomicInteger(0);
-    private static final int MAX_PENDING_TASKS = 10;
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> recentExplosions = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(256, 0.75f);
 
     public EndCrystalListener() {
     }
@@ -50,6 +45,21 @@ public class EndCrystalListener implements PacketListener, Listener {
             }
         } catch (Exception ignored) {
         }
+        startPeriodicCleanup(plugin);
+    }
+
+    private void startPeriodicCleanup(Combat plugin) {
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            long now = System.currentTimeMillis();
+            long expiryThreshold = now - 5000L;
+            for (org.bukkit.entity.Player p : plugin.getServer().getOnlinePlayers()) {
+                long key = Combat.uuidToLong(p.getUniqueId());
+                Long timestamp = recentExplosions.get(key);
+                if (timestamp != null && timestamp < expiryThreshold) {
+                    recentExplosions.remove(key);
+                }
+            }
+        }, 100L, 100L);
     }
 
     @Override
@@ -103,22 +113,9 @@ public class EndCrystalListener implements PacketListener, Listener {
         if (event.getEntity().getType() != EntityType.END_CRYSTAL) return;
 
         Entity crystal = event.getEntity();
-        UUID explosionId = UUID.randomUUID();
-        recentExplosions.put(explosionId, System.currentTimeMillis());
-        crystal.setMetadata("explosion_id", new FixedMetadataValue(Combat.getInstance(), explosionId));
-
-        if (pendingTasks.incrementAndGet() <= MAX_PENDING_TASKS) {
-            SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
-                try {
-                    long now = System.currentTimeMillis();
-                    recentExplosions.entrySet().removeIf(entry -> now - entry.getValue() > 5000);
-                } finally {
-                    pendingTasks.decrementAndGet();
-                }
-            }, 100L);
-        } else {
-            pendingTasks.decrementAndGet();
-        }
+        long explosionKey = Combat.uuidToLong(crystal.getUniqueId());
+        recentExplosions.put(explosionKey, System.currentTimeMillis());
+        crystal.setMetadata("explosion_id", new FixedMetadataValue(Combat.getInstance(), explosionKey));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

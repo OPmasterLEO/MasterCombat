@@ -1,8 +1,6 @@
 package net.opmasterleo.combat.listener;
 
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -19,8 +17,8 @@ import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUseItem;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerExplosion;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
-import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class BedExplosionListener implements PacketListener, Listener {
 
@@ -30,9 +28,8 @@ public class BedExplosionListener implements PacketListener, Listener {
         packetEventsEnabled = false;
     }
 
-    private final Map<UUID, Player> recentBedInteractions = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> interactionTimestamps = new ConcurrentHashMap<>();
-    private static final long INTERACTION_TIMEOUT = 5000L;
+    private final ConcurrentLong2ReferenceChainedHashTable<Player> recentBedInteractions = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(64, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> interactionTimestamps = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(64, 0.75f);
 
     public BedExplosionListener() {
     }
@@ -45,6 +42,23 @@ public class BedExplosionListener implements PacketListener, Listener {
             }
         } catch (Exception ignored) {
         }
+        startPeriodicCleanup(plugin);
+    }
+
+    private void startPeriodicCleanup(Combat plugin) {
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            long now = System.currentTimeMillis();
+            long expiryThreshold = now - 10000L;
+            int removed = 0;
+            for (long key = 0; key < Long.MAX_VALUE && removed < 100; key++) {
+                Long timestamp = interactionTimestamps.get(key);
+                if (timestamp != null && timestamp < expiryThreshold) {
+                    interactionTimestamps.remove(key);
+                    recentBedInteractions.remove(key);
+                    removed++;
+                }
+            }
+        }, 200L, 200L);
     }
 
     @Override
@@ -68,18 +82,10 @@ public class BedExplosionListener implements PacketListener, Listener {
             if (!blockTypeName.endsWith("_BED")) return;
 
             Location bedLocation = targetBlock.getLocation();
-            String locationKey = bedLocation.getBlockX() + "," + bedLocation.getBlockY() + "," + bedLocation.getBlockZ();
-            UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
-            recentBedInteractions.put(bedId, player);
+            long bedKey = ((long)bedLocation.getBlockX() << 40) | ((long)bedLocation.getBlockY() << 20) | bedLocation.getBlockZ();
+            recentBedInteractions.put(bedKey, player);
             long currentTime = System.currentTimeMillis();
-            interactionTimestamps.put(bedId, currentTime);
-            
-            SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
-                long now = System.currentTimeMillis();
-                interactionTimestamps.entrySet().removeIf(entry ->
-                    now - entry.getValue() > INTERACTION_TIMEOUT);
-                recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
-            }, 200L);
+            interactionTimestamps.put(bedKey, currentTime);
         } catch (Throwable ignored) {}
     }
 
@@ -108,9 +114,8 @@ public class BedExplosionListener implements PacketListener, Listener {
     private void handleExplosion(Player victim, Location explosionLocation) {
         Combat combat = Combat.getInstance();
         if (!combat.getConfig().getBoolean("link-bed-explosions", true)) return;
-        String locationKey = explosionLocation.getBlockX() + "," + explosionLocation.getBlockY() + "," + explosionLocation.getBlockZ();
-        UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
-        Player activator = recentBedInteractions.get(bedId);
+        long bedKey = ((long)explosionLocation.getBlockX() << 40) | ((long)explosionLocation.getBlockY() << 20) | explosionLocation.getBlockZ();
+        Player activator = recentBedInteractions.get(bedKey);
 
         if (activator != null && activator.isOnline()) {
             if (combat.getSuperVanishManager() != null &&
@@ -139,7 +144,8 @@ public class BedExplosionListener implements PacketListener, Listener {
     }
 
     public Player getBedActivator(UUID bedId) {
-        return recentBedInteractions.get(bedId);
+        long bedKey = Combat.uuidToLong(bedId);
+        return recentBedInteractions.get(bedKey);
     }
 
     public void cleanup() {
@@ -149,16 +155,8 @@ public class BedExplosionListener implements PacketListener, Listener {
 
     public void registerPotentialExplosion(Location location, Player player) {
         if (location == null || player == null) return;
-        String locationKey = location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
-        UUID bedId = UUID.nameUUIDFromBytes(locationKey.getBytes());
-        recentBedInteractions.put(bedId, player);
-        long currentTime = System.currentTimeMillis();
-        interactionTimestamps.put(bedId, currentTime);
-        SchedulerUtil.runTaskLaterAsync(Combat.getInstance(), () -> {
-            long now = System.currentTimeMillis();
-            interactionTimestamps.entrySet().removeIf(entry ->
-                now - entry.getValue() > INTERACTION_TIMEOUT);
-            recentBedInteractions.keySet().retainAll(interactionTimestamps.keySet());
-        }, 200L);
+        long bedKey = ((long)location.getBlockX() << 40) | ((long)location.getBlockY() << 20) | location.getBlockZ();
+        recentBedInteractions.put(bedKey, player);
+        interactionTimestamps.put(bedKey, System.currentTimeMillis());
     }
 }

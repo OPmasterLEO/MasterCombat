@@ -69,6 +69,13 @@ public class Combat extends JavaPlugin implements Listener {
     private final ConcurrentLong2ReferenceChainedHashTable<CombatRecord> combatRecords = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
     private final ConcurrentLong2ReferenceChainedHashTable<Long> lastActionBarUpdates = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
     private final ConcurrentLong2ReferenceChainedHashTable<Boolean> combatVisibility = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(512, 0.75f);
+    private static final int POOL_SIZE = 256;
+    private final java.util.concurrent.ConcurrentLinkedQueue<CombatRecord> recordPool = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.concurrent.atomic.AtomicInteger poolHits = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger poolMisses = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger totalAcquisitions = new java.util.concurrent.atomic.AtomicInteger();
+    private static final int POOL_LOG_INTERVAL = 1000; // log after this many acquisitions
+    
     private final List<UUID> reusablePlayerList = new ArrayList<>(512);
     private final List<UUID> reusableToEnd = new ArrayList<>(64);
     private final List<UUID> reusableToActionbar = new ArrayList<>(64);
@@ -129,15 +136,58 @@ public class Combat extends JavaPlugin implements Listener {
     private static final double LOW_CPU_THRESHOLD = 0.30;
 
     public static class CombatRecord {
-        public final long expiry;
-        public final UUID opponent;
-
+        public long expiry;
+        public UUID opponent;
+        
+        public CombatRecord() {}
+        
         public CombatRecord(long expiry, UUID opponent) {
             this.expiry = expiry;
             this.opponent = opponent;
         }
+        
+        public CombatRecord set(long expiry, UUID opponent) {
+            this.expiry = expiry;
+            this.opponent = opponent;
+            return this;
+        }
+        
+        public void reset() {
+            this.expiry = 0;
+            this.opponent = null;
+        }
     }
-
+    
+    private CombatRecord acquireRecord(long expiry, UUID opponent) {
+        int acquisitions = totalAcquisitions.incrementAndGet();
+        CombatRecord record = recordPool.poll();
+        if (record != null) {
+            poolHits.incrementAndGet();
+            CombatRecord r = record.set(expiry, opponent);
+            if (acquisitions % POOL_LOG_INTERVAL == 0) {
+                debug(String.format("[Pool] acquisitions=%d hits=%d misses=%d poolSize=%d", acquisitions, poolHits.get(), poolMisses.get(), recordPool.size()));
+            }
+            return r;
+        }
+        poolMisses.incrementAndGet();
+        if (acquisitions % POOL_LOG_INTERVAL == 0) {
+            debug(String.format("[Pool] acquisitions=%d hits=%d misses=%d poolSize=%d", acquisitions, poolHits.get(), poolMisses.get(), recordPool.size()));
+        }
+        return new CombatRecord(expiry, opponent);
+    }
+    
+    private void releaseRecord(CombatRecord record) {
+        if (record == null || recordPool.size() >= POOL_SIZE) return;
+        record.reset();
+        recordPool.offer(record);
+    }
+    
+    private void warmPool() {
+        for (int i = 0; i < POOL_SIZE / 2; i++) {
+            recordPool.offer(new CombatRecord());
+        }
+    }
+    
     private void loadConfigValues() {
         reloadConfig();
         org.bukkit.configuration.file.FileConfiguration cfg = getConfig();
@@ -233,6 +283,10 @@ public class Combat extends JavaPlugin implements Listener {
                 debug("Failed to initialize WorldGuard integration: " + e.getMessage());
             }
         }
+
+        // Pre-warm the object pool for combat records
+        warmPool();
+        debug("Object pool pre-warmed with " + recordPool.size() + " records");
     }
 
     private void registerCommands() {
@@ -464,6 +518,8 @@ public class Combat extends JavaPlugin implements Listener {
 
         combatRecords.clear();
         lastActionBarUpdates.clear();
+        combatVisibility.clear();
+        recordPool.clear();
 
         getLogger().info("MasterCombat shutdown complete.");
     }
@@ -471,10 +527,15 @@ public class Combat extends JavaPlugin implements Listener {
     private void cleanUpPlayerData() {
         combatRecords.clear();
         lastActionBarUpdates.clear();
+        combatVisibility.clear();
+        recordPool.clear();
         if (glowManager != null) {
             glowManager.cleanup();
         }
-        debug("Player data cleaned up successfully.");
+        if (crystalManager != null) {
+            crystalManager.cleanup();
+        }
+        debug("Player data and caches cleaned up successfully.");
     }
 
     public boolean isPluginEnabled() {
@@ -529,17 +590,26 @@ public class Combat extends JavaPlugin implements Listener {
 
         long now = System.currentTimeMillis();
         long expiry = now + (getConfig().getLong("General.duration", 0) * 1000L);
+        long playerKey = uuidToLong(playerUUID);
 
-        CombatRecord playerRecord = combatRecords.get(uuidToLong(playerUUID));
+        CombatRecord playerRecord = combatRecords.get(playerKey);
         boolean playerWasInCombat = playerRecord != null && playerRecord.expiry > now;
         boolean isSamePlayer = playerUUID.equals(opponentUUID);
 
-        combatRecords.put(uuidToLong(playerUUID), new CombatRecord(expiry, opponentUUID));
+        if (playerRecord != null && !playerWasInCombat) {
+            releaseRecord(playerRecord);
+        }
+        combatRecords.put(playerKey, acquireRecord(expiry, opponentUUID));
 
         boolean opponentWasInCombat = false;
         if (!isSamePlayer) {
-            CombatRecord opponentRecord = combatRecords.put(uuidToLong(opponentUUID), new CombatRecord(expiry, playerUUID));
+            long opponentKey = uuidToLong(opponentUUID);
+            CombatRecord opponentRecord = combatRecords.get(opponentKey);
             opponentWasInCombat = opponentRecord != null && opponentRecord.expiry > now;
+            if (opponentRecord != null && !opponentWasInCombat) {
+                releaseRecord(opponentRecord);
+            }
+            combatRecords.put(opponentKey, acquireRecord(expiry, playerUUID));
         }
 
         if (!playerWasInCombat) {
@@ -565,7 +635,7 @@ public class Combat extends JavaPlugin implements Listener {
             if (!playerWasInCombat) glowManager.setGlowing(player, true, opponentUUID);
             if (!isSamePlayer && !opponentWasInCombat) glowManager.setGlowing(opponent, true, playerUUID);
         }
-        lastActionBarUpdates.put(uuidToLong(playerUUID), 0L);
+        lastActionBarUpdates.put(playerKey, 0L);
         if (!isSamePlayer) {
             lastActionBarUpdates.put(uuidToLong(opponentUUID), 0L);
         }

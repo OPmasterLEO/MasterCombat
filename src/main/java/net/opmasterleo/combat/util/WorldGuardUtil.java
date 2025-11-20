@@ -2,8 +2,6 @@ package net.opmasterleo.combat.util;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -31,6 +29,7 @@ import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
 import com.sk89q.worldguard.protection.regions.RegionQuery;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.opmasterleo.combat.Combat;
 
 public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
@@ -50,10 +49,10 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     private boolean bypassEnabled;
     private boolean opBypass;
     private String bypassPermission;
-    private final Map<UUID, Long> lastBarrierWarning = new ConcurrentHashMap<>();
-    private final Map<UUID, Location> lastBarrierLocations = new ConcurrentHashMap<>();
-    private final Map<UUID, Vector3d> lastPositions = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> lastBarrierRender = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> lastBarrierWarning = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Location> lastBarrierLocations = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Vector3d> lastPositions = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> lastBarrierRender = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
     private static final long BARRIER_RENDER_INTERVAL_MS = 100L;
     private final java.util.concurrent.atomic.AtomicLong wgPackets = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong exitNotInCombat = new java.util.concurrent.atomic.AtomicLong();
@@ -140,26 +139,18 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     bypassPermission = (cfgPerm == null || cfgPerm.isBlank()) ? defPerm : cfgPerm;
         SchedulerUtil.runTaskTimerAsync(plugin, () -> {
             long currentTime = System.currentTimeMillis();
-            java.util.Iterator<Map.Entry<UUID, Long>> warningIter = lastBarrierWarning.entrySet().iterator();
-            while (warningIter.hasNext()) {
-                if (currentTime - warningIter.next().getValue() > 10000) {
-                    warningIter.remove();
+            for (Player p : plugin.getServer().getOnlinePlayers()) {
+                long key = Combat.uuidToLong(p.getUniqueId());
+                Long warningTime = lastBarrierWarning.get(key);
+                if (warningTime != null && currentTime - warningTime > 10000) {
+                    lastBarrierWarning.remove(key);
                 }
-            }
-            
-            java.util.Iterator<Map.Entry<UUID, Location>> locationIter = lastBarrierLocations.entrySet().iterator();
-            while (locationIter.hasNext()) {
-                UUID uuid = locationIter.next().getKey();
-                Player p = plugin.getServer().getPlayer(uuid);
-                if (p == null || !plugin.isInCombat(p)) {
-                    locationIter.remove();
+                if (!plugin.isInCombat(p)) {
+                    lastBarrierLocations.remove(key);
                 }
-            }
-            
-            java.util.Iterator<Map.Entry<UUID, Long>> renderIter = lastBarrierRender.entrySet().iterator();
-            while (renderIter.hasNext()) {
-                if (currentTime - renderIter.next().getValue() > 10000) {
-                    renderIter.remove();
+                Long renderTime = lastBarrierRender.get(key);
+                if (renderTime != null && currentTime - renderTime > 10000) {
+                    lastBarrierRender.remove(key);
                 }
             }
         }, 60L, 60L);
@@ -193,14 +184,15 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
                     newPos = wrapper.getPosition();
                 }
 
-                Vector3d lastPos = lastPositions.get(player.getUniqueId());
+                long playerKey = Combat.uuidToLong(player.getUniqueId());
+                Vector3d lastPos = lastPositions.get(playerKey);
                 if (lastPos != null) {
                     double deltaX = Math.abs(newPos.getX() - lastPos.getX());
                     double deltaZ = Math.abs(newPos.getZ() - lastPos.getZ());
                     if (deltaX < 0.01 && deltaZ < 0.01) { if (dbg) exitSmallDelta.incrementAndGet(); return; }
                 }
                 
-                lastPositions.put(player.getUniqueId(), newPos);
+                lastPositions.put(playerKey, newPos);
                 Location to = new Location(player.getWorld(), newPos.getX(), newPos.getY(), newPos.getZ());
                 Location from = lastPos != null
                     ? new Location(player.getWorld(), lastPos.getX(), lastPos.getY(), lastPos.getZ())
@@ -243,7 +235,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
         if (inCombat && isNearSafezone(to)) {
             createVisualBarrier(player, to);
         } else {
-            lastBarrierLocations.remove(player.getUniqueId());
+            lastBarrierLocations.remove(Combat.uuidToLong(player.getUniqueId()));
         }
 
         if (inCombat && !shouldBypass(player)) {
@@ -327,7 +319,7 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
     }
     
     private void createVisualBarrier(Player player, Location location) {
-        UUID id = player.getUniqueId();
+        long id = Combat.uuidToLong(player.getUniqueId());
         long now = System.currentTimeMillis();
         Long lastTime = lastBarrierRender.get(id);
         if (lastTime != null && (now - lastTime) < BARRIER_RENDER_INTERVAL_MS) return;
@@ -457,14 +449,14 @@ public class WorldGuardUtil extends PacketListenerAbstract implements Listener {
 
     @EventHandler
     public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
-        UUID id = event.getPlayer().getUniqueId();
+        long id = Combat.uuidToLong(event.getPlayer().getUniqueId());
         lastBarrierWarning.remove(id);
         lastBarrierLocations.remove(id);
         lastPositions.remove(id);
     }
     
     private void pushPlayerBack(Player player) {
-        UUID playerId = player.getUniqueId();
+        long playerId = Combat.uuidToLong(player.getUniqueId());
         long now = System.currentTimeMillis();
         Long lastWarning = lastBarrierWarning.get(playerId);
         if (lastWarning != null && now - lastWarning < 1000) {

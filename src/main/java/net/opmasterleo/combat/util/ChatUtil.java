@@ -14,6 +14,8 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class ChatUtil {
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
+    private static final Component EMPTY_COMPONENT = Component.empty();
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
 
     private static final MiniMessage MINI_MESSAGE = MiniMessage.builder()
         .tags(TagResolver.builder()
@@ -26,24 +28,39 @@ public class ChatUtil {
 
     public static Component parse(String message) {
         if (message == null || message.isEmpty()) {
-            return Component.empty();
+            return EMPTY_COMPONENT;
+        }
+        
+        final int length = message.length();
+        if (length > 500) {
+            return Component.text(message.substring(0, 500));
         }
 
-        if (message.indexOf('&') == -1 && message.indexOf('<') == -1 && message.indexOf('§') == -1) {
+        final boolean hasAmpersand = message.indexOf('&') != -1;
+        final boolean hasMiniMsg = message.indexOf('<') != -1 && message.indexOf('>') != -1;
+        final boolean hasSection = message.indexOf('§') != -1;
+        
+        if (!hasAmpersand && !hasMiniMsg && !hasSection) {
             return Component.text(message);
         }
 
-        if (message.indexOf('<') != -1 && message.indexOf('>') != -1) {
+        if (hasMiniMsg) {
             try {
                 return MINI_MESSAGE.deserialize(message);
             } catch (Exception e) {
             }
         }
 
-        String processed = message.replace('&', '§');
-        if (processed.indexOf('#') == -1) {
+        if (!hasAmpersand && !hasSection) {
+            return Component.text(message);
+        }
+
+        String processed = hasAmpersand ? message.replace('&', '§') : message;
+        final boolean hasHex = processed.indexOf('#') != -1;
+        
+        if (!hasHex) {
             try {
-                return LegacyComponentSerializer.legacySection().deserialize(processed);
+                return LEGACY_SERIALIZER.deserialize(processed);
             } catch (Exception e) {
                 return Component.text(message).color(NamedTextColor.WHITE);
             }
@@ -52,28 +69,28 @@ public class ChatUtil {
         Matcher matcher = HEX_COLOR_PATTERN.matcher(processed);
         if (!matcher.find()) {
             try {
-                return LegacyComponentSerializer.legacySection().deserialize(processed);
+                return LEGACY_SERIALIZER.deserialize(processed);
             } catch (Exception e) {
                 return Component.text(message).color(NamedTextColor.WHITE);
             }
         }
         
         matcher.reset();
-        StringBuilder sb = new StringBuilder(processed.length() + (matcher.groupCount() * 14));
+        StringBuilder sb = new StringBuilder(length + 80);
         int lastEnd = 0;
         while (matcher.find()) {
             sb.append(processed, lastEnd, matcher.start());
             String hex = matcher.group(1);
             sb.append("§x");
             for (int i = 0; i < 6; i++) {
-                sb.append("§").append(hex.charAt(i));
+                sb.append('§').append(hex.charAt(i));
             }
             lastEnd = matcher.end();
         }
-        sb.append(processed, lastEnd, processed.length());
+        sb.append(processed, lastEnd, length);
         
         try {
-            return LegacyComponentSerializer.legacySection().deserialize(sb.toString());
+            return LEGACY_SERIALIZER.deserialize(sb.toString());
         } catch (Exception e) {
             return Component.text(message).color(NamedTextColor.WHITE);
         }
@@ -120,14 +137,13 @@ public class ChatUtil {
         return LegacyComponentSerializer.legacySection().serialize(component);
     }
 
+    private static final Pattern ALL_COLOR_CODES = Pattern.compile(
+        "&#[A-Fa-f0-9]{6}|§x(?:§[A-Fa-f0-9]){6}|&x(?:&[A-Fa-f0-9]){8}|[§&][0-9a-fk-or]"
+    );
+    
     public static String toPlainText(String input) {
         if (input == null || input.isEmpty()) return "";
-        input = input.replaceAll("&#[A-Fa-f0-9]{6}", "");
-        input = input.replaceAll("§x§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]§[A-Fa-f0-9]", "");
-        input = input.replaceAll("&x&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]&[A-Fa-f0-9]", "");
-        input = input.replaceAll("[§&][0-9a-fk-or]", "");
-        
-        return input;
+        return ALL_COLOR_CODES.matcher(input).replaceAll("");
     }
 
     public static String toConsoleFormat(String input) {

@@ -1,10 +1,7 @@
 package net.opmasterleo.combat.listener;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +29,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 
+import ca.spottedleaf.concurrentutil.map.ConcurrentLong2ReferenceChainedHashTable;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import net.opmasterleo.combat.Combat;
@@ -41,9 +39,9 @@ import net.opmasterleo.combat.util.SchedulerUtil;
 
 public class NewbieProtectionListener implements Listener {
 
-    private final Map<UUID, Long> protectedPlayers = new ConcurrentHashMap<>();
-    private final Map<UUID, UUID> anchorActivators = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> offlineProtection = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> protectedPlayers = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(128, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<UUID> anchorActivators = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(64, 0.75f);
+    private final ConcurrentLong2ReferenceChainedHashTable<Long> offlineProtection = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(64, 0.75f);
     private long protectionDuration;
     private boolean enabled;
 
@@ -67,7 +65,7 @@ public class NewbieProtectionListener implements Listener {
     private Set<Material> blockedItems;
 
     private final Set<UUID> pendingProtection = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, Location> joinLocations = new ConcurrentHashMap<>();
+    private final ConcurrentLong2ReferenceChainedHashTable<Location> joinLocations = ConcurrentLong2ReferenceChainedHashTable.createWithExpected(64, 0.75f);
     private static final double MIN_DISTANCE = 32.0;
 
     public NewbieProtectionListener() {
@@ -84,32 +82,21 @@ public class NewbieProtectionListener implements Listener {
 
         SchedulerUtil.runTaskTimer(Combat.getInstance(), () -> {
             long currentTime = System.currentTimeMillis();
-            List<UUID> toRemove = new ArrayList<>();
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                long key = Combat.uuidToLong(player.getUniqueId());
+                Long expiry = protectedPlayers.get(key);
+                if (expiry == null) continue;
 
-            for (Map.Entry<UUID, Long> entry : protectedPlayers.entrySet()) {
-                Player player = Bukkit.getPlayer(entry.getKey());
-                if (player == null) {
-                    offlineProtection.put(entry.getKey(), entry.getValue());
-                    toRemove.add(entry.getKey());
-                    continue;
-                }
-
-                if (currentTime >= entry.getValue()) {
-                    toRemove.add(entry.getKey());
+                if (currentTime >= expiry) {
+                    protectedPlayers.remove(key);
                     sendProtectionExpired(player);
-                } else {
-                    if (protectionLeftMessage != null && !protectionLeftMessage.isEmpty()) {
-                        long remaining = entry.getValue() - currentTime;
-                        if (remaining > 0 && remaining / 1000 % 5 == 0) {
-                            String message = PlaceholderAPI.applyPlaceholders(player, protectionLeftMessage, remaining / 1000);
-                            sendMessage(player, message);
-                        }
+                } else if (protectionLeftMessage != null && !protectionLeftMessage.isEmpty()) {
+                    long remaining = expiry - currentTime;
+                    if (remaining > 0 && remaining / 1000 % 5 == 0) {
+                        String message = PlaceholderAPI.applyPlaceholders(player, protectionLeftMessage, remaining / 1000);
+                        sendMessage(player, message);
                     }
                 }
-            }
-
-            for (UUID playerId : toRemove) {
-                protectedPlayers.remove(playerId);
             }
         }, 20L, 20L);
     }
@@ -120,15 +107,19 @@ public class NewbieProtectionListener implements Listener {
 
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
+        long key = Combat.uuidToLong(playerId);
         if (!player.hasPlayedBefore()) {
-
             pendingProtection.add(playerId);
-            joinLocations.put(playerId, player.getLocation().clone());
-        } else if (offlineProtection.containsKey(playerId)) {
-            long remainingTime = offlineProtection.remove(playerId) - System.currentTimeMillis();
-            if (remainingTime > 0) {
-                protectedPlayers.put(playerId, System.currentTimeMillis() + remainingTime);
-                sendProtectionMessage(player);
+            joinLocations.put(key, player.getLocation().clone());
+        } else {
+            Long offline = offlineProtection.get(key);
+            if (offline != null) {
+                long remainingTime = offline - System.currentTimeMillis();
+                offlineProtection.remove(key);
+                if (remainingTime > 0) {
+                    protectedPlayers.put(key, System.currentTimeMillis() + remainingTime);
+                    sendProtectionMessage(player);
+                }
             }
         }
     }
@@ -139,7 +130,9 @@ public class NewbieProtectionListener implements Listener {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
         if (!pendingProtection.contains(playerId)) return;
-        Location from = joinLocations.getOrDefault(playerId, event.getFrom());
+        long key = Combat.uuidToLong(playerId);
+        Location from = joinLocations.get(key);
+        if (from == null) from = event.getFrom();
         if (from.getWorld().equals(event.getTo().getWorld()) &&
             from.distanceSquared(event.getTo()) < MIN_DISTANCE * MIN_DISTANCE) {
             return;
@@ -153,7 +146,7 @@ public class NewbieProtectionListener implements Listener {
         Player player = event.getPlayer();
         if (pendingProtection.remove(player.getUniqueId())) {
             addProtectedPlayer(player);
-            joinLocations.remove(player.getUniqueId());
+            joinLocations.remove(Combat.uuidToLong(player.getUniqueId()));
         }
     }
 
@@ -163,7 +156,7 @@ public class NewbieProtectionListener implements Listener {
         Player player = event.getPlayer();
         if (pendingProtection.remove(player.getUniqueId())) {
             addProtectedPlayer(player);
-            joinLocations.remove(player.getUniqueId());
+            joinLocations.remove(Combat.uuidToLong(player.getUniqueId()));
         }
     }
 
@@ -171,32 +164,34 @@ public class NewbieProtectionListener implements Listener {
         UUID playerId = player.getUniqueId();
         if (pendingProtection.remove(playerId)) {
             addProtectedPlayer(player);
-            joinLocations.remove(playerId);
+            joinLocations.remove(Combat.uuidToLong(playerId));
         }
     }
 
     public void addProtectedPlayer(Player player) {
         if (!enabled) return;
-
-        protectedPlayers.put(player.getUniqueId(), System.currentTimeMillis() + protectionDuration);
+        protectedPlayers.put(Combat.uuidToLong(player.getUniqueId()), System.currentTimeMillis() + protectionDuration);
         sendProtectionMessage(player);
     }
 
     public void removeProtection(Player player) {
-        protectedPlayers.remove(player.getUniqueId());
-        offlineProtection.remove(player.getUniqueId());
+        long key = Combat.uuidToLong(player.getUniqueId());
+        protectedPlayers.remove(key);
+        offlineProtection.remove(key);
         sendProtectionRemoved(player);
     }
 
     public boolean isActuallyProtected(Player player) {
         if (!enabled) return false;
-
-        Long until = protectedPlayers.get(player.getUniqueId());
+        Long until = protectedPlayers.get(Combat.uuidToLong(player.getUniqueId()));
         return until != null && until > System.currentTimeMillis();
     }
 
     public void sendProtectionMessage(Player player) {
-        long remaining = protectedPlayers.get(player.getUniqueId()) - System.currentTimeMillis();
+        long key = Combat.uuidToLong(player.getUniqueId());
+        Long expiry = protectedPlayers.get(key);
+        if (expiry == null) return;
+        long remaining = expiry - System.currentTimeMillis();
         String message = PlaceholderAPI.applyPlaceholders(player, msgProtected, remaining / 1000);
         sendMessage(player, message);
     }
@@ -264,11 +259,13 @@ public class NewbieProtectionListener implements Listener {
     }
 
     public void trackAnchorActivator(UUID anchorId, Player player) {
-        anchorActivators.put(anchorId, player.getUniqueId());
+        long anchorKey = Combat.uuidToLong(anchorId);
+        anchorActivators.put(anchorKey, player.getUniqueId());
     }
 
     public Player getAnchorActivator(UUID anchorId) {
-        UUID playerId = anchorActivators.get(anchorId);
+        long anchorKey = Combat.uuidToLong(anchorId);
+        UUID playerId = anchorActivators.get(anchorKey);
         if (playerId == null) return null;
         return Combat.getInstance().getServer().getPlayer(playerId);
     }
