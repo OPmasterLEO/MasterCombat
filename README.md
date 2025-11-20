@@ -1,5 +1,11 @@
 # MasterCombat
 
+> # ⚠️ PROJECT ABANDONED ⚠️
+> 
+> ## This project is no longer maintained or supported.
+> 
+> **No further updates, bug fixes, or support will be provided.**
+
 <div align="center">
 
 [![Downloads](https://img.shields.io/github/downloads/OPmasterLEO/MasterCombat/total?style=for-the-badge&logo=github&logoColor=white&labelColor=2B2D30&color=24A57C)](https://github.com/OPmasterLEO/MasterCombat/releases)
